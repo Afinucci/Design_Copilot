@@ -104,6 +104,299 @@ export class SpatialRelationshipModel {
     }
   }
 
+  async getAllRelationships(): Promise<SpatialRelationship[]> {
+    const session = this.driver.session();
+    
+    try {
+      const result = await session.run(
+        `MATCH (from:FunctionalArea)-[r]->(to:FunctionalArea)
+         RETURN r, from.id as fromId, to.id as toId, type(r) as relType
+         ORDER BY r.priority DESC, from.id, to.id`
+      );
+      
+      return result.records.map(record => ({
+        id: record.get('r').properties.id,
+        type: record.get('relType') as any,
+        fromId: record.get('fromId'),
+        toId: record.get('toId'),
+        priority: record.get('r').properties.priority,
+        reason: record.get('r').properties.reason,
+        doorType: record.get('r').properties.doorType,
+        minDistance: record.get('r').properties.minDistance,
+        maxDistance: record.get('r').properties.maxDistance,
+        flowDirection: record.get('r').properties.flowDirection,
+        flowType: record.get('r').properties.flowType
+      }));
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getRelationshipById(id: string): Promise<SpatialRelationship | null> {
+    const session = this.driver.session();
+    
+    try {
+      const result = await session.run(
+        `MATCH (from:FunctionalArea)-[r]->(to:FunctionalArea)
+         WHERE r.id = $id
+         RETURN r, from.id as fromId, to.id as toId, type(r) as relType`,
+        { id }
+      );
+      
+      if (result.records.length === 0) {
+        return null;
+      }
+      
+      const record = result.records[0];
+      return {
+        id: record.get('r').properties.id,
+        type: record.get('relType') as any,
+        fromId: record.get('fromId'),
+        toId: record.get('toId'),
+        priority: record.get('r').properties.priority,
+        reason: record.get('r').properties.reason,
+        doorType: record.get('r').properties.doorType,
+        minDistance: record.get('r').properties.minDistance,
+        maxDistance: record.get('r').properties.maxDistance,
+        flowDirection: record.get('r').properties.flowDirection,
+        flowType: record.get('r').properties.flowType
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
+  async updateRelationship(id: string, updates: Partial<SpatialRelationship>): Promise<SpatialRelationship | null> {
+    const session = this.driver.session();
+    
+    try {
+      const result = await session.run(
+        `MATCH (from:FunctionalArea)-[r]->(to:FunctionalArea)
+         WHERE r.id = $id
+         SET r.priority = COALESCE($priority, r.priority),
+             r.reason = COALESCE($reason, r.reason),
+             r.doorType = COALESCE($doorType, r.doorType),
+             r.minDistance = COALESCE($minDistance, r.minDistance),
+             r.maxDistance = COALESCE($maxDistance, r.maxDistance),
+             r.flowDirection = COALESCE($flowDirection, r.flowDirection),
+             r.flowType = COALESCE($flowType, r.flowType),
+             r.updatedAt = datetime()
+         RETURN r, from.id as fromId, to.id as toId, type(r) as relType`,
+        {
+          id,
+          priority: updates.priority,
+          reason: updates.reason,
+          doorType: updates.doorType,
+          minDistance: updates.minDistance,
+          maxDistance: updates.maxDistance,
+          flowDirection: updates.flowDirection,
+          flowType: updates.flowType
+        }
+      );
+      
+      if (result.records.length === 0) {
+        return null;
+      }
+      
+      const record = result.records[0];
+      return {
+        id: record.get('r').properties.id,
+        type: record.get('relType') as any,
+        fromId: record.get('fromId'),
+        toId: record.get('toId'),
+        priority: record.get('r').properties.priority,
+        reason: record.get('r').properties.reason,
+        doorType: record.get('r').properties.doorType,
+        minDistance: record.get('r').properties.minDistance,
+        maxDistance: record.get('r').properties.maxDistance,
+        flowDirection: record.get('r').properties.flowDirection,
+        flowType: record.get('r').properties.flowType
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
+  async deleteRelationship(id: string): Promise<boolean> {
+    const session = this.driver.session();
+    
+    try {
+      const result = await session.run(
+        `MATCH (from:FunctionalArea)-[r]->(to:FunctionalArea)
+         WHERE r.id = $id
+         DELETE r
+         RETURN count(r) as deletedCount`,
+        { id }
+      );
+      
+      return result.records[0].get('deletedCount') > 0;
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getRelationshipsBetweenNodes(sourceId: string, targetId: string): Promise<SpatialRelationship[]> {
+    const session = this.driver.session();
+    
+    try {
+      const result = await session.run(
+        `MATCH (from:FunctionalArea {id: $sourceId})-[r]->(to:FunctionalArea {id: $targetId})
+         RETURN r, from.id as fromId, to.id as toId, type(r) as relType
+         UNION
+         MATCH (from:FunctionalArea {id: $targetId})-[r]->(to:FunctionalArea {id: $sourceId})
+         RETURN r, from.id as fromId, to.id as toId, type(r) as relType`,
+        { sourceId, targetId }
+      );
+      
+      return result.records.map(record => ({
+        id: record.get('r').properties.id,
+        type: record.get('relType') as any,
+        fromId: record.get('fromId'),
+        toId: record.get('toId'),
+        priority: record.get('r').properties.priority,
+        reason: record.get('r').properties.reason,
+        doorType: record.get('r').properties.doorType,
+        minDistance: record.get('r').properties.minDistance,
+        maxDistance: record.get('r').properties.maxDistance,
+        flowDirection: record.get('r').properties.flowDirection,
+        flowType: record.get('r').properties.flowType
+      }));
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getRelationshipsByType(type: string): Promise<SpatialRelationship[]> {
+    const session = this.driver.session();
+    
+    try {
+      const result = await session.run(
+        `MATCH (from:FunctionalArea)-[r:${type}]->(to:FunctionalArea)
+         RETURN r, from.id as fromId, to.id as toId, type(r) as relType
+         ORDER BY r.priority DESC`,
+        { type }
+      );
+      
+      return result.records.map(record => ({
+        id: record.get('r').properties.id,
+        type: record.get('relType') as any,
+        fromId: record.get('fromId'),
+        toId: record.get('toId'),
+        priority: record.get('r').properties.priority,
+        reason: record.get('r').properties.reason,
+        doorType: record.get('r').properties.doorType,
+        minDistance: record.get('r').properties.minDistance,
+        maxDistance: record.get('r').properties.maxDistance,
+        flowDirection: record.get('r').properties.flowDirection,
+        flowType: record.get('r').properties.flowType
+      }));
+    } finally {
+      await session.close();
+    }
+  }
+
+  async batchCreateRelationships(relationships: Omit<SpatialRelationship, 'id'>[]): Promise<SpatialRelationship[]> {
+    const session = this.driver.session();
+    
+    try {
+      const createdRelationships: SpatialRelationship[] = [];
+      
+      for (const relationship of relationships) {
+        const result = await session.run(
+          `MATCH (from:FunctionalArea {id: $fromId})
+           MATCH (to:FunctionalArea {id: $toId})
+           CREATE (from)-[r:${relationship.type} {
+             id: randomUUID(),
+             priority: $priority,
+             reason: $reason,
+             doorType: $doorType,
+             minDistance: $minDistance,
+             maxDistance: $maxDistance,
+             flowDirection: $flowDirection,
+             flowType: $flowType,
+             createdAt: datetime(),
+             updatedAt: datetime()
+           }]->(to)
+           RETURN r`,
+          relationship
+        );
+        
+        createdRelationships.push({
+          id: result.records[0].get('r').properties.id,
+          ...relationship
+        });
+      }
+      
+      return createdRelationships;
+    } finally {
+      await session.close();
+    }
+  }
+
+  async batchUpdateRelationships(relationships: SpatialRelationship[]): Promise<SpatialRelationship[]> {
+    const session = this.driver.session();
+    
+    try {
+      const updatedRelationships: SpatialRelationship[] = [];
+      
+      for (const relationship of relationships) {
+        const result = await session.run(
+          `MATCH (from:FunctionalArea)-[r]->(to:FunctionalArea)
+           WHERE r.id = $id
+           SET r.priority = $priority,
+               r.reason = $reason,
+               r.doorType = $doorType,
+               r.minDistance = $minDistance,
+               r.maxDistance = $maxDistance,
+               r.flowDirection = $flowDirection,
+               r.flowType = $flowType,
+               r.updatedAt = datetime()
+           RETURN r, from.id as fromId, to.id as toId, type(r) as relType`,
+          relationship
+        );
+        
+        if (result.records.length > 0) {
+          const record = result.records[0];
+          updatedRelationships.push({
+            id: record.get('r').properties.id,
+            type: record.get('relType') as any,
+            fromId: record.get('fromId'),
+            toId: record.get('toId'),
+            priority: record.get('r').properties.priority,
+            reason: record.get('r').properties.reason,
+            doorType: record.get('r').properties.doorType,
+            minDistance: record.get('r').properties.minDistance,
+            maxDistance: record.get('r').properties.maxDistance,
+            flowDirection: record.get('r').properties.flowDirection,
+            flowType: record.get('r').properties.flowType
+          });
+        }
+      }
+      
+      return updatedRelationships;
+    } finally {
+      await session.close();
+    }
+  }
+
+  async batchDeleteRelationships(relationshipIds: string[]): Promise<number> {
+    const session = this.driver.session();
+    
+    try {
+      const result = await session.run(
+        `MATCH (from:FunctionalArea)-[r]->(to:FunctionalArea)
+         WHERE r.id IN $relationshipIds
+         DELETE r
+         RETURN count(r) as deletedCount`,
+        { relationshipIds }
+      );
+      
+      return result.records[0].get('deletedCount');
+    } finally {
+      await session.close();
+    }
+  }
+
   async initializeSpatialRelationships(): Promise<void> {
     const session = this.driver.session();
     

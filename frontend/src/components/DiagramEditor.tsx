@@ -6,9 +6,9 @@ import ReactFlow, {
   Connection,
   useNodesState,
   useEdgesState,
-  addEdge,
   ReactFlowProvider,
   ReactFlowInstance,
+  Edge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import {
@@ -34,9 +34,11 @@ import {
   ListItemText,
   IconButton,
   FormControl,
+  FormControlLabel,
   InputLabel,
   Select,
   MenuItem,
+  Checkbox,
 } from '@mui/material';
 import { Save, PlayArrow, Stop, Edit, Search, Wifi, WifiOff, Sync, GroupWork, Cancel, Delete, Room, Warning, Speed, Settings, SwapHoriz, Person } from '@mui/icons-material';
 import NodePalette from './NodePalette';
@@ -46,6 +48,8 @@ import CustomNode from './CustomNode';
 import GroupBoundaryNode from './GroupBoundaryNode';
 import MultiRelationshipEdge from './MultiRelationshipEdge';
 import RelationshipLegend from './RelationshipLegend';
+import InlineRelationshipEditDialog from './InlineRelationshipEditDialog';
+import { addMultiEdge } from '../utils/edgeUtils';
 import { DiagramEdge, NodeTemplate, ValidationResult, NodeData, AppMode, GuidedSuggestion, ModeConfig, NodeGroup, GroupingState, SpatialRelationship } from '../types';
 import { apiService } from '../services/api';
 import { Node } from 'reactflow';
@@ -172,7 +176,7 @@ const DiagramEditor: React.FC = () => {
       return {
         ...edge,
         type: 'multiRelationship' as const,
-        animated: true,
+        animated: edgeData.animated || false,
         style: {
           ...edge.style,
           stroke: getRelationshipColor(relationshipType),
@@ -192,7 +196,8 @@ const DiagramEditor: React.FC = () => {
         data: {
           ...edgeData,
           relationshipType,
-          relationshipIndex
+          relationshipIndex,
+          creationDirection: edgeData.creationDirection || 'source-to-target'
         }
       };
     });
@@ -228,6 +233,8 @@ const DiagramEditor: React.FC = () => {
   }, [edges, autoFixEdges, setEdges]);
   
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<DiagramEdge | null>(null);
+  const [showInlineEditDialog, setShowInlineEditDialog] = useState(false);
 
   // Handle node deletion
   const onNodesDelete = useCallback((nodesToDelete: any[]) => {
@@ -260,6 +267,7 @@ const DiagramEditor: React.FC = () => {
     // Use the existing deletion handler
     onNodesDelete([nodeToDelete]);
   }, [nodes, onNodesDelete]);
+
   const [nodeTemplates, setNodeTemplates] = useState<NodeTemplate[]>([]);
   const [existingNodes, setExistingNodes] = useState<NodeTemplate[]>([]);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
@@ -287,6 +295,7 @@ const DiagramEditor: React.FC = () => {
   const [groupName, setGroupName] = useState<string>('');
   const [showGroupDialog, setShowGroupDialog] = useState<boolean>(false);
   
+  
   // Relationship creation state
   const [relationshipDialog, setRelationshipDialog] = useState<{
     open: boolean;
@@ -299,6 +308,7 @@ const DiagramEditor: React.FC = () => {
     maxDistance: number | null;
     flowDirection: string;
     flowType: string;
+    animated: boolean;
   }>({
     open: false,
     connection: null,
@@ -309,7 +319,8 @@ const DiagramEditor: React.FC = () => {
     minDistance: null,
     maxDistance: null,
     flowDirection: 'bidirectional',
-    flowType: 'raw_material'
+    flowType: 'raw_material',
+    animated: false
   });
 
   // Group boundary utilities
@@ -784,7 +795,7 @@ const DiagramEditor: React.FC = () => {
                 source: rel.fromId,
                 target: rel.toId,
                 type: 'multiRelationship' as const,
-                animated: true,
+                animated: false,
                 style: {
                   stroke: getRelationshipColor(rel.type),
                   strokeWidth: 2,
@@ -888,7 +899,7 @@ const DiagramEditor: React.FC = () => {
                   source: rel.fromId,
                   target: rel.toId,
                   type: 'multiRelationship' as const,
-                  animated: true,
+                  animated: false,
                   style: {
                     stroke: getRelationshipColor(rel.type),
                     strokeWidth: 2,
@@ -985,6 +996,60 @@ const DiagramEditor: React.FC = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
+  // Relationship editing handlers
+  const handleUpdateRelationship = useCallback((edgeId: string, updates: Partial<SpatialRelationship>) => {
+    setEdges((currentEdges) => 
+      currentEdges.map((edge) => {
+        if (edge.id === edgeId) {
+          const updatedEdge = {
+            ...edge,
+            data: {
+              ...edge.data,
+              ...updates,
+              relationshipType: updates.type || (edge.data as any)?.relationshipType,
+            },
+            style: {
+              ...edge.style,
+              stroke: getRelationshipColor(updates.type || (edge.data as any)?.relationshipType || 'ADJACENT_TO'),
+              strokeDasharray: getRelationshipDashArray(updates.type || (edge.data as any)?.relationshipType || 'ADJACENT_TO'),
+            },
+            label: getRelationshipLabel(updates.type || (edge.data as any)?.relationshipType || 'ADJACENT_TO'),
+          };
+          // Update selectedEdge if it's the one being updated
+          if (selectedEdge && 'id' in selectedEdge && selectedEdge.id === edgeId) {
+            setSelectedEdge(updatedEdge as DiagramEdge);
+          }
+          return updatedEdge as any;
+        }
+        return edge;
+      })
+    );
+    showSnackbar('Relationship updated successfully', 'success');
+  }, [setEdges, getRelationshipColor, getRelationshipDashArray, getRelationshipLabel, selectedEdge]);
+
+  const handleDeleteRelationship = useCallback((edgeId: string) => {
+    setEdges((currentEdges) => currentEdges.filter((edge) => edge.id !== edgeId));
+    if (selectedEdge && 'id' in selectedEdge && selectedEdge.id === edgeId) {
+      setSelectedEdge(null);
+      setShowInlineEditDialog(false);
+    }
+    showSnackbar('Relationship deleted successfully', 'success');
+  }, [setEdges, selectedEdge]);
+
+
+
+  const handleEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+    event.stopPropagation(); // Prevent canvas selection
+    setSelectedEdge(edge as DiagramEdge);
+    setShowInlineEditDialog(true);
+    setSelectedNode(null); // Clear node selection when edge is selected
+  }, []);
+
+  const handleCloseInlineEditDialog = useCallback(() => {
+    setShowInlineEditDialog(false);
+    setSelectedEdge(null);
+  }, []);
+
   const handleCreateCustomNode = (nodeTemplate: Omit<NodeTemplate, 'id'>) => {
     // Generate a unique ID for the custom node
     const customNodeId = `custom-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
@@ -1018,7 +1083,8 @@ const DiagramEditor: React.FC = () => {
         minDistance: null,
         maxDistance: null,
         flowDirection: 'bidirectional',
-        flowType: 'raw_material'
+        flowType: 'raw_material',
+        animated: false
       });
     },
     []
@@ -1028,7 +1094,7 @@ const DiagramEditor: React.FC = () => {
     if (!relationshipDialog.connection) return;
     
     const params = relationshipDialog.connection;
-    const { selectedType, priority, reason, doorType, minDistance, maxDistance, flowDirection, flowType } = relationshipDialog;
+    const { selectedType, priority, reason, doorType, minDistance, maxDistance, flowDirection, flowType, animated } = relationshipDialog;
     
     // Check if relationship already exists between these nodes
     const existingRelationships = edges.filter(edge => 
@@ -1051,12 +1117,12 @@ const DiagramEditor: React.FC = () => {
     
     // Create edge with unique ID for multiple relationships
     const uniqueId = `edge-${params.source}-${params.target}-${selectedType}-${Date.now()}`;
-    const newEdge: DiagramEdge = {
+    const newEdge: Edge<DiagramEdge> = {
       id: uniqueId,
       source: params.source!,
       target: params.target!,
       type: 'multiRelationship',
-      animated: true,
+      animated: animated,
       style: { 
         stroke: getRelationshipColor(selectedType), 
         strokeWidth: 2,
@@ -1081,14 +1147,16 @@ const DiagramEditor: React.FC = () => {
         maxDistance: maxDistance || undefined,
         flowDirection: flowDirection || undefined,
         flowType: flowType || undefined,
-        relationshipIndex: relationshipCount // This will be updated by auto-fix
-      }
+        relationshipIndex: relationshipCount, // This will be updated by auto-fix
+        creationDirection: 'source-to-target', // Track creation direction for arrow display
+        animated: animated
+      } as any
     };
     
     console.log('Creating new edge:', newEdge);
     console.log('Existing relationships:', existingRelationships.length);
     
-    setEdges((eds) => addEdge(newEdge, eds));
+    setEdges((eds) => addMultiEdge(eds, newEdge));
     
     // Close dialog
     setRelationshipDialog(prev => ({ ...prev, open: false }));
@@ -1484,6 +1552,7 @@ const DiagramEditor: React.FC = () => {
                 onEdgesDelete={onEdgesDelete}
                 onConnect={onConnect}
                 onNodeClick={onNodeClick}
+                onEdgeClick={handleEdgeClick}
                 onDrop={onDrop}
                 onDragOver={onDragOver}
                 onInit={setReactFlowInstance}
@@ -1520,7 +1589,10 @@ const DiagramEditor: React.FC = () => {
           {/* Debug Panel for Relationships */}
           {edges.length > 0 && (
             <Box sx={{ p: 2, mt: 1, border: '1px solid #ccc', borderRadius: 1 }}>
-              <Typography variant="h6" gutterBottom>Debug: Relationships ({edges.length})</Typography>
+              <Typography variant="h6" gutterBottom>Relationships ({edges.length})</Typography>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                Click on any relationship line to edit it
+              </Typography>
               <Box sx={{ maxHeight: 150, overflow: 'auto' }}>
                 {edges.map((edge, index) => (
                   <Typography key={edge.id} variant="caption" display="block" sx={{ fontSize: '10px' }}>
@@ -1751,7 +1823,7 @@ const DiagramEditor: React.FC = () => {
               value={relationshipDialog.priority}
               onChange={(e) => setRelationshipDialog(prev => ({ ...prev, priority: parseInt(e.target.value) || 5 }))}
               margin="normal"
-              inputProps={{ min: 1, max: 10 }} // eslint-disable-line
+              slotProps={{ htmlInput: { min: 1, max: 10 } }}
             />
 
             <TextField
@@ -1840,6 +1912,19 @@ const DiagramEditor: React.FC = () => {
                 )}
               </>
             )}
+            
+            {/* Animation option */}
+            <Box sx={{ mt: 2 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={relationshipDialog.animated}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRelationshipDialog(prev => ({ ...prev, animated: e.target.checked }))}
+                  />
+                }
+                label="Enable Animation"
+              />
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>
@@ -1855,6 +1940,16 @@ const DiagramEditor: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Inline Relationship Edit Dialog */}
+      <InlineRelationshipEditDialog
+        open={showInlineEditDialog}
+        edge={selectedEdge}
+        nodes={nodes}
+        onClose={handleCloseInlineEditDialog}
+        onUpdate={handleUpdateRelationship}
+        onDelete={handleDeleteRelationship}
+      />
     </Box>
   );
 };

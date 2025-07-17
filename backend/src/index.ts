@@ -8,6 +8,7 @@ import diagramRoutes from './routes/diagrams';
 import nodeRoutes from './routes/nodes';
 import validationRoutes from './routes/validation';
 import groupRoutes from './routes/groups';
+import relationshipRoutes from './routes/relationships';
 
 config();
 
@@ -41,6 +42,7 @@ app.use('/api/diagrams', diagramRoutes);
 app.use('/api/nodes', nodeRoutes);
 app.use('/api/validation', validationRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/relationships', relationshipRoutes);
 
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');

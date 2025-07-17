@@ -116,26 +116,20 @@ export interface DiagramEdge {
   id: string;
   source: string;
   target: string;
-  type: 'smoothstep' | 'straight' | 'step' | 'multiRelationship';
+  type?: string;
+  relationship?: SpatialRelationship;
+  relationshipType?: string;
+  priority?: number;
+  reason?: string;
+  doorType?: string;
+  minDistance?: number;
+  maxDistance?: number;
+  flowDirection?: string;
+  flowType?: string;
+  relationshipIndex?: number;
+  creationDirection?: 'source-to-target' | 'target-to-source';
   animated?: boolean;
-  style?: React.CSSProperties;
-  label?: string;
-  labelShowBg?: boolean;
-  labelBgPadding?: [number, number];
-  labelBgBorderRadius?: number;
-  labelBgStyle?: React.CSSProperties;
-  data?: {
-    relationship?: SpatialRelationship;
-    relationshipType?: string;
-    priority?: number;
-    reason?: string;
-    doorType?: string;
-    minDistance?: number;
-    maxDistance?: number;
-    flowDirection?: string;
-    flowType?: string;
-    relationshipIndex?: number;
-  };
+  data?: any;
 }
 
 // New types for enhanced modes

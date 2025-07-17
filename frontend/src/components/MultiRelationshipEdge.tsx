@@ -1,7 +1,6 @@
 import React from 'react';
 import { 
   EdgeProps, 
-  getBezierPath, 
   EdgeLabelRenderer,
   BaseEdge 
 } from 'reactflow';
@@ -16,6 +15,7 @@ interface MultiRelationshipEdgeData {
   maxDistance?: number;
   flowDirection?: string;
   flowType?: string;
+  creationDirection?: 'source-to-target' | 'target-to-source';
 }
 
 const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
@@ -97,12 +97,83 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   const labelX = (1 - t) * (1 - t) * sourceX + 2 * (1 - t) * t * controlX + t * t * targetX;
   const labelY = (1 - t) * (1 - t) * sourceY + 2 * (1 - t) * t * controlY + t * t * targetY;
   
+  // Helper function to determine if arrows should be shown
+  const shouldShowArrows = () => {
+    return data.relationshipType === 'MATERIAL_FLOW' || data.relationshipType === 'PERSONNEL_FLOW';
+  };
+  
+  // Helper function to determine arrow configuration
+  const getArrowConfig = () => {
+    if (!shouldShowArrows()) return { showSourceArrow: false, showTargetArrow: false };
+    
+    const isBidirectional = data.flowDirection === 'bidirectional';
+    const isUnidirectional = data.flowDirection === 'unidirectional';
+    
+    if (isBidirectional) {
+      return { showSourceArrow: true, showTargetArrow: true };
+    } else if (isUnidirectional) {
+      // For unidirectional, show arrow only on the target (second selected node)
+      return { showSourceArrow: false, showTargetArrow: true };
+    } else {
+      // Default to showing arrow on target
+      return { showSourceArrow: false, showTargetArrow: true };
+    }
+  };
+  
+  // Helper function to create arrow marker
+  const createArrowMarker = (direction: 'source' | 'target') => {
+    const arrowSize = 8;
+    const arrowId = `arrow-${direction}-${id}`;
+    
+    return (
+      <defs>
+        <marker
+          id={arrowId}
+          markerWidth={arrowSize}
+          markerHeight={arrowSize}
+          refX={direction === 'target' ? arrowSize - 1 : 1}
+          refY={arrowSize / 2}
+          orient="auto"
+          markerUnits="strokeWidth"
+        >
+          <path
+            d={direction === 'target' ? 
+              `M0,0 L0,${arrowSize} L${arrowSize},${arrowSize/2} z` : 
+              `M${arrowSize},0 L${arrowSize},${arrowSize} L0,${arrowSize/2} z`}
+            fill={style.stroke || '#000'}
+            stroke={style.stroke || '#000'}
+          />
+        </marker>
+      </defs>
+    );
+  };
+  
+  const { showSourceArrow, showTargetArrow } = getArrowConfig();
+  
   return (
     <>
+      <svg>
+        {showSourceArrow && createArrowMarker('source')}
+        {showTargetArrow && createArrowMarker('target')}
+      </svg>
       <BaseEdge
         id={id}
         path={edgePath}
-        style={style}
+        style={{
+          ...style,
+          markerStart: showSourceArrow ? `url(#arrow-source-${id})` : undefined,
+          markerEnd: showTargetArrow ? `url(#arrow-target-${id})` : undefined,
+          cursor: 'pointer',
+        }}
+      />
+      {/* Invisible wider path for easier clicking */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth="20"
+        style={{ cursor: 'pointer' }}
+        className="react-flow__edge-interaction"
       />
       {/* Debug indicator showing relationship index */}
       <circle
