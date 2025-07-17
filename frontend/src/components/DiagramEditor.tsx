@@ -6,7 +6,6 @@ import ReactFlow, {
   Connection,
   useNodesState,
   useEdgesState,
-  addEdge,
   ReactFlowProvider,
   ReactFlowInstance,
 } from 'reactflow';
@@ -46,6 +45,7 @@ import CustomNode from './CustomNode';
 import GroupBoundaryNode from './GroupBoundaryNode';
 import MultiRelationshipEdge from './MultiRelationshipEdge';
 import RelationshipLegend from './RelationshipLegend';
+import { addMultiEdge } from '../utils/edgeUtils';
 import { DiagramEdge, NodeTemplate, ValidationResult, NodeData, AppMode, GuidedSuggestion, ModeConfig, NodeGroup, GroupingState, SpatialRelationship } from '../types';
 import { apiService } from '../services/api';
 import { Node } from 'reactflow';
@@ -1088,7 +1088,7 @@ const DiagramEditor: React.FC = () => {
     console.log('Creating new edge:', newEdge);
     console.log('Existing relationships:', existingRelationships.length);
     
-    setEdges((eds) => addEdge(newEdge, eds));
+    setEdges((eds) => addMultiEdge(eds, newEdge));
     
     // Close dialog
     setRelationshipDialog(prev => ({ ...prev, open: false }));
