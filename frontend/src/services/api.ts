@@ -227,6 +227,64 @@ class ApiService {
     });
   }
 
+  // Relationships
+  async getAllRelationships(): Promise<SpatialRelationship[]> {
+    return this.request<SpatialRelationship[]>('/relationships');
+  }
+
+  async getRelationshipById(id: string): Promise<SpatialRelationship> {
+    return this.request<SpatialRelationship>(`/relationships/${id}`);
+  }
+
+  async createRelationship(relationship: Omit<SpatialRelationship, 'id'>): Promise<SpatialRelationship> {
+    return this.request<SpatialRelationship>('/relationships', {
+      method: 'POST',
+      body: JSON.stringify(relationship),
+    });
+  }
+
+  async updateRelationship(id: string, updates: Partial<SpatialRelationship>): Promise<SpatialRelationship> {
+    return this.request<SpatialRelationship>(`/relationships/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async deleteRelationship(id: string): Promise<void> {
+    return this.request<void>(`/relationships/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getRelationshipsBetweenNodes(sourceId: string, targetId: string): Promise<SpatialRelationship[]> {
+    return this.request<SpatialRelationship[]>(`/relationships/between/${sourceId}/${targetId}`);
+  }
+
+  async getRelationshipsByType(type: string): Promise<SpatialRelationship[]> {
+    return this.request<SpatialRelationship[]>(`/relationships/type/${type}`);
+  }
+
+  async batchCreateRelationships(relationships: Omit<SpatialRelationship, 'id'>[]): Promise<SpatialRelationship[]> {
+    return this.request<SpatialRelationship[]>('/relationships/batch', {
+      method: 'POST',
+      body: JSON.stringify({ relationships }),
+    });
+  }
+
+  async batchUpdateRelationships(relationships: SpatialRelationship[]): Promise<SpatialRelationship[]> {
+    return this.request<SpatialRelationship[]>('/relationships/batch', {
+      method: 'PUT',
+      body: JSON.stringify({ relationships }),
+    });
+  }
+
+  async batchDeleteRelationships(relationshipIds: string[]): Promise<{ deletedCount: number }> {
+    return this.request<{ deletedCount: number }>('/relationships/batch', {
+      method: 'DELETE',
+      body: JSON.stringify({ relationshipIds }),
+    });
+  }
+
   // Health Check
   async healthCheck(): Promise<{ status: string; timestamp: string; database: string }> {
     const url = `${API_BASE_URL.replace('/api', '')}/health`;

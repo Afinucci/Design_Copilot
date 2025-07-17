@@ -113,6 +113,10 @@ export interface DiagramNode {
 }
 
 export interface DiagramEdge {
+  id: string;
+  source: string;
+  target: string;
+  type?: string;
   relationship?: SpatialRelationship;
   relationshipType?: string;
   priority?: number;
@@ -125,6 +129,7 @@ export interface DiagramEdge {
   relationshipIndex?: number;
   creationDirection?: 'source-to-target' | 'target-to-source';
   animated?: boolean;
+  data?: any;
 }
 
 // New types for enhanced modes

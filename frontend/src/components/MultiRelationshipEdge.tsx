@@ -163,7 +163,17 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
           ...style,
           markerStart: showSourceArrow ? `url(#arrow-source-${id})` : undefined,
           markerEnd: showTargetArrow ? `url(#arrow-target-${id})` : undefined,
+          cursor: 'pointer',
         }}
+      />
+      {/* Invisible wider path for easier clicking */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth="20"
+        style={{ cursor: 'pointer' }}
+        className="react-flow__edge-interaction"
       />
       {/* Debug indicator showing relationship index */}
       <circle

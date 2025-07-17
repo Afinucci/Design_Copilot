@@ -28,7 +28,7 @@ export interface FunctionalArea {
 
 export interface SpatialRelationship {
   id: string;
-  type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY';
+  type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW';
   fromId: string;
   toId: string;
   priority: number;
@@ -36,6 +36,8 @@ export interface SpatialRelationship {
   doorType?: string;
   minDistance?: number;
   maxDistance?: number;
+  flowDirection?: 'bidirectional' | 'unidirectional';
+  flowType?: 'raw_material' | 'finished_product' | 'waste' | 'personnel' | 'equipment';
 }
 
 export interface Diagram {
