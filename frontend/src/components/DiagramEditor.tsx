@@ -34,9 +34,11 @@ import {
   ListItemText,
   IconButton,
   FormControl,
+  FormControlLabel,
   InputLabel,
   Select,
   MenuItem,
+  Checkbox,
 } from '@mui/material';
 import { Save, PlayArrow, Stop, Edit, Search, Wifi, WifiOff, Sync, GroupWork, Cancel, Delete, Room, Warning, Speed, Settings, SwapHoriz, Person } from '@mui/icons-material';
 import NodePalette from './NodePalette';
@@ -173,7 +175,7 @@ const DiagramEditor: React.FC = () => {
       return {
         ...edge,
         type: 'multiRelationship' as const,
-        animated: animationEnabled,
+        animated: edgeData.animated || false,
         style: {
           ...edge.style,
           stroke: getRelationshipColor(relationshipType),
@@ -289,8 +291,6 @@ const DiagramEditor: React.FC = () => {
   const [groupName, setGroupName] = useState<string>('');
   const [showGroupDialog, setShowGroupDialog] = useState<boolean>(false);
   
-  // Animation toggle state
-  const [animationEnabled, setAnimationEnabled] = useState<boolean>(true);
   
   // Relationship creation state
   const [relationshipDialog, setRelationshipDialog] = useState<{
@@ -304,6 +304,7 @@ const DiagramEditor: React.FC = () => {
     maxDistance: number | null;
     flowDirection: string;
     flowType: string;
+    animated: boolean;
   }>({
     open: false,
     connection: null,
@@ -314,7 +315,8 @@ const DiagramEditor: React.FC = () => {
     minDistance: null,
     maxDistance: null,
     flowDirection: 'bidirectional',
-    flowType: 'raw_material'
+    flowType: 'raw_material',
+    animated: false
   });
 
   // Group boundary utilities
@@ -789,7 +791,7 @@ const DiagramEditor: React.FC = () => {
                 source: rel.fromId,
                 target: rel.toId,
                 type: 'multiRelationship' as const,
-                animated: animationEnabled,
+                animated: false,
                 style: {
                   stroke: getRelationshipColor(rel.type),
                   strokeWidth: 2,
@@ -893,7 +895,7 @@ const DiagramEditor: React.FC = () => {
                   source: rel.fromId,
                   target: rel.toId,
                   type: 'multiRelationship' as const,
-                  animated: animationEnabled,
+                  animated: false,
                   style: {
                     stroke: getRelationshipColor(rel.type),
                     strokeWidth: 2,
@@ -1023,7 +1025,8 @@ const DiagramEditor: React.FC = () => {
         minDistance: null,
         maxDistance: null,
         flowDirection: 'bidirectional',
-        flowType: 'raw_material'
+        flowType: 'raw_material',
+        animated: false
       });
     },
     []
@@ -1033,7 +1036,7 @@ const DiagramEditor: React.FC = () => {
     if (!relationshipDialog.connection) return;
     
     const params = relationshipDialog.connection;
-    const { selectedType, priority, reason, doorType, minDistance, maxDistance, flowDirection, flowType } = relationshipDialog;
+    const { selectedType, priority, reason, doorType, minDistance, maxDistance, flowDirection, flowType, animated } = relationshipDialog;
     
     // Check if relationship already exists between these nodes
     const existingRelationships = edges.filter(edge => 
@@ -1061,7 +1064,7 @@ const DiagramEditor: React.FC = () => {
       source: params.source!,
       target: params.target!,
       type: 'multiRelationship',
-      animated: true,
+      animated: animated,
       style: { 
         stroke: getRelationshipColor(selectedType), 
         strokeWidth: 2,
@@ -1087,7 +1090,8 @@ const DiagramEditor: React.FC = () => {
         flowDirection: flowDirection || undefined,
         flowType: flowType || undefined,
         relationshipIndex: relationshipCount, // This will be updated by auto-fix
-        creationDirection: 'source-to-target' // Track creation direction for arrow display
+        creationDirection: 'source-to-target', // Track creation direction for arrow display
+        animated: animated
       }
     };
     
@@ -1422,17 +1426,6 @@ const DiagramEditor: React.FC = () => {
               Guided
             </ToggleButton>
           </ToggleButtonGroup>
-          
-          <Button
-            color="inherit"
-            startIcon={animationEnabled ? <Stop /> : <PlayArrow />}
-            onClick={() => setAnimationEnabled(!animationEnabled)}
-            variant={animationEnabled ? 'outlined' : 'text'}
-            size="small"
-            sx={{ mr: 2 }}
-          >
-            {animationEnabled ? 'Disable Animation' : 'Enable Animation'}
-          </Button>
           
           <Button
             color="inherit"
@@ -1857,6 +1850,19 @@ const DiagramEditor: React.FC = () => {
                 )}
               </>
             )}
+            
+            {/* Animation option */}
+            <Box sx={{ mt: 2 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={relationshipDialog.animated}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRelationshipDialog(prev => ({ ...prev, animated: e.target.checked }))}
+                  />
+                }
+                label="Enable Animation"
+              />
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>

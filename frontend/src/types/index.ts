@@ -124,6 +124,7 @@ export interface DiagramEdge {
   flowType?: string;
   relationshipIndex?: number;
   creationDirection?: 'source-to-target' | 'target-to-source';
+  animated?: boolean;
 }
 
 // New types for enhanced modes
