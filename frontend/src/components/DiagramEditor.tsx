@@ -8,6 +8,7 @@ import ReactFlow, {
   useEdgesState,
   ReactFlowProvider,
   ReactFlowInstance,
+  Edge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import {
@@ -172,7 +173,7 @@ const DiagramEditor: React.FC = () => {
       return {
         ...edge,
         type: 'multiRelationship' as const,
-        animated: true,
+        animated: animationEnabled,
         style: {
           ...edge.style,
           stroke: getRelationshipColor(relationshipType),
@@ -192,7 +193,8 @@ const DiagramEditor: React.FC = () => {
         data: {
           ...edgeData,
           relationshipType,
-          relationshipIndex
+          relationshipIndex,
+          creationDirection: edgeData.creationDirection || 'source-to-target'
         }
       };
     });
@@ -286,6 +288,9 @@ const DiagramEditor: React.FC = () => {
   });
   const [groupName, setGroupName] = useState<string>('');
   const [showGroupDialog, setShowGroupDialog] = useState<boolean>(false);
+  
+  // Animation toggle state
+  const [animationEnabled, setAnimationEnabled] = useState<boolean>(true);
   
   // Relationship creation state
   const [relationshipDialog, setRelationshipDialog] = useState<{
@@ -784,7 +789,7 @@ const DiagramEditor: React.FC = () => {
                 source: rel.fromId,
                 target: rel.toId,
                 type: 'multiRelationship' as const,
-                animated: true,
+                animated: animationEnabled,
                 style: {
                   stroke: getRelationshipColor(rel.type),
                   strokeWidth: 2,
@@ -888,7 +893,7 @@ const DiagramEditor: React.FC = () => {
                   source: rel.fromId,
                   target: rel.toId,
                   type: 'multiRelationship' as const,
-                  animated: true,
+                  animated: animationEnabled,
                   style: {
                     stroke: getRelationshipColor(rel.type),
                     strokeWidth: 2,
@@ -1051,7 +1056,7 @@ const DiagramEditor: React.FC = () => {
     
     // Create edge with unique ID for multiple relationships
     const uniqueId = `edge-${params.source}-${params.target}-${selectedType}-${Date.now()}`;
-    const newEdge: DiagramEdge = {
+    const newEdge: Edge<DiagramEdge> = {
       id: uniqueId,
       source: params.source!,
       target: params.target!,
@@ -1081,7 +1086,8 @@ const DiagramEditor: React.FC = () => {
         maxDistance: maxDistance || undefined,
         flowDirection: flowDirection || undefined,
         flowType: flowType || undefined,
-        relationshipIndex: relationshipCount // This will be updated by auto-fix
+        relationshipIndex: relationshipCount, // This will be updated by auto-fix
+        creationDirection: 'source-to-target' // Track creation direction for arrow display
       }
     };
     
@@ -1416,6 +1422,17 @@ const DiagramEditor: React.FC = () => {
               Guided
             </ToggleButton>
           </ToggleButtonGroup>
+          
+          <Button
+            color="inherit"
+            startIcon={animationEnabled ? <Stop /> : <PlayArrow />}
+            onClick={() => setAnimationEnabled(!animationEnabled)}
+            variant={animationEnabled ? 'outlined' : 'text'}
+            size="small"
+            sx={{ mr: 2 }}
+          >
+            {animationEnabled ? 'Disable Animation' : 'Enable Animation'}
+          </Button>
           
           <Button
             color="inherit"
