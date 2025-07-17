@@ -9,6 +9,8 @@ import ReactFlow, {
   ReactFlowProvider,
   ReactFlowInstance,
   Edge,
+  ConnectionMode,
+  ConnectionLineType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import {
@@ -1224,6 +1226,7 @@ const DiagramEditor: React.FC = () => {
             height: template.defaultSize.height,
             icon: template.icon,
           },
+          connectable: true,
         };
 
         setNodes((nds) => nds.concat(newNode));
@@ -1564,6 +1567,9 @@ const DiagramEditor: React.FC = () => {
                 edgeTypes={edgeTypes}
                 deleteKeyCode="Delete"
                 multiSelectionKeyCode="Meta"
+                connectOnClick={true}
+                connectionMode={ConnectionMode.Strict}
+                connectionLineType={ConnectionLineType.SmoothStep}
                 fitView
                 snapToGrid
                 snapGrid={[20, 20]}
