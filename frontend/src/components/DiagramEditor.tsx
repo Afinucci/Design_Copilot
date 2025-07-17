@@ -1072,6 +1072,10 @@ const DiagramEditor: React.FC = () => {
 
   const onConnect = useCallback(
     (params: Connection) => {
+      console.log('🔗 Connection attempt detected:', params);
+      console.log('Source:', params.source, 'Target:', params.target);
+      console.log('Source Handle:', params.sourceHandle, 'Target Handle:', params.targetHandle);
+      
       // Open relationship dialog instead of directly creating edge
       setRelationshipDialog({
         open: true,

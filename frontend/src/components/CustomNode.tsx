@@ -94,7 +94,9 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           width: 10,
           height: 10,
           border: '2px solid #fff',
-          borderRadius: '50%'
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair'
         }}
       />
       <Handle 
@@ -106,7 +108,9 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           width: 10,
           height: 10,
           border: '2px solid #fff',
-          borderRadius: '50%'
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair'
         }}
       />
       
@@ -120,7 +124,9 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           width: 10,
           height: 10,
           border: '2px solid #fff',
-          borderRadius: '50%'
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair'
         }}
       />
       <Handle 
@@ -132,7 +138,9 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           width: 10,
           height: 10,
           border: '2px solid #fff',
-          borderRadius: '50%'
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair'
         }}
       />
       
@@ -146,7 +154,9 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           width: 10,
           height: 10,
           border: '2px solid #fff',
-          borderRadius: '50%'
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair'
         }}
       />
       <Handle 
@@ -158,7 +168,9 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           width: 10,
           height: 10,
           border: '2px solid #fff',
-          borderRadius: '50%'
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair'
         }}
       />
       
@@ -172,7 +184,9 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           width: 10,
           height: 10,
           border: '2px solid #fff',
-          borderRadius: '50%'
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair'
         }}
       />
       <Handle 
@@ -184,7 +198,9 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           width: 10,
           height: 10,
           border: '2px solid #fff',
-          borderRadius: '50%'
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair'
         }}
       />
       
