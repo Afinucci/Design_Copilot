@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Box, Typography, Chip, Paper, Tooltip, Badge } from '@mui/material';
 import { Build } from '@mui/icons-material';
+import './CustomNode.css';
 
 interface Equipment {
   id: string;
@@ -84,10 +85,93 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
         },
       }}
     >
-      <Handle type="target" position={Position.Left} />
-      <Handle type="source" position={Position.Right} />
-      <Handle type="target" position={Position.Top} />
-      <Handle type="source" position={Position.Bottom} />
+      {/* Left handle - bidirectional (centered) */}
+      <Handle 
+        type="source" 
+        position={Position.Left} 
+        id="left"
+        isConnectable={true}
+        style={{ 
+          background: '#555',
+          width: 14,
+          height: 14,
+          border: '2px solid #fff',
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          transition: 'all 0.2s ease-in-out',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        }}
+        className="custom-handle"
+      />
+      
+      {/* Right handle - bidirectional (centered) */}
+      <Handle 
+        type="source" 
+        position={Position.Right} 
+        id="right"
+        isConnectable={true}
+        style={{ 
+          background: '#555',
+          width: 14,
+          height: 14,
+          border: '2px solid #fff',
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          transition: 'all 0.2s ease-in-out',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        }}
+        className="custom-handle"
+      />
+      
+      {/* Top handle - bidirectional (centered) */}
+      <Handle 
+        type="source" 
+        position={Position.Top} 
+        id="top"
+        isConnectable={true}
+        style={{ 
+          background: '#555',
+          width: 14,
+          height: 14,
+          border: '2px solid #fff',
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          transition: 'all 0.2s ease-in-out',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        }}
+        className="custom-handle"
+      />
+      
+      {/* Bottom handle - bidirectional (centered) */}
+      <Handle 
+        type="source" 
+        position={Position.Bottom} 
+        id="bottom"
+        isConnectable={true}
+        style={{ 
+          background: '#555',
+          width: 14,
+          height: 14,
+          border: '2px solid #fff',
+          borderRadius: '50%',
+          pointerEvents: 'all',
+          cursor: 'crosshair',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          transition: 'all 0.2s ease-in-out',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        }}
+        className="custom-handle"
+      />
       
       {/* Group indicator */}
       {groupId && (
