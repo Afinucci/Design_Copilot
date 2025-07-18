@@ -2,7 +2,11 @@ import React from 'react';
 import { 
   EdgeProps, 
   EdgeLabelRenderer,
-  BaseEdge 
+  BaseEdge,
+  getStraightPath,
+  useStore,
+  Node,
+  Edge
 } from 'reactflow';
 
 interface MultiRelationshipEdgeData {
@@ -17,6 +21,53 @@ interface MultiRelationshipEdgeData {
   flowType?: string;
   creationDirection?: 'source-to-target' | 'target-to-source';
 }
+
+// Helper function to get node dimensions from store
+const getNodeDimensions = (nodeId: string, nodes: Node[]): { width: number; height: number } => {
+  const node = nodes.find((n: Node) => n.id === nodeId);
+  if (!node) return { width: 120, height: 80 }; // Default size
+  
+  const nodeData = node.data;
+  return {
+    width: nodeData?.width || 120,
+    height: nodeData?.height || 80
+  };
+};
+
+// Helper function to calculate intersection point on node boundary
+const getNodeIntersectionPoint = (
+  nodeX: number, 
+  nodeY: number, 
+  nodeWidth: number, 
+  nodeHeight: number, 
+  lineX: number, 
+  lineY: number
+): { x: number; y: number } => {
+  // Calculate center of node
+  const centerX = nodeX + nodeWidth / 2;
+  const centerY = nodeY + nodeHeight / 2;
+  
+  // Calculate direction vector from node center to line endpoint
+  const dx = lineX - centerX;
+  const dy = lineY - centerY;
+  
+  // Calculate intersection with node boundary
+  const halfWidth = nodeWidth / 2;
+  const halfHeight = nodeHeight / 2;
+  
+  // Find which edge of the rectangle the line intersects
+  if (Math.abs(dx) / halfWidth > Math.abs(dy) / halfHeight) {
+    // Intersects with left or right edge
+    const x = centerX + (dx > 0 ? halfWidth : -halfWidth);
+    const y = centerY + (dy * halfWidth) / Math.abs(dx);
+    return { x, y };
+  } else {
+    // Intersects with top or bottom edge
+    const x = centerX + (dx * halfHeight) / Math.abs(dy);
+    const y = centerY + (dy > 0 ? halfHeight : -halfHeight);
+    return { x, y };
+  }
+};
 
 const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   id,
@@ -34,19 +85,15 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   labelBgStyle,
   labelBgPadding,
   labelBgBorderRadius,
+  source,
+  target,
 }) => {
-  const relationshipIndex = data?.relationshipIndex ?? 0;
+  // Remove unused variable warning
+  // const relationshipIndex = data?.relationshipIndex ?? 0;
   
-  console.log('MultiRelationshipEdge rendering:', {
-    id,
-    relationshipIndex,
-    relationshipType: data?.relationshipType,
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    edgeCount: data ? 'data present' : 'no data'
-  });
+  // Get all nodes and edges from the store
+  const nodes = useStore((state) => state.getNodes());
+  const edges = useStore((state) => state.edges);
   
   // Ensure we have valid data before rendering
   if (!data || data.relationshipIndex === undefined) {
@@ -56,46 +103,89 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   
   if (sourceX === targetX && sourceY === targetY) return null;
   
+  // Get node dimensions
+  const sourceDimensions = getNodeDimensions(source, nodes);
+  const targetDimensions = getNodeDimensions(target, nodes);
+  
+  // Find all edges between the same nodes (bidirectional)
+  const parallelEdges = edges.filter((edge: Edge) => 
+    (edge.source === source && edge.target === target) ||
+    (edge.source === target && edge.target === source)
+  );
+  
+  // Calculate proper offset for multiple relationships
+  const edgeCount = parallelEdges.length;
+  const edgeIndex = parallelEdges.findIndex((edge: Edge) => edge.id === id);
+  
+  // Calculate offset: center multiple lines around the direct line
+  const offsetAmount = 15; // 15px spacing between parallel lines
+  const offset = edgeCount > 1 ? 
+    (edgeIndex - Math.floor(edgeCount / 2)) * offsetAmount + 
+    (edgeCount % 2 === 0 ? offsetAmount / 2 : 0) : 0;
+  
+  // Calculate direction vector
   const dx = targetX - sourceX;
   const dy = targetY - sourceY;
   const distance = Math.sqrt(dx * dx + dy * dy);
   
   if (distance === 0) return null;
   
-  // Unit vector
+  // Unit vectors
   const ux = dx / distance;
   const uy = dy / distance;
   
-  // Perp unit vector
+  // Perpendicular unit vector for offset
   const perpUx = -uy;
   const perpUy = ux;
   
-  // Calculate curvature with better distribution for multiple edges
-  const isEven = relationshipIndex % 2 === 0;
-  const direction = isEven ? 1 : -1;
-  const magnitude = Math.ceil((relationshipIndex + 1) / 2);
+  // Calculate node boundary intersection points
+  const sourceNode = nodes.find((n: Node) => n.id === source);
+  const targetNode = nodes.find((n: Node) => n.id === target);
   
-  // Increased curvature for better visibility
-  const baseCurvature = Math.min(distance * 0.3, 100); // Scale with distance but cap at 100
-  const curvature = magnitude * baseCurvature * direction;
+  if (!sourceNode || !targetNode) return null;
   
-  console.log(`Edge ${id}: index=${relationshipIndex}, magnitude=${magnitude}, direction=${direction}, curvature=${curvature}`);
+  // Get actual node positions and dimensions
+  const sourceNodeX = sourceNode.position.x;
+  const sourceNodeY = sourceNode.position.y;
+  const targetNodeX = targetNode.position.x;
+  const targetNodeY = targetNode.position.y;
   
-  // Center point
-  const centerX = sourceX + dx * 0.5;
-  const centerY = sourceY + dy * 0.5;
+  // Calculate intersection points on node boundaries
+  const sourceIntersection = getNodeIntersectionPoint(
+    sourceNodeX, 
+    sourceNodeY, 
+    sourceDimensions.width, 
+    sourceDimensions.height, 
+    targetX, 
+    targetY
+  );
   
-  // Offset control point
-  const controlX = centerX + perpUx * curvature;
-  const controlY = centerY + perpUy * curvature;
+  const targetIntersection = getNodeIntersectionPoint(
+    targetNodeX, 
+    targetNodeY, 
+    targetDimensions.width, 
+    targetDimensions.height, 
+    sourceX, 
+    sourceY
+  );
   
-  // Create path
-  const edgePath = `M${sourceX},${sourceY} Q ${controlX},${controlY} ${targetX},${targetY}`;
+  // Apply offset to intersection points
+  const offsetSourceX = sourceIntersection.x + perpUx * offset;
+  const offsetSourceY = sourceIntersection.y + perpUy * offset;
+  const offsetTargetX = targetIntersection.x + perpUx * offset;
+  const offsetTargetY = targetIntersection.y + perpUy * offset;
   
-  // Label position at t=0.5 on the quadratic bezier curve
-  const t = 0.5;
-  const labelX = (1 - t) * (1 - t) * sourceX + 2 * (1 - t) * t * controlX + t * t * targetX;
-  const labelY = (1 - t) * (1 - t) * sourceY + 2 * (1 - t) * t * controlY + t * t * targetY;
+  // Create straight line path using ReactFlow's getStraightPath
+  const [edgePath] = getStraightPath({
+    sourceX: offsetSourceX,
+    sourceY: offsetSourceY,
+    targetX: offsetTargetX,
+    targetY: offsetTargetY,
+  });
+  
+  // Label position at center of line
+  const labelX = offsetSourceX + (offsetTargetX - offsetSourceX) * 0.5;
+  const labelY = offsetSourceY + (offsetTargetY - offsetSourceY) * 0.5;
   
   // Helper function to determine if arrows should be shown
   const shouldShowArrows = () => {
@@ -112,10 +202,8 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
     if (isBidirectional) {
       return { showSourceArrow: true, showTargetArrow: true };
     } else if (isUnidirectional) {
-      // For unidirectional, show arrow only on the target (second selected node)
       return { showSourceArrow: false, showTargetArrow: true };
     } else {
-      // Default to showing arrow on target
       return { showSourceArrow: false, showTargetArrow: true };
     }
   };
@@ -175,25 +263,6 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
         style={{ cursor: 'pointer' }}
         className="react-flow__edge-interaction"
       />
-      {/* Debug indicator showing relationship index */}
-      <circle
-        cx={labelX + (relationshipIndex * 10)}
-        cy={labelY - 20}
-        r="5"
-        fill="red"
-        stroke="white"
-        strokeWidth="1"
-      />
-      <text
-        x={labelX + (relationshipIndex * 10)}
-        y={labelY - 15}
-        fontSize="10"
-        fill="white"
-        textAnchor="middle"
-        fontWeight="bold"
-      >
-        {relationshipIndex}
-      </text>
       {label && (
         <EdgeLabelRenderer>
           <div
@@ -220,4 +289,4 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   );
 };
 
-export default MultiRelationshipEdge;
+export default React.memo(MultiRelationshipEdge);

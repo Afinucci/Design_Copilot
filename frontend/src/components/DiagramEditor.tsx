@@ -1072,9 +1072,41 @@ const DiagramEditor: React.FC = () => {
     // This would require a new API endpoint to save custom templates
   };
 
+  const isValidConnection = useCallback((connection: Connection) => {
+    console.log('🔍 Validating connection:', connection);
+    console.log('Source:', connection.source, 'Target:', connection.target);
+    console.log('Source Handle:', connection.sourceHandle, 'Target Handle:', connection.targetHandle);
+    
+    // Basic validation: can't connect to self
+    if (connection.source === connection.target) {
+      console.log('❌ Cannot connect node to itself');
+      return false;
+    }
+    
+    // Check if source and target exist
+    const sourceNode = nodes.find(n => n.id === connection.source);
+    const targetNode = nodes.find(n => n.id === connection.target);
+    
+    if (!sourceNode || !targetNode) {
+      console.log('❌ Source or target node not found');
+      return false;
+    }
+    
+    console.log('✅ Connection is valid');
+    return true;
+  }, [nodes]);
+
+  const onConnectStart = useCallback((event: any, params: any) => {
+    console.log('🚀 Connection started:', params);
+  }, []);
+
+  const onConnectEnd = useCallback((event: any) => {
+    console.log('🏁 Connection ended');
+  }, []);
+
   const onConnect = useCallback(
     (params: Connection) => {
-      console.log('🔗 Connection attempt detected:', params);
+      console.log('🔗 Connection completed successfully:', params);
       console.log('Source:', params.source, 'Target:', params.target);
       console.log('Source Handle:', params.sourceHandle, 'Target Handle:', params.targetHandle);
       
@@ -1127,6 +1159,8 @@ const DiagramEditor: React.FC = () => {
       id: uniqueId,
       source: params.source!,
       target: params.target!,
+      sourceHandle: params.sourceHandle!,
+      targetHandle: params.targetHandle!,
       type: 'multiRelationship',
       animated: animated,
       style: { 
@@ -1160,6 +1194,8 @@ const DiagramEditor: React.FC = () => {
     };
     
     console.log('Creating new edge:', newEdge);
+    console.log('Connection params:', params);
+    console.log('Source Handle:', params.sourceHandle, 'Target Handle:', params.targetHandle);
     console.log('Existing relationships:', existingRelationships.length);
     
     setEdges((eds) => addMultiEdge(eds, newEdge));
@@ -1229,6 +1265,9 @@ const DiagramEditor: React.FC = () => {
           connectable: true,
         };
 
+        console.log('🎯 Creating new node:', newNode);
+        console.log('Node type:', newNode.type, 'Connectable:', newNode.connectable);
+        
         setNodes((nds) => nds.concat(newNode));
         showSnackbar(`Added ${template.name} to diagram`, 'success');
       }
@@ -1558,6 +1597,9 @@ const DiagramEditor: React.FC = () => {
                 onNodesDelete={onNodesDelete}
                 onEdgesDelete={onEdgesDelete}
                 onConnect={onConnect}
+                onConnectStart={onConnectStart}
+                onConnectEnd={onConnectEnd}
+                isValidConnection={isValidConnection}
                 onNodeClick={onNodeClick}
                 onEdgeClick={handleEdgeClick}
                 onDrop={onDrop}
@@ -1567,9 +1609,10 @@ const DiagramEditor: React.FC = () => {
                 edgeTypes={edgeTypes}
                 deleteKeyCode="Delete"
                 multiSelectionKeyCode="Meta"
-                connectOnClick={true}
-                connectionMode={ConnectionMode.Strict}
-                connectionLineType={ConnectionLineType.SmoothStep}
+                connectOnClick={false}
+                connectionMode={ConnectionMode.Loose}
+                connectionLineType={ConnectionLineType.Straight}
+                connectionLineStyle={{ stroke: '#1976d2', strokeWidth: 3 }}
                 fitView
                 snapToGrid
                 snapGrid={[20, 20]}
