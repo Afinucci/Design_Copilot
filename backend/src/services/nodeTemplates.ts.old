@@ -1,0 +1,417 @@
+import Neo4jService from '../config/database';
+import { NodeTemplate } from '../../../shared/types/index';
+
+export class NodeTemplatesService {
+  private neo4jService: Neo4jService;
+
+  constructor() {
+    this.neo4jService = Neo4jService.getInstance();
+  }
+
+  async getTemplates(): Promise<NodeTemplate[]> {
+    const session = this.neo4jService.getSession();
+    if (!session) {
+      console.warn('🔌 Backend: No database session available, using fallback templates');
+      return this.getFallbackTemplates();
+    }
+
+    try {
+      const result = await session.run(`
+        MATCH (n:NodeTemplate)
+        RETURN n
+        ORDER BY n.category, n.name
+      `);
+
+      const templates = result.records.map(record => {
+        const node = record.get('n');
+        return {
+          id: node.properties.id,
+          name: node.properties.name,
+          category: node.properties.category,
+          description: node.properties.description || '',
+          cleanroomClass: node.properties.cleanroomClass || 'Unclassified',
+          requiredConnections: node.properties.requiredConnections || [],
+          prohibitedConnections: node.properties.prohibitedConnections || [],
+          sharedUtilities: node.properties.sharedUtilities || [],
+          personnelRequirements: node.properties.personnelRequirements || [],
+          color: this.getCategoryColor(node.properties.category),
+          icon: this.getCategoryIcon(node.properties.category),
+        } as NodeTemplate;
+      });
+
+      console.log(`📋 Backend: Retrieved ${templates.length} templates from database`);
+      return templates;
+    } catch (error) {
+      console.error('❌ Backend: Error fetching templates:', error);
+      return this.getFallbackTemplates();
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getTemplatesByCategory(category: string): Promise<NodeTemplate[]> {
+    const session = this.neo4jService.getSession();
+    if (!session) {
+      console.warn('🔌 Backend: No database session available, using fallback templates');
+      return this.getFallbackTemplates().filter(t => t.category === category);
+    }
+
+    try {
+      const result = await session.run(`
+        MATCH (n:NodeTemplate {category: $category})
+        RETURN n
+        ORDER BY n.name
+      `, { category });
+
+      const templates = result.records.map(record => {
+        const node = record.get('n');
+        return {
+          id: node.properties.id,
+          name: node.properties.name,
+          category: node.properties.category,
+          description: node.properties.description || '',
+          cleanroomClass: node.properties.cleanroomClass || 'Unclassified',
+          requiredConnections: node.properties.requiredConnections || [],
+          prohibitedConnections: node.properties.prohibitedConnections || [],
+          sharedUtilities: node.properties.sharedUtilities || [],
+          personnelRequirements: node.properties.personnelRequirements || [],
+          color: this.getCategoryColor(node.properties.category),
+          icon: this.getCategoryIcon(node.properties.category),
+        } as NodeTemplate;
+      });
+
+      console.log(`📋 Backend: Retrieved ${templates.length} templates for category: ${category}`);
+      return templates;
+    } catch (error) {
+      console.error('❌ Backend: Error fetching templates by category:', error);
+      return this.getFallbackTemplates().filter(t => t.category === category);
+    } finally {
+      await session.close();
+    }
+  }
+
+  async initializeTemplates(): Promise<void> {
+    const session = this.neo4jService.getSession();
+    if (!session) {
+      console.warn('🔌 Backend: No database session available, cannot initialize templates');
+      return;
+    }
+
+    try {
+      console.log('📋 Backend: Initializing pharmaceutical node templates...');
+      
+      // Clear existing templates first
+      await session.run('MATCH (n:NodeTemplate) DELETE n');
+      
+      const templates = this.getFallbackTemplates();
+      
+      for (const template of templates) {
+        await session.run(`
+          CREATE (n:NodeTemplate {
+            id: $id,
+            name: $name,
+            category: $category,
+            description: $description,
+            cleanroomClass: $cleanroomClass,
+            requiredConnections: $requiredConnections,
+            prohibitedConnections: $prohibitedConnections,
+            sharedUtilities: $sharedUtilities,
+            personnelRequirements: $personnelRequirements
+          })
+        `, {
+          id: template.id,
+          name: template.name,
+          category: template.category,
+          description: template.description,
+          cleanroomClass: template.cleanroomClass,
+          requiredConnections: template.requiredConnections,
+          prohibitedConnections: template.prohibitedConnections,
+          sharedUtilities: template.sharedUtilities,
+          personnelRequirements: template.personnelRequirements,
+        });
+      }
+
+      console.log(`✅ Backend: Successfully initialized ${templates.length} pharmaceutical node templates`);
+    } catch (error) {
+      console.error('❌ Backend: Error initializing templates:', error);
+      throw error;
+    } finally {
+      await session.close();
+    }
+  }
+
+  private getCategoryColor(category: string): string {
+    switch (category) {
+      case 'Production':
+        return '#1976d2';
+      case 'Quality Control':
+        return '#388e3c';
+      case 'Warehouse':
+        return '#f57c00';
+      case 'Utilities':
+        return '#7b1fa2';
+      case 'Personnel':
+        return '#c62828';
+      case 'Support':
+        return '#455a64';
+      default:
+        return '#757575';
+    }
+  }
+
+  private getCategoryIcon(category: string): string {
+    switch (category) {
+      case 'Production':
+        return '🏭';
+      case 'Quality Control':
+        return '🔬';
+      case 'Warehouse':
+        return '📦';
+      case 'Utilities':
+        return '⚡';
+      case 'Personnel':
+        return '👥';
+      case 'Support':
+        return '🔧';
+      default:
+        return '📋';
+    }
+  }
+
+  private getFallbackTemplates(): NodeTemplate[] {
+    return [
+      // Production Areas
+      {
+        id: 'weighing',
+        name: 'Weighing Area',
+        category: 'Production',
+        description: 'Area for weighing and dispensing raw materials',
+        cleanroomClass: 'Class C',
+        requiredConnections: ['Raw Materials Storage', 'Granulation Area'],
+        prohibitedConnections: ['Finished Goods Storage'],
+        sharedUtilities: ['HVAC', 'Compressed Air'],
+        personnelRequirements: ['Gowning Area'],
+        color: '#1976d2',
+        icon: '⚖️',
+      },
+      {
+        id: 'granulation',
+        name: 'Granulation Area',
+        category: 'Production',
+        description: 'Wet and dry granulation processes',
+        cleanroomClass: 'Class C',
+        requiredConnections: ['Weighing Area', 'Compression Area'],
+        prohibitedConnections: [],
+        sharedUtilities: ['HVAC', 'Compressed Air', 'Purified Water'],
+        personnelRequirements: ['Gowning Area'],
+        color: '#1976d2',
+        icon: '🔄',
+      },
+      {
+        id: 'compression',
+        name: 'Compression Area',
+        category: 'Production',
+        description: 'Tablet compression and forming',
+        cleanroomClass: 'Class C',
+        requiredConnections: ['Granulation Area', 'Coating Area'],
+        prohibitedConnections: [],
+        sharedUtilities: ['HVAC', 'Compressed Air', 'Electrical'],
+        personnelRequirements: ['Gowning Area'],
+        color: '#1976d2',
+        icon: '💊',
+      },
+      {
+        id: 'coating',
+        name: 'Coating Area',
+        category: 'Production',
+        description: 'Film coating and sugar coating',
+        cleanroomClass: 'Class C',
+        requiredConnections: ['Compression Area', 'Packaging Area'],
+        prohibitedConnections: [],
+        sharedUtilities: ['HVAC', 'Compressed Air', 'Purified Water'],
+        personnelRequirements: ['Gowning Area'],
+        color: '#1976d2',
+        icon: '🎨',
+      },
+      {
+        id: 'packaging',
+        name: 'Packaging Area',
+        category: 'Production',
+        description: 'Primary and secondary packaging',
+        cleanroomClass: 'Class D',
+        requiredConnections: ['Coating Area', 'Finished Goods Storage'],
+        prohibitedConnections: ['Raw Materials Storage'],
+        sharedUtilities: ['HVAC', 'Compressed Air'],
+        personnelRequirements: ['Gowning Area'],
+        color: '#1976d2',
+        icon: '📦',
+      },
+
+      // Quality Control Areas
+      {
+        id: 'analytical-lab',
+        name: 'Analytical Lab',
+        category: 'Quality Control',
+        description: 'Chemical and physical testing',
+        cleanroomClass: 'Class D',
+        requiredConnections: ['Quality Control Office'],
+        prohibitedConnections: [],
+        sharedUtilities: ['HVAC', 'Purified Water', 'Electrical'],
+        personnelRequirements: ['Laboratory Gowning'],
+        color: '#388e3c',
+        icon: '🔬',
+      },
+      {
+        id: 'microbiology-lab',
+        name: 'Microbiology Lab',
+        category: 'Quality Control',
+        description: 'Microbiological testing and sterility testing',
+        cleanroomClass: 'Class A/B',
+        requiredConnections: ['Analytical Lab'],
+        prohibitedConnections: ['Production Areas'],
+        sharedUtilities: ['HVAC', 'Purified Water', 'Electrical'],
+        personnelRequirements: ['Sterile Gowning'],
+        color: '#388e3c',
+        icon: '🦠',
+      },
+      {
+        id: 'stability-chamber',
+        name: 'Stability Chamber',
+        category: 'Quality Control',
+        description: 'Long-term and accelerated stability studies',
+        cleanroomClass: 'Controlled',
+        requiredConnections: ['Analytical Lab'],
+        prohibitedConnections: [],
+        sharedUtilities: ['HVAC', 'Electrical'],
+        personnelRequirements: ['Standard Access'],
+        color: '#388e3c',
+        icon: '🌡️',
+      },
+
+      // Warehouse Areas
+      {
+        id: 'raw-materials',
+        name: 'Raw Materials Storage',
+        category: 'Warehouse',
+        description: 'Storage of incoming raw materials',
+        cleanroomClass: 'Controlled',
+        requiredConnections: ['Weighing Area', 'Receiving Area'],
+        prohibitedConnections: ['Finished Goods Storage'],
+        sharedUtilities: ['HVAC', 'Fire Protection'],
+        personnelRequirements: ['Warehouse Uniform'],
+        color: '#f57c00',
+        icon: '📦',
+      },
+      {
+        id: 'finished-goods',
+        name: 'Finished Goods Storage',
+        category: 'Warehouse',
+        description: 'Storage of finished pharmaceutical products',
+        cleanroomClass: 'Controlled',
+        requiredConnections: ['Packaging Area', 'Shipping Area'],
+        prohibitedConnections: ['Raw Materials Storage'],
+        sharedUtilities: ['HVAC', 'Fire Protection'],
+        personnelRequirements: ['Warehouse Uniform'],
+        color: '#f57c00',
+        icon: '📋',
+      },
+      {
+        id: 'quarantine',
+        name: 'Quarantine Storage',
+        category: 'Warehouse',
+        description: 'Quarantine storage for materials under testing',
+        cleanroomClass: 'Controlled',
+        requiredConnections: ['Quality Control Areas'],
+        prohibitedConnections: [],
+        sharedUtilities: ['HVAC', 'Security System'],
+        personnelRequirements: ['Restricted Access'],
+        color: '#f57c00',
+        icon: '🚫',
+      },
+
+      // Personnel Areas
+      {
+        id: 'gowning-area',
+        name: 'Gowning Area',
+        category: 'Personnel',
+        description: 'Personnel gowning and hygiene',
+        cleanroomClass: 'Class D',
+        requiredConnections: ['Production Areas'],
+        prohibitedConnections: [],
+        sharedUtilities: ['HVAC', 'Purified Water'],
+        personnelRequirements: ['All Production Staff'],
+        color: '#c62828',
+        icon: '👔',
+      },
+      {
+        id: 'break-room',
+        name: 'Break Room',
+        category: 'Personnel',
+        description: 'Staff break and dining area',
+        cleanroomClass: 'Office',
+        requiredConnections: [],
+        prohibitedConnections: ['Production Areas'],
+        sharedUtilities: ['HVAC', 'Potable Water'],
+        personnelRequirements: ['All Staff'],
+        color: '#c62828',
+        icon: '☕',
+      },
+
+      // Utilities
+      {
+        id: 'hvac-room',
+        name: 'HVAC Room',
+        category: 'Utilities',
+        description: 'Heating, ventilation, and air conditioning equipment',
+        cleanroomClass: 'Mechanical',
+        requiredConnections: [],
+        prohibitedConnections: ['Production Areas'],
+        sharedUtilities: ['Electrical', 'Chilled Water'],
+        personnelRequirements: ['Maintenance Staff'],
+        color: '#7b1fa2',
+        icon: '🌪️',
+      },
+      {
+        id: 'water-system',
+        name: 'Purified Water System',
+        category: 'Utilities',
+        description: 'Purified water generation and distribution',
+        cleanroomClass: 'Utility',
+        requiredConnections: [],
+        prohibitedConnections: [],
+        sharedUtilities: ['Electrical', 'Raw Water'],
+        personnelRequirements: ['Qualified Operators'],
+        color: '#7b1fa2',
+        icon: '💧',
+      },
+
+      // Support Areas
+      {
+        id: 'receiving',
+        name: 'Receiving Area',
+        category: 'Support',
+        description: 'Material receiving and inspection',
+        cleanroomClass: 'Warehouse',
+        requiredConnections: ['Raw Materials Storage'],
+        prohibitedConnections: [],
+        sharedUtilities: ['Loading Dock', 'Inspection Equipment'],
+        personnelRequirements: ['Receiving Staff'],
+        color: '#455a64',
+        icon: '📥',
+      },
+      {
+        id: 'shipping',
+        name: 'Shipping Area',
+        category: 'Support',
+        description: 'Finished product shipping and dispatch',
+        cleanroomClass: 'Warehouse',
+        requiredConnections: ['Finished Goods Storage'],
+        prohibitedConnections: [],
+        sharedUtilities: ['Loading Dock', 'Shipping Equipment'],
+        personnelRequirements: ['Shipping Staff'],
+        color: '#455a64',
+        icon: '📤',
+      },
+    ];
+  }
+}

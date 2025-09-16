@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, memo } from 'react';
 import {
   Box,
   Paper,
@@ -19,27 +19,38 @@ import {
 import { ExpandMore, Search, Edit, Visibility, Add } from '@mui/icons-material';
 import { NodeTemplate, NodeCategory, AppMode } from '../types';
 import CustomNodeCreationModal from './CustomNodeCreationModal';
+import { apiService } from '../services/api';
 
 interface NodePaletteProps {
   templates: NodeTemplate[];
   mode: AppMode;
   onCreateCustomNode?: (nodeTemplate: Omit<NodeTemplate, 'id'>) => void;
+  onGuidedNodeSelect?: (nodeId: string) => void;
+  isVisible?: boolean;
 }
 
-const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCustomNode }) => {
+const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCustomNode, onGuidedNodeSelect, isVisible = true }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<string[]>([
     'Production',
     'Quality Control',
   ]);
   const [showCustomNodeModal, setShowCustomNodeModal] = useState(false);
+  const [guidedNodes, setGuidedNodes] = useState<NodeTemplate[]>([]);
+
+  useEffect(() => {
+    if (mode === 'guided') {
+      apiService.getExistingGraphNodes().then(setGuidedNodes).catch(() => setGuidedNodes([]));
+    }
+  }, [mode]);
 
   const filteredTemplates = useMemo(() => {
-    return templates.filter(template =>
+    const source = mode === 'guided' ? guidedNodes : templates;
+    return source.filter(template =>
       (template.name && template.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (template.category && template.category.toLowerCase().includes(searchTerm.toLowerCase()))
     );
-  }, [templates, searchTerm]);
+  }, [templates, guidedNodes, searchTerm, mode]);
 
   const templatesByCategory = useMemo(() => {
     const grouped = filteredTemplates.reduce((acc, template) => {
@@ -63,8 +74,26 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
   };
 
   const handleDragStart = (event: React.DragEvent, template: NodeTemplate) => {
-    event.dataTransfer.setData('application/reactflow', JSON.stringify(template));
+    console.log('🎯 Drag started for template:', template);
+    
+    // Allow dragging in guided mode since we're dragging KG nodes for exploration
+    const templateData = JSON.stringify(template);
+    event.dataTransfer.setData('application/reactflow', templateData);
     event.dataTransfer.effectAllowed = 'move';
+    
+    console.log('🎯 Set drag data:', {
+      dataType: 'application/reactflow',
+      dataLength: templateData.length,
+      templateId: template.id,
+      templateName: template.name
+    });
+  };
+
+  const handleNodeClick = (template: NodeTemplate) => {
+    if (mode === 'guided' && onGuidedNodeSelect) {
+      // In guided mode, clicking a node should fetch its relationships
+      onGuidedNodeSelect(template.id);
+    }
   };
 
   const getCategoryIcon = (category: NodeCategory) => {
@@ -124,10 +153,12 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
       sx={{
         width: 280,
         height: '100%',
-        display: 'flex',
+        display: isVisible ? 'flex' : 'none',
         flexDirection: 'column',
         borderRadius: 0,
         borderRight: '1px solid #e0e0e0',
+        flex: 1,
+        minHeight: 0,
       }}
     >
       <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
@@ -137,6 +168,24 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
             {mode === 'creation' ? 'Template Library' : 'Knowledge Graph'}
           </Typography>
         </Box>
+        
+        {mode === 'guided' && (
+          <Box sx={{ 
+            mb: 2, 
+            p: 1.5, 
+            backgroundColor: '#e3f2fd', 
+            borderRadius: 1,
+            border: '1px solid #bbdefb'
+          }}>
+            <Typography variant="body2" color="primary" sx={{ fontWeight: 500 }}>
+              <Visibility sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
+              Explore Knowledge Graph
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Click on any node to load it with all its relationships on the canvas.
+            </Typography>
+          </Box>
+        )}
         
         <TextField
           fullWidth
@@ -236,16 +285,17 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                 {categoryTemplates.map((template) => (
                   <ListItem
                     key={template.id}
-                    draggable
+                    draggable={true}
                     onDragStart={(e) => handleDragStart(e, template)}
+                    onClick={() => handleNodeClick(template)}
                     sx={{
-                      cursor: 'grab',
+                      cursor: mode === 'guided' ? 'pointer' : 'grab',
                       borderBottom: '1px solid #f0f0f0',
                       '&:hover': {
                         backgroundColor: '#f5f5f5',
                       },
                       '&:active': {
-                        cursor: 'grabbing',
+                        cursor: mode === 'guided' ? 'pointer' : 'grabbing',
                       },
                     }}
                   >
@@ -269,7 +319,7 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                         </Typography>
                       }
                       secondary={
-                        <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+                        <span style={{ display: 'flex', gap: '4px', marginTop: '4px', alignItems: 'center' }}>
                           {template.cleanroomClass && (
                             <Chip
                               label={`Class ${template.cleanroomClass}`}
@@ -292,7 +342,7 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                               color: '#7b1fa2',
                             }}
                           />
-                        </Box>
+                        </span>
                       }
                     />
                   </ListItem>
@@ -308,7 +358,7 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
         <Typography variant="caption" color="text.secondary">
           {mode === 'creation' 
             ? 'Drag templates to create new nodes. Results will expand the knowledge graph.'
-            : 'Drag existing nodes to visualize subgraphs. This creates read-only views.'
+            : 'Click nodes to load with relationships. Drag to add individual nodes to canvas.'
           }
         </Typography>
       </Box>
@@ -333,4 +383,4 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
   );
 };
 
-export default NodePalette;
+export default memo(NodePalette);

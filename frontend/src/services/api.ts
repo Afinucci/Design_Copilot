@@ -11,22 +11,91 @@ import {
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 class ApiService {
+  private baseURL = API_BASE_URL;
+
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
     
-    const response = await fetch(url, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
+    // Log all API requests for debugging
+    console.log('🌐 Base Request: DEBUG - Endpoint check:', {
+      endpoint,
+      includesGhostSuggestions: endpoint.includes('ghost-suggestions'),
+      url,
+      timestamp: new Date().toISOString()
     });
 
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    if (endpoint.includes('ghost-suggestions')) {
+      console.log('🌐 Base Request: Starting fetch request:', {
+        url,
+        method: options.method || 'GET',
+        headers: options.headers,
+        hasBody: !!options.body,
+        bodyLength: options.body ? (options.body as string).length : 0,
+        timestamp: new Date().toISOString()
+      });
     }
+    
+    try {
+      console.log('🌐 Base Request: ABOUT TO EXECUTE FETCH for:', endpoint);
+      
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+        ...options,
+      });
 
-    return response.json();
+      console.log('🌐 Base Request: FETCH COMPLETED for:', endpoint, 'Status:', response.status);
+
+      if (endpoint.includes('ghost-suggestions')) {
+        console.log('🌐 Base Request: Fetch response received:', {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      if (!response.ok) {
+        const errorMsg = `API request failed: ${response.status} ${response.statusText}`;
+        if (endpoint.includes('ghost-suggestions')) {
+          console.error('🌐 Base Request: ❌ Response not ok:', errorMsg);
+        }
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      
+      if (endpoint.includes('ghost-suggestions')) {
+        console.log('🌐 Base Request: ✅ JSON parsed successfully:', {
+          url,
+          dataKeys: Object.keys(data),
+          suggestionsLength: data.suggestions?.length,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      return data;
+    } catch (error) {
+      console.error('🌐 Base Request: ❌ FETCH ERROR for:', endpoint, {
+        url,
+        error: error instanceof Error ? error.message : error,
+        errorType: typeof error,
+        errorConstructor: error?.constructor?.name,
+        timestamp: new Date().toISOString()
+      });
+
+      if (endpoint.includes('ghost-suggestions')) {
+        console.error('🌐 Base Request: ❌ Ghost suggestions request failed with error:', {
+          url,
+          error: error instanceof Error ? error.message : error,
+          timestamp: new Date().toISOString()
+        });
+      }
+      throw error;
+    }
   }
 
   // Node Templates
@@ -79,8 +148,47 @@ class ApiService {
     return this.request<Suggestion[]>(`/nodes/${nodeId}/suggestions${excludeQuery}`);
   }
 
-  async getRelationshipsForNode(nodeId: string): Promise<SpatialRelationship[]> {
-    return this.request<SpatialRelationship[]>(`/nodes/${nodeId}/relationships`);
+  // Enhanced method with mode-awareness for relationship fetching
+  async getRelationshipsForNode(
+    nodeId: string, 
+    options?: { 
+      mode?: 'creation' | 'guided';
+      includeIcons?: boolean;
+      priority?: number;
+    }
+  ): Promise<SpatialRelationship[]> {
+    const queryParams = new URLSearchParams();
+    
+    if (options?.mode) {
+      queryParams.append('mode', options.mode);
+    }
+    if (options?.includeIcons) {
+      queryParams.append('includeIcons', 'true');
+    }
+    if (options?.priority !== undefined) {
+      queryParams.append('priority', options.priority.toString());
+    }
+    
+    const queryString = queryParams.toString();
+    const endpoint = `/nodes/${nodeId}/relationships${queryString ? `?${queryString}` : ''}`;
+    
+    console.log(`🌐 API: Fetching relationships for ${nodeId} with mode: ${options?.mode || 'standard'}`);
+    return this.request<SpatialRelationship[]>(endpoint);
+  }
+
+  // Get node with its relationships and related nodes (for guided mode)
+  async getNodeWithRelationships(nodeId: string): Promise<{
+    mainNode: any;
+    relatedNodes: any[];
+    relationships: any[];
+    metadata: any;
+  }> {
+    return this.request<{
+      mainNode: any;
+      relatedNodes: any[];
+      relationships: any[];
+      metadata: any;
+    }>(`/nodes/${nodeId}/with-relationships`);
   }
 
   // Diagrams
@@ -169,12 +277,78 @@ class ApiService {
     return this.request<{ nodes: any[]; relationships: any[]; patterns: any[]; metadata: any }>('/nodes/kg/import');
   }
 
+  async getNeo4jOverview(): Promise<{
+    connectionStatus: string;
+    database: { name: string; uri: string; user: string };
+    statistics: {
+      totalNodes: number;
+      totalRelationships: number;
+      nodeLabels: Array<{ label: string; count: number }>;
+      relationshipTypes: Array<{ type: string; count: number }>;
+      keyNodeCounts: Record<string, number>;
+    };
+    sampleNodes: Record<string, any[]>;
+    timestamp: string;
+  }> {
+    return this.request('/nodes/neo4j/overview');
+  }
+
   // Guided Mode: Get suggestions based on current diagram state
   async getGuidedSuggestions(currentNodes: any[], targetCategory: string): Promise<{ suggestions: any[] }> {
+    console.log('🌐 API Service: ❌ WRONG METHOD CALLED - getGuidedSuggestions (should be getGhostSuggestions)!');
     return this.request<{ suggestions: any[] }>('/nodes/kg/suggestions', {
       method: 'POST',
       body: JSON.stringify({ currentNodes, targetCategory }),
     });
+  }
+
+  // Enhanced Ghost Suggestions for real-time guided mode
+  async getGhostSuggestions(
+    triggerNodeId: string, 
+    triggerNodePosition: { x: number; y: number },
+    existingNodePositions: Array<{ id: string; x: number; y: number; width?: number; height?: number }>,
+    confidenceThreshold: number = 0.3,
+    triggerNodeName?: string,
+    triggerNodeCategory?: string
+  ): Promise<{ suggestions: any[] }> {
+    console.log('🌐 API Service: ✅ CORRECT METHOD CALLED - getGhostSuggestions!');
+    const requestBody = { 
+      triggerNodeId, 
+      triggerNodePosition, 
+      existingNodePositions, 
+      confidenceThreshold,
+      triggerNodeName,
+      triggerNodeCategory
+    };
+
+    console.log('🌐 API Service: Making ghost suggestions request:', {
+      url: `${this.baseURL}/nodes/kg/ghost-suggestions`,
+      method: 'POST',
+      requestBody,
+      timestamp: new Date().toISOString()
+    });
+
+    try {
+      const response = await this.request<{ suggestions: any[] }>('/nodes/kg/ghost-suggestions', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+      console.log('🌐 API Service: ✅ Ghost suggestions response received:', {
+        suggestionsCount: response.suggestions?.length || 0,
+        response,
+        timestamp: new Date().toISOString()
+      });
+
+      return response;
+    } catch (error) {
+      console.error('🌐 API Service: ❌ Ghost suggestions request failed:', {
+        error,
+        requestBody,
+        timestamp: new Date().toISOString()
+      });
+      throw error;
+    }
   }
 
   // Creation Mode: Enhanced persistence with knowledge graph integration
@@ -285,14 +459,334 @@ class ApiService {
     });
   }
 
+  // ============================================================================
+  // CONSTRAINT ENFORCEMENT API METHODS
+  // ============================================================================
+
+  // Associate a shape with a Neo4j node template
+  async associateShapeWithNode(
+    shapeId: string,
+    nodeTemplateId: string,
+    nodeTemplateName: string,
+    category: string,
+    cleanroomClass?: string,
+    customProperties?: Record<string, any>
+  ): Promise<{
+    success: boolean;
+    message: string;
+    constraintsCount: number;
+    constraints: any[];
+  }> {
+    return this.request<{
+      success: boolean;
+      message: string;
+      constraintsCount: number;
+      constraints: any[];
+    }>(`/nodes/${shapeId}/associate`, {
+      method: 'POST',
+      body: JSON.stringify({
+        nodeTemplateId,
+        nodeTemplateName,
+        category,
+        cleanroomClass,
+        customProperties
+      }),
+    });
+  }
+
+  // Get all constraints that apply to a specific node
+  async getNodeConstraints(nodeId: string): Promise<{
+    nodeId: string;
+    constraintsCount: number;
+    constraints: any[];
+  }> {
+    return this.request<{
+      nodeId: string;
+      constraintsCount: number;
+      constraints: any[];
+    }>(`/nodes/${nodeId}/constraints`);
+  }
+
+  // Validate a connection between two nodes
+  async validateConnection(
+    sourceNodeId: string,
+    targetNodeId: string,
+    relationshipType?: string
+  ): Promise<{
+    sourceNodeId: string;
+    targetNodeId: string;
+    relationshipType?: string;
+    isValid: boolean;
+    violations: Array<{
+      type: 'ERROR' | 'WARNING' | 'INFO';
+      message: string;
+      ruleType: string;
+      priority: number;
+      reason: string;
+    }>;
+    suggestions: string[];
+  }> {
+    return this.request<{
+      sourceNodeId: string;
+      targetNodeId: string;
+      relationshipType?: string;
+      isValid: boolean;
+      violations: Array<{
+        type: 'ERROR' | 'WARNING' | 'INFO';
+        message: string;
+        ruleType: string;
+        priority: number;
+        reason: string;
+      }>;
+      suggestions: string[];
+    }>('/nodes/connections/validate', {
+      method: 'POST',
+      body: JSON.stringify({
+        sourceNodeId,
+        targetNodeId,
+        relationshipType
+      }),
+    });
+  }
+
+  // Get valid connection targets for a node
+  async getValidConnectionTargets(nodeId: string): Promise<{
+    nodeId: string;
+    validTargetsCount: number;
+    validTargets: Array<{
+      nodeId: string;
+      nodeName: string;
+      relationshipTypes: string[];
+      confidence: number;
+      reason: string;
+    }>;
+  }> {
+    return this.request<{
+      nodeId: string;
+      validTargetsCount: number;
+      validTargets: Array<{
+        nodeId: string;
+        nodeName: string;
+        relationshipTypes: string[];
+        confidence: number;
+        reason: string;
+      }>;
+    }>(`/nodes/${nodeId}/valid-targets`);
+  }
+
+  // Knowledge Graph Explorer
+  async getKnowledgeGraphData(nodeId: string, confidence: number = 0.3): Promise<{ nodes: any[]; links: any[] }> {
+    console.log('🔍 API Service: Fetching knowledge graph data for node:', nodeId);
+    const encodedId = encodeURIComponent(nodeId);
+    return this.request<{ nodes: any[]; links: any[] }>(`/nodes/kg/${encodedId}?confidence=${confidence}`);
+  }
+
+  // ============================================================================
+  // RELATIONSHIP POSITIONING API METHODS - Enhanced for Overlapping Scenarios
+  // ============================================================================
+
+  // Get optimal positioning for relationship icons in overlapping scenarios
+  async getOptimalRelationshipPositioning(request: {
+    relationships: SpatialRelationship[];
+    nodeGeometry: Array<{
+      id: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>;
+    canvasSize?: { width: number; height: number };
+  }): Promise<{
+    iconPositions: Array<{
+      relationshipId: string;
+      optimalPosition: { x: number; y: number };
+      alternativePositions: Array<{ x: number; y: number; score: number }>;
+      collisionRisk: 'none' | 'low' | 'medium' | 'high';
+      connectionPoints: {
+        source: { x: number; y: number; side: 'top' | 'right' | 'bottom' | 'left' };
+        target: { x: number; y: number; side: 'top' | 'right' | 'bottom' | 'left' };
+      };
+    }>;
+    summary: {
+      total: number;
+      noCollision: number;
+      lowRisk: number;
+      mediumRisk: number;
+      highRisk: number;
+    };
+    layoutSuggestions: string[];
+  }> {
+    return this.request('/nodes/relationships/optimal-positioning', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  // Enhanced relationships with positioning metadata for guided mode
+  async getEnhancedRelationshipsForNode(
+    nodeId: string,
+    options?: {
+      mode?: 'creation' | 'guided';
+      includePositioning?: boolean;
+    }
+  ): Promise<SpatialRelationship[]> {
+    const queryParams = new URLSearchParams();
+    
+    if (options?.mode) {
+      queryParams.append('mode', options.mode);
+    }
+    if (options?.includePositioning) {
+      queryParams.append('includePositioning', 'true');
+    }
+    
+    const queryString = queryParams.toString();
+    const endpoint = `/nodes/${nodeId}/relationships/enhanced${queryString ? `?${queryString}` : ''}`;
+    
+    console.log(`🌐 API: Fetching enhanced relationships for ${nodeId} with positioning support`);
+    return this.request<SpatialRelationship[]>(endpoint);
+  }
+
+  // ============================================================================
+  // SHAPE POSITION VALIDATION API METHODS  
+  // ============================================================================
+
+  async validateShapePosition(request: {
+    shapeId: string;
+    position: { x: number; y: number };
+    shapeGeometry: {
+      vertices: Array<{ x: number; y: number }>;
+      boundingBox: {
+        minX: number;
+        maxX: number;
+        minY: number;
+        maxY: number;
+        width: number;
+        height: number;
+      };
+    };
+    assignedNodeId?: string;
+    nearbyShapes: Array<{
+      id: string;
+      assignedNodeId?: string;
+      geometry: {
+        vertices: Array<{ x: number; y: number }>;
+        boundingBox: {
+          minX: number;
+          maxX: number;
+          minY: number;
+          maxY: number;
+          width: number;
+          height: number;
+        };
+      };
+      distance: number;
+    }>;
+  }): Promise<{
+    canPlace: boolean;
+    violations: Array<{
+      shapeId: string;
+      reason: string;
+      severity: 'error' | 'warning';
+      collisionType: 'overlap' | 'edge-touch' | 'near-proximity';
+    }>;
+    warnings: string[];
+    adjacencyChecks: Array<{
+      targetShapeId: string;
+      sourceNodeId: string;
+      targetNodeId: string;
+      canBeAdjacent: boolean;
+      reason: string;
+    }>;
+  }> {
+    return this.request('/shapes/validate-position', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  async checkAdjacency(nodeId1: string, nodeId2: string): Promise<{
+    nodeId1: string;
+    nodeId2: string;
+    canBeAdjacent: boolean;
+    relationshipType?: string;
+    reason: string;
+    confidence: number;
+  }> {
+    return this.request(`/shapes/adjacency/${nodeId1}/${nodeId2}`);
+  }
+
+  async bulkCheckAdjacency(requests: Array<{
+    nodeId1: string;
+    nodeId2: string;
+  }>): Promise<{
+    results: Array<{
+      nodeId1: string;
+      nodeId2: string;
+      canBeAdjacent: boolean;
+      relationshipType?: string;
+      reason: string;
+    }>;
+    total: number;
+    allowed: number;
+    blocked: number;
+  }> {
+    return this.request('/shapes/bulk-adjacency', {
+      method: 'POST',
+      body: JSON.stringify({ requests }),
+    });
+  }
+
+  async getAdjacencyCacheStats(): Promise<{
+    cacheSize: number;
+    cachedPairs: string[];
+    timestamp: string;
+  }> {
+    return this.request('/shapes/cache-stats');
+  }
+
+  async clearAdjacencyCache(): Promise<{
+    message: string;
+    timestamp: string;
+  }> {
+    return this.request('/shapes/clear-cache', {
+      method: 'POST',
+    });
+  }
+
+  async checkShapesServiceHealth(): Promise<{
+    status: 'healthy' | 'unhealthy';
+    service: string;
+    neo4jConnected: boolean;
+    cacheSize: number;
+    timestamp: string;
+    testQuery: {
+      executed: boolean;
+      result: string;
+    };
+  }> {
+    return this.request('/shapes/health');
+  }
+
   // Health Check
   async healthCheck(): Promise<{ status: string; timestamp: string; database: string }> {
     const url = `${API_BASE_URL.replace('/api', '')}/health`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Health check failed: ${response.status} ${response.statusText}`);
+    console.log('🩺 Frontend health check - URL:', url);
+    
+    try {
+      const response = await fetch(url);
+      console.log('🩺 Frontend health check - Response status:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`Health check failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('🩺 Frontend health check - Result:', result);
+      return result;
+    } catch (error) {
+      console.error('🩺 Frontend health check - Error:', error);
+      throw error;
     }
-    return response.json();
   }
 }
 

@@ -1,3 +1,6 @@
+// Import shared types
+import type { KnowledgeGraphNode, KnowledgeGraphRelationship } from '../../../shared/types';
+
 export interface Equipment {
   id: string;
   name: string;
@@ -28,7 +31,7 @@ export interface FunctionalArea {
 
 export interface SpatialRelationship {
   id: string;
-  type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW';
+  type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW' | 'WORKFLOW_SUGGESTION';
   fromId: string;
   toId: string;
   priority: number;
@@ -38,6 +41,21 @@ export interface SpatialRelationship {
   maxDistance?: number;
   flowDirection?: 'bidirectional' | 'unidirectional';
   flowType?: 'raw_material' | 'finished_product' | 'waste' | 'personnel' | 'equipment';
+  
+  // Enhanced properties for mode-aware rendering
+  mode?: 'creation' | 'guided';
+  visualization?: {
+    preferIcon: boolean;
+    iconType: 'personnel' | 'material' | 'utility' | 'adjacency' | 'access' | 'warning';
+    iconSize: 'small' | 'medium' | 'large';
+    iconColor: string;
+    renderingPriority: number;
+  };
+  guidedModeProperties?: {
+    showInLegend: boolean;
+    interactionEnabled: boolean;
+    tooltip: string;
+  };
 }
 
 export interface Diagram {
@@ -45,8 +63,8 @@ export interface Diagram {
   name: string;
   nodes: FunctionalArea[];
   relationships: SpatialRelationship[];
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface ValidationResult {
@@ -103,6 +121,61 @@ export interface NodeData {
   groupId?: string;
   isSelected?: boolean;
   equipment?: Equipment[];
+}
+
+// Custom shape types for guided mode
+export interface ShapePoint {
+  x: number;
+  y: number;
+}
+
+export type ShapeType = 'rectangle' | 'polygon' | 'custom' | 'L-shape' | 'U-shape' | 'T-shape';
+
+// Resize handle types
+export type ResizeHandleType = 'corner' | 'edge';
+export type ResizeHandlePosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top' | 'bottom' | 'left' | 'right' | 'edge-midpoint';
+
+export interface ResizeHandle {
+  id: string;
+  type: ResizeHandleType;
+  position: ResizeHandlePosition;
+  x: number;
+  y: number;
+  cursor: string;
+}
+
+export interface CustomShapeData extends NodeData {
+  id: string; // Shape ID
+  shapeType: ShapeType;
+  shapePoints: ShapePoint[];
+  isEditing?: boolean;
+  isResizing?: boolean; // Whether shape is in resize mode
+  highlighted?: boolean; // Whether shape is highlighted
+  assignedNodeId?: string; // Neo4j node ID
+  assignedNodeName?: string; // Neo4j node name
+  assignedNodeCategory?: string; // Neo4j node category
+  hasInheritedProperties?: boolean; // Whether shape inherited from Neo4j node
+  inheritedRelationships?: KnowledgeGraphRelationship[]; // Relationships from Neo4j
+  showAssignmentDialog?: boolean; // For triggering assignment dialog
+  neo4jProperties?: { [key: string]: any }; // Additional Neo4j properties
+  lastAssignmentUpdate?: Date; // Track when assignment was last updated
+  constraintsActivated?: boolean; // Whether Neo4j constraints are active
+  constraintsCount?: number; // Number of active constraints
+}
+
+// Re-export the imported types
+export type { KnowledgeGraphNode, KnowledgeGraphRelationship };
+
+// Shape templates for quick creation
+export interface ShapeTemplate {
+  id: string;
+  name: string;
+  shapeType: ShapeType;
+  defaultPoints: ShapePoint[];
+  defaultWidth: number;
+  defaultHeight: number;
+  description: string;
+  preview?: string; // SVG path for preview
 }
 
 export interface DiagramNode {
@@ -195,3 +268,110 @@ export interface GroupingState {
   selectedNodeIds: string[];
   groups: NodeGroup[];
 }
+
+export interface GhostRelationship {
+  id: string;
+  type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW' | 'WORKFLOW_SUGGESTION';
+  fromNodeId: string;
+  toNodeId: string;
+  confidence: number;
+  reason: string;
+  priority: number;
+  flowDirection?: 'bidirectional' | 'unidirectional';
+  flowType?: 'raw_material' | 'finished_product' | 'waste' | 'personnel' | 'equipment';
+  doorType?: string;
+  minDistance?: number;
+  maxDistance?: number;
+}
+
+export interface GhostSuggestion {
+  id: string;
+  sourceNodeId: string;
+  sourceNodeName: string;
+  sourceNodeCategory: string;
+  sourceNodeCleanroomClass?: string;
+  category: string;
+  name: string;
+  cleanroomClass?: string;
+  suggestedPosition: { x: number; y: number };
+  confidence: number;
+  reason: string;
+  priority: number;
+  relationships: GhostRelationship[];
+}
+
+export interface GhostState {
+  suggestions: GhostSuggestion[];
+  isLoading: boolean;
+  showGhosts: boolean;
+  triggerNode: any | null;
+  isVisible?: boolean;
+  confidenceThreshold?: number;
+  lastUpdated?: Date | null;
+  triggerNodeId?: string | null;
+}
+
+// Utility functions for node ID management
+export const NodeIdUtils = {
+  /**
+   * Generates a unique node ID with proper prefix handling
+   * @param baseId - Base ID (can already contain 'node-' prefix)
+   * @returns Clean node ID with single 'node-' prefix
+   */
+  generateNodeId(baseId: string): string {
+    // Remove any existing 'node-' prefix to avoid double prefixing
+    const cleanBaseId = baseId.startsWith('node-') ? baseId.substring(5) : baseId;
+    return `node-${cleanBaseId}-${Date.now()}`;
+  },
+
+  /**
+   * Extracts the base name from a node ID, handling various formats
+   * @param nodeId - Full node ID (e.g., "node-coating-123" or "node-node-coating-123-456")
+   * @returns Base name (e.g., "coating")
+   */
+  extractBaseName(nodeId: string): string {
+    const patterns = [
+      /^node-node-([a-zA-Z]+(?:-[a-zA-Z]+)*?)(?:-\d+)+$/,  // node-node-coating-123-456 (double prefix)
+      /^node-([a-zA-Z]+(?:-[a-zA-Z]+)*?)(?:-\d+)+$/,       // node-coating-123 (single prefix)  
+      /^([a-zA-Z]+(?:-[a-zA-Z]+)*)(?:-\d+)*$/,             // coating or coating-123 (no prefix)
+    ];
+    
+    for (const pattern of patterns) {
+      const match = nodeId.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    
+    // Fallback: return original ID if no pattern matches
+    return nodeId;
+  },
+
+  /**
+   * Checks if a node ID has the correct format
+   * @param nodeId - Node ID to validate
+   * @returns true if ID is properly formatted
+   */
+  isValidNodeId(nodeId: string): boolean {
+    const validPatterns = [
+      /^node-[a-zA-Z]+(?:-[a-zA-Z]+)*-\d+$/,  // node-coating-123
+      /^[a-zA-Z]+(?:-[a-zA-Z]+)*$/,           // coating (template ID)
+    ];
+    
+    return validPatterns.some(pattern => pattern.test(nodeId));
+  },
+
+  /**
+   * Normalizes a node ID by removing double prefixes
+   * @param nodeId - Raw node ID that might have issues
+   * @returns Normalized node ID
+   */
+  normalizeNodeId(nodeId: string): string {
+    // Handle double-prefixed IDs by extracting base name and regenerating
+    if (nodeId.startsWith('node-node-')) {
+      const baseName = this.extractBaseName(nodeId);
+      return this.generateNodeId(baseName);
+    }
+    return nodeId;
+  }
+};

@@ -28,7 +28,7 @@ export interface FunctionalArea {
 }
 export interface SpatialRelationship {
     id: string;
-    type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY';
+    type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW' | 'WORKFLOW_SUGGESTION';
     fromId: string;
     toId: string;
     priority: number;
@@ -36,6 +36,8 @@ export interface SpatialRelationship {
     doorType?: string;
     minDistance?: number;
     maxDistance?: number;
+    flowDirection?: 'bidirectional' | 'unidirectional';
+    flowType?: 'raw_material' | 'finished_product' | 'waste' | 'personnel' | 'equipment';
 }
 export interface Diagram {
     id: string;
@@ -93,5 +95,64 @@ export interface GroupingState {
     isGroupMode: boolean;
     selectedNodeIds: string[];
     groups: NodeGroup[];
+}
+export interface KnowledgeGraphNode {
+    id: string;
+    name: string;
+    category: NodeCategory;
+    cleanroomClass?: string;
+    properties?: {
+        [key: string]: any;
+    };
+    relationships?: KnowledgeGraphRelationship[];
+}
+export interface KnowledgeGraphRelationship {
+    id: string;
+    type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW' | 'WORKFLOW_SUGGESTION' | 'CANNOT_CONNECT_TO';
+    targetNodeId: string;
+    targetNodeName: string;
+    targetCategory: string;
+    priority: number;
+    reason?: string;
+    confidence: number;
+    flowDirection?: 'bidirectional' | 'unidirectional';
+    flowType?: 'raw_material' | 'finished_product' | 'waste' | 'personnel' | 'equipment';
+}
+export interface GhostSuggestion {
+    id: string;
+    nodeId: string;
+    name: string;
+    category: NodeCategory;
+    cleanroomClass?: string;
+    suggestedPosition: {
+        x: number;
+        y: number;
+    };
+    confidence: number;
+    reason: string;
+    sourceNodeId: string;
+    relationships: GhostRelationship[];
+}
+export interface GhostRelationship {
+    id: string;
+    type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW' | 'WORKFLOW_SUGGESTION';
+    toNodeId: string;
+    fromNodeId: string;
+    priority: number;
+    reason: string;
+    confidence: number;
+    flowDirection?: 'bidirectional' | 'unidirectional';
+    flowType?: 'raw_material' | 'finished_product' | 'waste' | 'personnel' | 'equipment';
+}
+export interface GhostState {
+    suggestions: GhostSuggestion[];
+    isLoading: boolean;
+    showGhosts: boolean;
+    triggerNode: any | null;
+    debugMode: boolean;
+    isVisible?: boolean;
+    confidenceThreshold?: number;
+    lastUpdated?: Date | null;
+    triggerNodeId?: string | null;
 }
 //# sourceMappingURL=index.d.ts.map

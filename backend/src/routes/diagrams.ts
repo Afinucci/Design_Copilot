@@ -12,16 +12,35 @@ router.get('/', async (req, res) => {
   try {
     const result = await session.run(
       `MATCH (d:Diagram)
-       RETURN d.id as id, d.name as name, d.createdAt as createdAt, d.updatedAt as updatedAt
+       OPTIONAL MATCH (d)-[:CONTAINS]->(fa:FunctionalArea)
+       WITH d, collect(fa) as nodes
+       UNWIND CASE WHEN nodes = [] THEN [null] ELSE nodes END as node
+       OPTIONAL MATCH (node)-[r]-(other:FunctionalArea)
+       WHERE other IN nodes
+       WITH d, nodes, collect(DISTINCT r) as relationships
+       RETURN d.id as id, d.name as name, d.createdAt as createdAt, d.updatedAt as updatedAt,
+              size(nodes) as nodeCount, size(relationships)/2 as relationshipCount,
+              [n IN nodes | {id: n.id, name: n.name, category: n.category, cleanroomClass: n.cleanroomClass, x: n.x, y: n.y, width: n.width, height: n.height}] as nodeList
        ORDER BY d.updatedAt DESC`
     );
     
-    const diagrams = result.records.map(record => ({
-      id: record.get('id'),
-      name: record.get('name'),
-      createdAt: record.get('createdAt'),
-      updatedAt: record.get('updatedAt')
-    }));
+    const diagrams = result.records.map(record => {
+      const createdAt = record.get('createdAt');
+      const updatedAt = record.get('updatedAt');
+      
+      return {
+        id: record.get('id'),
+        name: record.get('name'),
+        createdAt: createdAt ? new Date(createdAt.toString()).toISOString() : null,
+        updatedAt: updatedAt ? new Date(updatedAt.toString()).toISOString() : null,
+        nodes: record.get('nodeList') || [],
+        relationships: [], // We'll get these when loading individual diagrams
+        nodeCount: record.get('nodeCount'),
+        relationshipCount: record.get('relationshipCount')
+      };
+    });
+    
+    console.log('🔍 Retrieved diagrams:', diagrams.map(d => ({ id: d.id, name: d.name, nodeCount: d.nodeCount, relationshipCount: d.relationshipCount })));
     
     res.json(diagrams);
   } catch (error) {
@@ -171,8 +190,8 @@ router.get('/:id', async (req, res) => {
       name: diagram.name,
       nodes,
       relationships,
-      createdAt: diagram.createdAt,
-      updatedAt: diagram.updatedAt
+      createdAt: diagram.createdAt ? new Date(diagram.createdAt.toString()).toISOString() : null,
+      updatedAt: diagram.updatedAt ? new Date(diagram.updatedAt.toString()).toISOString() : null
     };
     
     res.json(fullDiagram);
@@ -198,7 +217,22 @@ router.post('/', async (req, res) => {
     const tx = session.beginTransaction();
     
     try {
-      // Use MERGE to avoid creating duplicate nodes
+      // First, create the Diagram entity
+      const diagramResult = await tx.run(
+        `CREATE (d:Diagram {
+          id: randomUUID(),
+          name: $name,
+          createdAt: datetime(),
+          updatedAt: datetime()
+        })
+        RETURN d.id as id`,
+        { name }
+      );
+      
+      const diagramId = diagramResult.records[0].get('id');
+      console.log('🔍 Created diagram with ID:', diagramId);
+      
+      // Create functional area nodes and link them to the diagram
       for (const node of nodes) {
         await tx.run(
           `MERGE (fa:FunctionalArea {id: $nodeId})
@@ -220,7 +254,10 @@ router.post('/', async (req, res) => {
              fa.y = $y,
              fa.width = $width,
              fa.height = $height,
-             fa.updatedAt = datetime()`,
+             fa.updatedAt = datetime()
+           WITH fa
+           MATCH (d:Diagram {id: $diagramId})
+           MERGE (d)-[:CONTAINS]->(fa)`,
           {
             nodeId: node.id,
             name: node.name,
@@ -229,12 +266,13 @@ router.post('/', async (req, res) => {
             x: node.x,
             y: node.y,
             width: node.width,
-            height: node.height
+            height: node.height,
+            diagramId
           }
         );
       }
       
-      // Use MERGE to avoid creating duplicate relationships
+      // Create relationships between functional areas
       for (const rel of relationships) {
         const relationshipQuery = `MATCH (from:FunctionalArea {id: $fromId})
            MATCH (to:FunctionalArea {id: $toId})
@@ -245,6 +283,8 @@ router.post('/', async (req, res) => {
              r.doorType = $doorType,
              r.minDistance = $minDistance,
              r.maxDistance = $maxDistance,
+             r.flowDirection = $flowDirection,
+             r.flowType = $flowType,
              r.createdAt = datetime(),
              r.updatedAt = datetime()
            ON MATCH SET
@@ -253,6 +293,8 @@ router.post('/', async (req, res) => {
              r.doorType = $doorType,
              r.minDistance = $minDistance,
              r.maxDistance = $maxDistance,
+             r.flowDirection = $flowDirection,
+             r.flowType = $flowType,
              r.updatedAt = datetime()`;
         
         await tx.run(relationshipQuery,
@@ -264,14 +306,22 @@ router.post('/', async (req, res) => {
             reason: rel.reason || 'User-defined relationship',
             doorType: rel.doorType || null,
             minDistance: rel.minDistance || null,
-            maxDistance: rel.maxDistance || null
+            maxDistance: rel.maxDistance || null,
+            flowDirection: rel.flowDirection || null,
+            flowType: rel.flowType || null
           }
         );
       }
       
       await tx.commit();
       
-      res.status(201).json({ message: 'Functional areas saved successfully', nodeCount: nodes.length, relationshipCount: relationships.length });
+      console.log('🔍 Diagram saved successfully with ID:', diagramId);
+      res.status(201).json({ 
+        id: diagramId, 
+        message: 'Diagram saved successfully', 
+        nodeCount: nodes.length, 
+        relationshipCount: relationships.length 
+      });
     } catch (error) {
       await tx.rollback();
       throw error;

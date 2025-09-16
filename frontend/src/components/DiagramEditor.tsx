@@ -42,24 +42,124 @@ import {
   MenuItem,
   Checkbox,
 } from '@mui/material';
-import { Save, PlayArrow, Stop, Edit, Search, Wifi, WifiOff, Sync, GroupWork, Cancel, Delete, Room, Warning, Speed, Settings, SwapHoriz, Person } from '@mui/icons-material';
+import { Save, PlayArrow, Stop, Edit, Search, Wifi, WifiOff, Sync, GroupWork, Cancel, Delete, Room, Warning, Speed, Settings, SwapHoriz, Person, Storage } from '@mui/icons-material';
 import NodePalette from './NodePalette';
+import SnapCanvas from './SnapCanvas';
+import ConstraintFeedback from './ConstraintFeedback';
+import AdjacencyFeedback from './AdjacencyFeedback';
 import PropertyPanel from './PropertyPanel';
 import ValidationPanel from './ValidationPanel';
 import CustomNode from './CustomNode';
+import CustomShapeNode from './CustomShapeNode';
+import ConstraintValidationFeedback from './ConstraintValidationFeedback';
+import ShapeDrawingToolbar from './ShapeDrawingToolbar';
+import ShapeDrawingCanvas from './ShapeDrawingCanvas';
 import GroupBoundaryNode from './GroupBoundaryNode';
 import MultiRelationshipEdge from './MultiRelationshipEdge';
 import RelationshipLegend from './RelationshipLegend';
 import InlineRelationshipEditDialog from './InlineRelationshipEditDialog';
 import { addMultiEdge } from '../utils/edgeUtils';
-import { DiagramEdge, NodeTemplate, ValidationResult, NodeData, AppMode, GuidedSuggestion, ModeConfig, NodeGroup, GroupingState, SpatialRelationship } from '../types';
+import { getAutoConnectors, getConnectorMetadata } from '../services/connectorLogic';
+import { calculateBoundingBox } from '../utils/shapeCollision';
+import { DiagramEdge, NodeTemplate, ValidationResult, NodeData, AppMode, GuidedSuggestion, ModeConfig, NodeGroup, GroupingState, SpatialRelationship, ShapeType, CustomShapeData, ShapePoint } from '../types';
 import { apiService } from '../services/api';
 import { Node } from 'reactflow';
+import Neo4jNodeAssignment from './Neo4jNodeAssignment';
+import KnowledgeGraphPanel from './KnowledgeGraphPanel';
+import Neo4jOverview from './Neo4jOverview';
+import useKnowledgeGraph from '../hooks/useKnowledgeGraph';
+import { useEdgeValidation } from '../hooks/useEdgeValidation';
+import { useAdjacencyConstraints } from '../hooks/useAdjacencyConstraints';
+import { usePhysicalConstraints } from '../hooks/usePhysicalConstraints';
+import { EdgeProximityIndicator } from './EdgeProximityIndicator';
+import { PhysicalConstraintOverlay } from './PhysicalConstraintOverlay';
 
-const nodeTypes = {
-  functionalArea: CustomNode,
-  groupBoundary: GroupBoundaryNode,
+// Helper functions for shape geometry calculations
+const calculateShapeGeometry = (shapePoints: ShapePoint[], position: { x: number; y: number }) => {
+  if (!shapePoints || shapePoints.length === 0) {
+    return {
+      vertices: [],
+      boundingBox: {
+        minX: position.x,
+        maxX: position.x + 100,
+        minY: position.y,
+        maxY: position.y + 100,
+        width: 100,
+        height: 100
+      }
+    };
+  }
+
+  // Convert relative shape points to absolute coordinates
+  const vertices = shapePoints.map(point => ({
+    x: position.x + point.x,
+    y: position.y + point.y
+  }));
+
+  const boundingBox = calculateBoundingBox(shapePoints);
+  
+  return {
+    vertices,
+    boundingBox: {
+      minX: position.x + boundingBox.minX,
+      maxX: position.x + boundingBox.maxX,
+      minY: position.y + boundingBox.minY,
+      maxY: position.y + boundingBox.maxY,
+      width: boundingBox.width,
+      height: boundingBox.height
+    }
+  };
 };
+
+const getNearbyShapes = (currentNode: Node, allNodes: Node[], maxDistance: number = 300) => {
+  return allNodes.filter(node => {
+    if (node.id === currentNode.id || node.type !== 'customShape') return false;
+    
+    const distance = Math.sqrt(
+      Math.pow(node.position.x - currentNode.position.x, 2) + 
+      Math.pow(node.position.y - currentNode.position.y, 2)
+    );
+    
+    return distance <= maxDistance;
+  });
+};
+
+// Define node types within component to access handlers
+const createNodeTypes = (
+  onShapeEdit?: (nodeId: string) => void, 
+  onShapeComplete?: (nodeId: string, points: ShapePoint[]) => void,
+  onShapeResize?: (nodeId: string, points: ShapePoint[], width: number, height: number) => void
+) => ({
+  functionalArea: CustomNode,
+  customShape: React.memo((props: any) => {
+    // Create a stable key that changes when important data changes
+    const dataKey = React.useMemo(() => {
+      const data = props.data as CustomShapeData;
+      return [
+        data.assignedNodeId || '',
+        data.assignedNodeName || '',
+        data.hasInheritedProperties || false,
+        data.showAssignmentDialog || false,
+        data.lastAssignmentUpdate instanceof Date ? data.lastAssignmentUpdate.getTime() : data.lastAssignmentUpdate || 0,
+        data.label || '',
+        data.category || ''
+      ].join('|');
+    }, [props.data]);
+
+    console.log(`🔄 DiagramEditor: Re-rendering CustomShapeNode ${props.id} with key: ${dataKey}`);
+
+    return (
+      <CustomShapeNode 
+        key={`${props.id}-${dataKey}`}
+        {...props} 
+        onShapeEdit={onShapeEdit}
+        onShapeComplete={onShapeComplete}
+        onShapeResize={onShapeResize}
+      />
+    );
+  }),
+  groupBoundary: GroupBoundaryNode,
+});
 
 const edgeTypes = {
   multiRelationship: MultiRelationshipEdge,
@@ -127,6 +227,18 @@ const DiagramEditor: React.FC = () => {
       case 'MATERIAL_FLOW': return 'Material';
       case 'PERSONNEL_FLOW': return 'Personnel';
       default: return 'Relation';
+    }
+  }, []);
+
+  const getCategoryColor = useCallback((category: string) => {
+    switch (category) {
+      case 'Production': return '#FF6B6B';
+      case 'Quality Control': return '#4ECDC4';
+      case 'Warehouse': return '#45B7D1';
+      case 'Utilities': return '#F7DC6F';
+      case 'Personnel': return '#BB8FCE';
+      case 'Support': return '#85C1E9';
+      default: return '#95A5A6';
     }
   }, []);
 
@@ -270,11 +382,13 @@ const DiagramEditor: React.FC = () => {
     onNodesDelete([nodeToDelete]);
   }, [nodes, onNodesDelete]);
 
+
   const [nodeTemplates, setNodeTemplates] = useState<NodeTemplate[]>([]);
   const [existingNodes, setExistingNodes] = useState<NodeTemplate[]>([]);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
+  const [isNeo4jOverviewOpen, setIsNeo4jOverviewOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
     open: false,
     message: '',
@@ -288,6 +402,56 @@ const DiagramEditor: React.FC = () => {
   const [guidedSuggestions, setGuidedSuggestions] = useState<GuidedSuggestion[]>([]);
   const [currentModeConfig, setCurrentModeConfig] = useState<ModeConfig>(modeConfigs.creation);
   
+  // Enhanced Guided mode state
+  const [showSnapGuides, setShowSnapGuides] = useState(true);
+  const [showConstraintFeedback, setShowConstraintFeedback] = useState(true);
+  const [viewMode, setViewMode] = useState<'bubble' | 'logic'>('bubble');
+  
+
+  // Knowledge Graph integration
+  const knowledgeGraph = useKnowledgeGraph();
+  
+  // Edge validation for shape superimposition
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+
+  // Physical constraint enforcement state
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+  const [constraintFeedback, setConstraintFeedback] = useState<{
+    isBlocked: boolean;
+    blockedBy: string[];
+    feedbackMessage?: string;
+  }>({ isBlocked: false, blockedBy: [] });
+  
+  // Stable callback for validation changes
+  const handleValidationChange = useCallback((results: any[]) => {
+    // You can add additional logic here when validation changes
+    console.log('Edge validation results:', results);
+  }, []);
+  
+  const edgeValidation = useEdgeValidation({
+    nodes,
+    edges,
+    draggedNodeId,
+    proximityThreshold: 20,
+    onValidationChange: handleValidationChange
+  });
+
+  // Adjacency constraints hook for guided mode
+  const adjacencyConstraints = useAdjacencyConstraints(nodes, {
+    mode: mode === 'guided' ? 'guided' : 'creation',
+    touchTolerance: 2,
+    enableRealTimeValidation: mode === 'guided',
+    debounceMs: 150
+  });
+
+  // Physical constraints hook for enforcing overlap prevention
+  const physicalConstraints = usePhysicalConstraints(nodes, {
+    enabled: mode === 'guided',
+    mode: mode === 'guided' ? 'guided' : 'creation',
+    touchTolerance: 2,
+    cacheExpiryMs: 30000
+  });
+  
   // Grouping state
   const [groupingState, setGroupingState] = useState<GroupingState>({
     isGroupMode: false,
@@ -297,6 +461,17 @@ const DiagramEditor: React.FC = () => {
   const [groupName, setGroupName] = useState<string>('');
   const [showGroupDialog, setShowGroupDialog] = useState<boolean>(false);
   
+  // Shape drawing state for guided mode
+  const [activeShapeTool, setActiveShapeTool] = useState<ShapeType | null>(null);
+  const [isDrawingShape, setIsDrawingShape] = useState(false);
+  const [isGridVisible, setIsGridVisible] = useState(false);
+  const [isSnapEnabled, setIsSnapEnabled] = useState(true);
+  const [shapeHistory, setShapeHistory] = useState<any[]>([]);
+  const [shapeHistoryIndex, setShapeHistoryIndex] = useState(-1);
+  
+  // Neo4j assignment dialog state
+  const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
+  const [nodeToAssign, setNodeToAssign] = useState<Node | null>(null);
   
   // Relationship creation state
   const [relationshipDialog, setRelationshipDialog] = useState<{
@@ -729,11 +904,11 @@ const DiagramEditor: React.FC = () => {
           setGuidedSuggestions([]);
           
         } else {
-          // Guided mode: Import knowledge graph data and templates
+          // Guided mode: Load node list for palette but start with empty canvas
           if (isConnected) {
-            console.log('Importing knowledge graph data for guided mode...');
+            console.log('Loading nodes for guided mode palette...');
             
-            // Import full knowledge graph data
+            // Import knowledge graph data for palette only
             const kgData = await apiService.importKnowledgeGraph();
             
             // Convert KG nodes to template format for the palette
@@ -751,101 +926,17 @@ const DiagramEditor: React.FC = () => {
             
             setExistingNodes(kgTemplates);
             
-            // Convert KG nodes to React Flow nodes and place them on canvas
-            const flowNodes = kgData.nodes.map(node => ({
-              id: node.id,
-              type: 'functionalArea',
-              position: {
-                x: node.x || Math.random() * 500,
-                y: node.y || Math.random() * 500
-              },
-              data: {
-                label: node.name,
-                category: node.category,
-                cleanroomClass: node.cleanroomClass,
-                color: '#95A5A6',
-                name: node.name,
-                width: node.width || 120,
-                height: node.height || 80
-              }
-            }));
+            // Start with empty canvas - nodes will be added when user selects them from palette
+            setNodes([]);
+            setEdges([]);
             
-            // Convert KG relationships to React Flow edges
-            const relationshipGroups = new Map<string, any[]>();
-            
-            // First, group relationships by node pairs to calculate indices
-            kgData.relationships.forEach(rel => {
-              const nodeIds = [rel.fromId, rel.toId].sort();
-              const key = nodeIds.join('-');
-              if (!relationshipGroups.has(key)) {
-                relationshipGroups.set(key, []);
-              }
-              relationshipGroups.get(key)!.push(rel);
-            });
-            
-            const flowEdges = kgData.relationships.map(rel => {
-              const nodeIds = [rel.fromId, rel.toId].sort();
-              const key = nodeIds.join('-');
-              const groupRels = relationshipGroups.get(key)!;
-              
-              // Calculate relationship index based on consistent sorting
-              const sortedGroupRels = [...groupRels].sort((a, b) => a.id.localeCompare(b.id));
-              const relationshipIndex = sortedGroupRels.findIndex(r => r.id === rel.id);
-              
-              return {
-                id: rel.id,
-                source: rel.fromId,
-                target: rel.toId,
-                type: 'multiRelationship' as const,
-                animated: false,
-                style: {
-                  stroke: getRelationshipColor(rel.type),
-                  strokeWidth: 2,
-                  strokeDasharray: getRelationshipDashArray(rel.type)
-                },
-                label: getRelationshipLabel(rel.type),
-                labelShowBg: relationshipIndex > 0,
-                labelBgPadding: [8, 4] as [number, number],
-                labelBgBorderRadius: 4,
-                labelBgStyle: {
-                  fill: '#fff',
-                  fillOpacity: 0.9,
-                  stroke: getRelationshipColor(rel.type),
-                  strokeWidth: 1
-                },
-                data: {
-                  id: rel.id,
-                  source: rel.fromId,
-                  target: rel.toId,
-                  type: rel.type,
-                  relationshipType: rel.type,
-                  priority: rel.priority,
-                  reason: rel.reason,
-                  doorType: rel.doorType,
-                  minDistance: rel.minDistance,
-                  maxDistance: rel.maxDistance,
-                  flowDirection: rel.flowDirection,
-                  flowType: rel.flowType,
-                  relationshipIndex: relationshipIndex
-                }
-              }
-            });
-            
-            // Set nodes and edges on the canvas
-            setNodes(flowNodes);
-            setEdges(flowEdges);
-            
-            console.log('Loaded knowledge graph data:');
-            console.log('- Nodes:', flowNodes.length);
-            console.log('- Edges:', flowEdges.length);
-            console.log('- Edge relationship indices:', flowEdges.map(e => ({ id: e.id, index: e.data.relationshipIndex, type: e.data.relationshipType })));
-            console.log('- Raw relationships from API:', kgData.relationships);
-            console.log('- Relationship groups:', Array.from(relationshipGroups.entries()));
+            console.log('Loaded knowledge graph nodes for palette:', kgTemplates.length);
             
             if (kgData.nodes.length === 0) {
               showSnackbar('No data in knowledge graph - creating sample data', 'info');
               await createSampleKnowledgeGraphData();
               const newKgData = await apiService.importKnowledgeGraph();
+              
               // Update existing nodes with the new data
               const newKgTemplates = newKgData.nodes.map(node => ({
                 id: node.id,
@@ -859,84 +950,6 @@ const DiagramEditor: React.FC = () => {
                 }
               }));
               setExistingNodes(newKgTemplates);
-              
-              // Also update the canvas with new data
-              const newFlowNodes = newKgData.nodes.map(node => ({
-                id: node.id,
-                type: 'functionalArea',
-                position: {
-                  x: node.x || Math.random() * 500,
-                  y: node.y || Math.random() * 500
-                },
-                data: {
-                  label: node.name,
-                  category: node.category,
-                  cleanroomClass: node.cleanroomClass,
-                  color: '#95A5A6',
-                  name: node.name,
-                  width: node.width || 120,
-                  height: node.height || 80
-                }
-              }));
-              
-              // Recalculate relationship groups for new data
-              const newRelationshipGroups = new Map<string, any[]>();
-              newKgData.relationships.forEach(rel => {
-                const nodeIds = [rel.fromId, rel.toId].sort();
-                const key = nodeIds.join('-');
-                if (!newRelationshipGroups.has(key)) {
-                  newRelationshipGroups.set(key, []);
-                }
-                newRelationshipGroups.get(key)!.push(rel);
-              });
-              
-              const newFlowEdges = newKgData.relationships.map(rel => {
-                const nodeIds = [rel.fromId, rel.toId].sort();
-                const key = nodeIds.join('-');
-                const groupRels = newRelationshipGroups.get(key)!;
-                const sortedGroupRels = [...groupRels].sort((a, b) => a.id.localeCompare(b.id));
-                const relationshipIndex = sortedGroupRels.findIndex(r => r.id === rel.id);
-                return {
-                  id: rel.id,
-                  source: rel.fromId,
-                  target: rel.toId,
-                  type: 'multiRelationship' as const,
-                  animated: false,
-                  style: {
-                    stroke: getRelationshipColor(rel.type),
-                    strokeWidth: 2,
-                    strokeDasharray: getRelationshipDashArray(rel.type)
-                  },
-                  label: getRelationshipLabel(rel.type),
-                  labelShowBg: relationshipIndex > 0,
-                  labelBgPadding: [8, 4] as [number, number],
-                  labelBgBorderRadius: 4,
-                  labelBgStyle: {
-                    fill: '#fff',
-                    fillOpacity: 0.9,
-                    stroke: getRelationshipColor(rel.type),
-                    strokeWidth: 1
-                  },
-                  data: {
-                    id: rel.id,
-                    source: rel.fromId,
-                    target: rel.toId,
-                    type: rel.type,
-                    relationshipType: rel.type,
-                    priority: rel.priority,
-                    reason: rel.reason,
-                    doorType: rel.doorType,
-                    minDistance: rel.minDistance,
-                    maxDistance: rel.maxDistance,
-                    flowDirection: rel.flowDirection,
-                    flowType: rel.flowType,
-                    relationshipIndex: relationshipIndex
-                  }
-                };
-              });
-              
-              setNodes(newFlowNodes);
-              setEdges(newFlowEdges);
             }
           } else {
             loadDefaultExistingNodes();
@@ -997,6 +1010,272 @@ const DiagramEditor: React.FC = () => {
   const hideSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
   };
+
+  // Handle node materialization from knowledge graph
+  const handleNodeMaterialize = useCallback((nodeData: any) => {
+    console.log('🔄 DiagramEditor: Materializing node from knowledge graph:', nodeData);
+    
+    // Check if node already exists in diagram
+    const existingNode = nodes.find(n => n.id === nodeData.id);
+    if (existingNode) {
+      showSnackbar(`${nodeData.name} is already in the diagram`, 'info');
+      return;
+    }
+
+    // Create new ReactFlow node
+    const newNode = {
+      id: nodeData.id,
+      type: 'functionalArea' as const,
+      position: nodeData.position || { x: Math.random() * 400 + 200, y: Math.random() * 300 + 150 },
+      data: {
+        label: nodeData.name,
+        category: nodeData.category,
+        cleanroomClass: nodeData.cleanroomGrade,
+        color: getCategoryColor(nodeData.category),
+        name: nodeData.name,
+        width: 120,
+        height: 80
+      }
+    };
+
+    // Add node to diagram
+    setNodes(prev => [...prev, newNode]);
+    showSnackbar(`Added ${nodeData.name} to diagram`, 'success');
+    
+    // Optionally, set as selected node
+    setSelectedNode(newNode);
+  }, [nodes, setNodes, getCategoryColor, showSnackbar]);
+
+  // Shape drawing handlers
+  const handleShapeToolChange = useCallback((tool: ShapeType | null) => {
+    setActiveShapeTool(tool);
+    if (!tool) {
+      setIsDrawingShape(false);
+    }
+  }, []);
+
+  const handleShapeComplete = useCallback((shapeData: Partial<CustomShapeData>) => {
+    // Generate unique ID for the new shape
+    const shapeId = `shape-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
+    const rawPoints = (shapeData.shapePoints || []) as ShapePoint[];
+    const width = shapeData.width || 120;
+    const height = shapeData.height || 80;
+
+    // Compute bounding box of drawn points (canvas coordinates)
+    let minX = 0, minY = 0;
+    if (rawPoints.length > 0) {
+      minX = Math.min(...rawPoints.map(p => p.x));
+      minY = Math.min(...rawPoints.map(p => p.y));
+    }
+
+    // Normalize points to node-local coordinates starting at (0,0)
+    const normalizedPoints: ShapePoint[] = rawPoints.map(p => ({ x: p.x - minX, y: p.y - minY }));
+
+    // Create the new custom shape node positioned at the drawn location
+    const newNode: Node = {
+      id: shapeId,
+      type: 'customShape',
+      position: { x: minX, y: minY },
+      data: {
+        label: 'New Shape',
+        category: 'None',
+        color: getCategoryColor('None'),
+        name: 'New Shape',
+        width,
+        height,
+        shapeType: shapeData.shapeType || 'rectangle',
+        shapePoints: normalizedPoints,
+        isEditing: false,
+        hasInheritedProperties: false,
+        // In guided mode, automatically show assignment dialog
+        showAssignmentDialog: mode === 'guided',
+      } as CustomShapeData,
+    };
+
+    // Add to nodes
+    setNodes(prev => [...prev, newNode]);
+
+    // Clear active tool
+    setActiveShapeTool(null);
+    setIsDrawingShape(false);
+
+    // Select the new shape
+    setSelectedNode(newNode);
+
+    if (mode === 'guided') {
+      // Open the assignment dialog for guided mode
+      setNodeToAssign(newNode);
+      setAssignmentDialogOpen(true);
+      showSnackbar('Shape created! Please assign it to a Neo4j node to enable intelligent connections.', 'info');
+    } else {
+      showSnackbar('Shape created successfully! Switch to guided mode to assign Neo4j properties.', 'success');
+    }
+  }, [setNodes, getCategoryColor, showSnackbar, mode]);
+
+  const handleNeo4jAssignment = useCallback((assignedNodeId: string, nodeData: any) => {
+    console.log('🎯 DiagramEditor: Neo4j assignment from dialog:', {
+      nodeToAssign: nodeToAssign?.id,
+      assignedNodeId,
+      nodeData
+    });
+    
+    if (nodeToAssign) {
+      // Update the node with the assigned Neo4j properties
+      const updatedNode = {
+        ...nodeToAssign,
+        data: {
+          ...nodeToAssign.data,
+          ...nodeData,
+          assignedNodeId,
+          // Prefer explicit assigned name from dialog; fall back to label; never fall back to id for display
+          assignedNodeName: (nodeData as any).assignedNodeName || (nodeData as any).label || (nodeToAssign.data as any).label,
+          assignedNodeCategory: nodeData.category,
+          hasInheritedProperties: true,
+          showAssignmentDialog: false,
+          lastAssignmentUpdate: Date.now(),
+          // Ensure node label shows human-friendly name
+          label: (nodeData as any).assignedNodeName || (nodeData as any).label || nodeToAssign.data.label,
+          category: nodeData.category || nodeToAssign.data.category,
+          color: getCategoryColor(nodeData.category || 'None'),
+        } as CustomShapeData,
+      };
+      
+      // Update the node in the canvas
+      setNodes((nds) =>
+        nds.map((node) => (node.id === nodeToAssign.id ? updatedNode : node))
+      );
+      
+      // Set as selected node
+      setSelectedNode(updatedNode);
+      
+      // Close the dialog
+      setAssignmentDialogOpen(false);
+      setNodeToAssign(null);
+      
+      // Open knowledge graph panel after assignment in guided mode
+      if (mode === 'guided' && connectionStatus === 'connected') {
+        console.log('🎯 DiagramEditor: Opening knowledge graph panel after assignment');
+        
+        // Open knowledge graph panel for the assigned node
+        setTimeout(() => {
+          // Use the assigned Neo4j node NAME so backend can match by name variations
+          const display = (nodeData as any).assignedNodeName || (nodeData as any).label || 'Selected Node';
+          const centerKey = display;
+          knowledgeGraph.openPanel(centerKey, display);
+        }, 100);
+      }
+      
+      showSnackbar(`Shape assigned to ${nodeData.name}. View related nodes in knowledge graph.`, 'success');
+    }
+  }, [nodeToAssign, setNodes, getCategoryColor, mode, connectionStatus, knowledgeGraph.openPanel, showSnackbar]);
+
+  const handleShapeEdit = useCallback((nodeId: string) => {
+    // Handle both edit mode and resize mode
+    const isResizeMode = nodeId.includes(':resize');
+    const actualNodeId = isResizeMode ? nodeId.replace(':resize', '') : nodeId;
+    
+    setNodes(prev => prev.map(node => {
+      if (node.id === actualNodeId && node.type === 'customShape') {
+        const currentData = node.data as CustomShapeData;
+        
+        if (isResizeMode) {
+          // Toggle resize mode
+          return {
+            ...node,
+            data: {
+              ...currentData,
+              isResizing: !currentData.isResizing,
+              isEditing: false // Ensure edit mode is off when resizing
+            }
+          };
+        } else {
+          // Toggle edit mode
+          return {
+            ...node,
+            data: {
+              ...currentData,
+              isEditing: !currentData.isEditing,
+              isResizing: false // Ensure resize mode is off when editing
+            }
+          };
+        }
+      }
+      return node;
+    }));
+  }, [setNodes]);
+
+  const handleShapeEditComplete = useCallback((nodeId: string, newPoints: ShapePoint[]) => {
+    // Update shape points and exit edit mode
+    setNodes(prev => prev.map(node => {
+      if (node.id === nodeId && node.type === 'customShape') {
+        // Calculate new dimensions
+        const minX = Math.min(...newPoints.map(p => p.x));
+        const maxX = Math.max(...newPoints.map(p => p.x));
+        const minY = Math.min(...newPoints.map(p => p.y));
+        const maxY = Math.max(...newPoints.map(p => p.y));
+        
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            shapePoints: newPoints,
+            width: maxX - minX,
+            height: maxY - minY,
+            isEditing: false
+          }
+        };
+      }
+      return node;
+    }));
+    
+    showSnackbar('Shape updated successfully!', 'success');
+  }, [setNodes, showSnackbar]);
+
+  const handleShapeResize = useCallback((nodeId: string, newPoints: ShapePoint[], newWidth: number, newHeight: number) => {
+    // Update shape with new dimensions and points, then exit resize mode
+    setNodes(prev => prev.map(node => {
+      if (node.id === nodeId && node.type === 'customShape') {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            shapePoints: newPoints,
+            width: newWidth,
+            height: newHeight,
+            isResizing: false
+          }
+        };
+      }
+      return node;
+    }));
+    
+    showSnackbar('Shape resized successfully!', 'success');
+  }, [setNodes, showSnackbar]);
+
+  const handleToggleGrid = useCallback(() => {
+    setIsGridVisible(prev => !prev);
+  }, []);
+
+  const handleToggleSnap = useCallback(() => {
+    setIsSnapEnabled(prev => !prev);
+  }, []);
+
+  const handleUndoShape = useCallback(() => {
+    if (shapeHistoryIndex > 0) {
+      setShapeHistoryIndex(prev => prev - 1);
+      // TODO: Implement actual undo logic
+      showSnackbar('Undo not yet implemented', 'info');
+    }
+  }, [shapeHistoryIndex, showSnackbar]);
+
+  const handleRedoShape = useCallback(() => {
+    if (shapeHistoryIndex < shapeHistory.length - 1) {
+      setShapeHistoryIndex(prev => prev + 1);
+      // TODO: Implement actual redo logic
+      showSnackbar('Redo not yet implemented', 'info');
+    }
+  }, [shapeHistoryIndex, shapeHistory.length, showSnackbar]);
 
   // Relationship editing handlers
   const handleUpdateRelationship = useCallback((edgeId: string, updates: Partial<SpatialRelationship>) => {
@@ -1072,10 +1351,9 @@ const DiagramEditor: React.FC = () => {
     // This would require a new API endpoint to save custom templates
   };
 
+  // Synchronous connection validation (required by React Flow)
   const isValidConnection = useCallback((connection: Connection) => {
-    console.log('🔍 Validating connection:', connection);
-    console.log('Source:', connection.source, 'Target:', connection.target);
-    console.log('Source Handle:', connection.sourceHandle, 'Target Handle:', connection.targetHandle);
+    console.log('🔍 [Stage 1] Basic connection validation:', connection);
     
     // Basic validation: can't connect to self
     if (connection.source === connection.target) {
@@ -1091,10 +1369,129 @@ const DiagramEditor: React.FC = () => {
       console.log('❌ Source or target node not found');
       return false;
     }
+
+    // In creation mode, allow all basic connections
+    if (mode === 'creation') {
+      console.log('✅ Creation mode: Basic validation passed');
+      return true;
+    }
+
+    // In guided mode, validate both prohibited and required adjacency relationships
+    if (mode === 'guided') {
+      const getEffectiveNodeInfo = (node: Node) => {
+        if (node.type === 'customShape') {
+          const customData = node.data as CustomShapeData;
+          return {
+            id: customData.assignedNodeId || node.id,
+            name: customData.assignedNodeName || node.data?.name,
+            category: customData.assignedNodeCategory || node.data?.category,
+            inheritedRelationships: customData.inheritedRelationships || [],
+            hasAssignment: !!customData.assignedNodeId
+          };
+        }
+        return {
+          id: node.id,
+          name: node.data?.name,
+          category: node.data?.category,
+          inheritedRelationships: [],
+          hasAssignment: false
+        };
+      };
+
+      const sourceInfo = getEffectiveNodeInfo(sourceNode);
+      const targetInfo = getEffectiveNodeInfo(targetNode);
+
+      console.log('🔍 Validating connection in guided mode:', {
+        source: sourceInfo,
+        target: targetInfo
+      });
+
+      // For assigned custom shapes, validate specific adjacency requirements
+      if (sourceInfo.hasAssignment && targetInfo.hasAssignment) {
+        let hasAdjacency = false;
+        let isProhibited = false;
+
+        // Check cached inherited relationships
+        if (sourceNode.type === 'customShape') {
+          const sourceData = sourceNode.data as CustomShapeData;
+          if (sourceData.hasInheritedProperties && sourceData.inheritedRelationships) {
+            // Check for prohibited connections
+            const prohibitedConnections = sourceData.inheritedRelationships.filter(
+              (rel: any) => rel.type === 'PROHIBITED_NEAR'
+            );
+            
+            for (const prohibition of prohibitedConnections) {
+              const isThisProhibited = 
+                targetInfo.category === prohibition.targetCategory ||
+                targetInfo.name === prohibition.targetNodeName ||
+                targetInfo.id === prohibition.targetNodeId;
+                
+              if (isThisProhibited) {
+                console.log('❌ Connection blocked by cached prohibition:', prohibition.reason);
+                showSnackbar(`Connection not allowed: ${prohibition.reason || 'Prohibited by pharmaceutical design rules'}`, 'error');
+                return false;
+              }
+            }
+
+            // Check for adjacency relationships
+            const adjacencyConnections = sourceData.inheritedRelationships.filter(
+              (rel: any) => rel.type === 'ADJACENT_TO'
+            );
+
+            for (const adjacency of adjacencyConnections) {
+              const isAdjacent = 
+                targetInfo.category === adjacency.targetCategory ||
+                targetInfo.name === adjacency.targetNodeName ||
+                targetInfo.id === adjacency.targetNodeId;
+                
+              if (isAdjacent) {
+                hasAdjacency = true;
+                console.log('✅ Found cached adjacency relationship:', adjacency);
+                break;
+              }
+            }
+          }
+        }
+
+        // If no cached adjacency found, this connection is not allowed in guided mode
+        if (!hasAdjacency && !isProhibited) {
+          console.log('❌ No adjacency relationship found between assigned nodes in guided mode');
+          showSnackbar('Connection not allowed: These pharmaceutical areas are not designed to be adjacent according to GMP guidelines', 'error');
+          return false;
+        }
+      } else {
+        // For non-assigned nodes, fall back to category-based validation
+        if (sourceInfo.category && targetInfo.category) {
+          const connectorResult = getAutoConnectors(sourceInfo.category, targetInfo.category);
+          
+          const hasAdjacency = connectorResult.relationships.some(
+            (rel) => rel.type === 'ADJACENT_TO'
+          );
+          
+          const isProhibited = connectorResult.relationships.some(
+            (rel) => rel.type === 'PROHIBITED_NEAR'
+          );
+
+          if (isProhibited) {
+            console.log('❌ Connection blocked by category-based prohibition');
+            showSnackbar('Connection not allowed: These functional areas cannot be adjacent', 'error');
+            return false;
+          }
+
+          if (!hasAdjacency) {
+            console.log('❌ No adjacency relationship found between categories in guided mode');
+            showSnackbar('Connection not allowed: These functional areas are not designed to be adjacent', 'error');
+            return false;
+          }
+        }
+      }
+
+      console.log('✅ Guided mode: Adjacency validation passed');
+    }
     
-    console.log('✅ Connection is valid');
+    console.log('✅ Stage 1 validation passed - will validate with Neo4j in Stage 2');
     return true;
-  }, [nodes]);
+  }, [nodes, mode, showSnackbar]);
 
   const onConnectStart = useCallback((event: any, params: any) => {
     console.log('🚀 Connection started:', params);
@@ -1105,18 +1502,154 @@ const DiagramEditor: React.FC = () => {
   }, []);
 
   const onConnect = useCallback(
-    (params: Connection) => {
-      console.log('🔗 Connection completed successfully:', params);
-      console.log('Source:', params.source, 'Target:', params.target);
-      console.log('Source Handle:', params.sourceHandle, 'Target Handle:', params.targetHandle);
+    async (params: Connection) => {
+      console.log('🔗 [Stage 2] Advanced connection validation and setup:', params);
       
-      // Open relationship dialog instead of directly creating edge
+      // Get source and target nodes for relationship suggestion
+      const sourceNode = nodes.find(n => n.id === params.source);
+      const targetNode = nodes.find(n => n.id === params.target);
+      
+      if (!sourceNode || !targetNode) {
+        console.error('❌ Source or target node not found in onConnect');
+        return;
+      }
+
+      let suggestedType = 'ADJACENT_TO';
+      let suggestedReason = 'User-defined relationship';
+      let suggestedPriority = 5;
+      
+      // Advanced Neo4j validation for guided mode
+      if (mode === 'guided') {
+        try {
+          // Get the effective node IDs for Neo4j lookup
+          const getEffectiveNodeId = (node: Node) => {
+            if (node.type === 'customShape') {
+              const customData = node.data as CustomShapeData;
+              return customData.assignedNodeId || customData.assignedNodeName || node.id;
+            }
+            return node.data?.name || node.id;
+          };
+
+          const sourceNodeId = getEffectiveNodeId(sourceNode);
+          const targetNodeId = getEffectiveNodeId(targetNode);
+
+          // Check if both nodes are associated with Neo4j templates
+          const sourceHasAssociation = sourceNode.type === 'customShape' && 
+            (sourceNode.data as CustomShapeData).assignedNodeId;
+          const targetHasAssociation = targetNode.type === 'customShape' && 
+            (targetNode.data as CustomShapeData).assignedNodeId;
+
+          if (sourceHasAssociation && targetHasAssociation) {
+            console.log('🔍 [Stage 2] Performing advanced Neo4j validation...');
+
+            // Call the backend for comprehensive constraint validation
+            const validationResult = await apiService.validateConnection(
+              sourceNodeId,
+              targetNodeId
+            );
+
+            console.log('🔍 [Stage 2] Neo4j validation result:', validationResult);
+
+            // Check for blocking errors that weren't caught in Stage 1
+            const blockingErrors = validationResult.violations.filter(v => v.type === 'ERROR');
+            
+            if (blockingErrors.length > 0) {
+              console.log('❌ [Stage 2] Connection blocked by advanced Neo4j validation:', blockingErrors);
+              
+              // Remove the edge that was already created by React Flow
+              setEdges(edges => edges.filter(edge => 
+                !(edge.source === params.source && edge.target === params.target)
+              ));
+
+              const primaryError = blockingErrors[0];
+              showSnackbar(
+                `Connection not allowed: ${primaryError.message}`, 
+                'error'
+              );
+              return;
+            }
+
+            // Show warnings but allow connection
+            const warnings = validationResult.violations.filter(v => v.type === 'WARNING');
+            if (warnings.length > 0) {
+              console.log('⚠️ [Stage 2] Connection has warnings:', warnings);
+              showSnackbar(
+                `Connection created with warning: ${warnings[0].message}`, 
+                'info'
+              );
+            }
+
+            // Get suggestions for relationship type from Neo4j
+            try {
+              const validTargets = await apiService.getValidConnectionTargets(sourceNodeId);
+              const targetSuggestion = validTargets.validTargets.find(
+                target => target.nodeId === targetNodeId || target.nodeName === targetNodeId
+              );
+
+              if (targetSuggestion && targetSuggestion.relationshipTypes.length > 0) {
+                suggestedType = targetSuggestion.relationshipTypes[0];
+                suggestedReason = targetSuggestion.reason;
+                suggestedPriority = Math.round(targetSuggestion.confidence * 10);
+                
+                console.log('💡 [Stage 2] Using Neo4j relationship suggestion:', {
+                  type: suggestedType,
+                  reason: suggestedReason,
+                  priority: suggestedPriority
+                });
+
+                showSnackbar(`Smart suggestion: ${suggestedType} relationship`, 'success');
+              }
+            } catch (suggestionError) {
+              console.warn('⚠️ Could not get relationship suggestions:', suggestionError);
+            }
+
+          } else {
+            console.log('⚠️ [Stage 2] One or both nodes not associated with Neo4j - using basic suggestions');
+            showSnackbar('Tip: Associate shapes with Neo4j templates for smart relationship suggestions', 'info');
+          }
+
+        } catch (error) {
+          console.error('❌ [Stage 2] Error in advanced validation:', error);
+          showSnackbar('Connection created - advanced validation temporarily unavailable', 'info');
+        }
+      }
+
+      // Enhanced relationship suggestions for custom shapes with inherited Neo4j properties (fallback)
+      if (mode === 'guided' && sourceNode?.type === 'customShape' && suggestedType === 'ADJACENT_TO') {
+        const sourceData = sourceNode.data as CustomShapeData;
+        if (sourceData.hasInheritedProperties && sourceData.inheritedRelationships) {
+          const matchingRelationships = sourceData.inheritedRelationships.filter((rel: any) => {
+            return (
+              rel.type !== 'PROHIBITED_NEAR' && 
+              rel.type !== 'CANNOT_CONNECT_TO' &&
+              (targetNode?.data?.category === rel.targetCategory ||
+               targetNode?.data?.name === rel.targetName ||
+               targetNode?.data?.assignedNodeName === rel.targetName)
+            );
+          });
+          
+          if (matchingRelationships.length > 0) {
+            const bestMatch = matchingRelationships[0];
+            suggestedType = bestMatch.type;
+            suggestedReason = bestMatch.reason || 'Suggested by cached Neo4j data';
+            suggestedPriority = bestMatch.priority || 5;
+          }
+        }
+      }
+      
+      console.log('✅ [Stage 2] Opening relationship dialog with suggestions:', {
+        type: suggestedType,
+        reason: suggestedReason,
+        priority: suggestedPriority
+      });
+
+      // Open relationship dialog with intelligent suggestions
       setRelationshipDialog({
         open: true,
         connection: params,
-        selectedType: 'ADJACENT_TO',
-        priority: 5,
-        reason: 'User-defined relationship',
+        selectedType: suggestedType,
+        priority: suggestedPriority,
+        reason: suggestedReason,
         doorType: '',
         minDistance: null,
         maxDistance: null,
@@ -1125,7 +1658,7 @@ const DiagramEditor: React.FC = () => {
         animated: false
       });
     },
-    []
+    [nodes, mode, showSnackbar, edges, setEdges, apiService]
   );
 
   const handleCreateRelationship = useCallback(() => {
@@ -1189,7 +1722,8 @@ const DiagramEditor: React.FC = () => {
         flowType: flowType || undefined,
         relationshipIndex: relationshipCount, // This will be updated by auto-fix
         creationDirection: 'source-to-target', // Track creation direction for arrow display
-        animated: animated
+        animated: animated,
+        mode: mode // Add mode information for enhanced graphics in guided mode
       } as any
     };
     
@@ -1221,13 +1755,289 @@ const DiagramEditor: React.FC = () => {
     }
   };
 
+  // Handle automatic snap connections in guided mode
+  const handleSnapConnection = useCallback((sourceId: string, targetId: string, relationships: Partial<SpatialRelationship>[]) => {
+    console.log('🔗 Snap connection triggered:', { sourceId, targetId, relationships });
+    
+    // Check if connections already exist between these nodes
+    const existingConnections = edges.filter(
+      (edge) =>
+        (edge.source === sourceId && edge.target === targetId) ||
+        (edge.source === targetId && edge.target === sourceId)
+    );
+
+    const sourceNode = nodes.find(n => n.id === sourceId);
+    const targetNode = nodes.find(n => n.id === targetId);
+    const sourceCategory = (sourceNode?.data as any)?.category;
+    const targetCategory = (targetNode?.data as any)?.category;
+
+    relationships.forEach((rel, index) => {
+      // Check if this specific relationship type already exists
+      const existingRelOfType = existingConnections.find(
+        (edge) => (edge.data as any)?.relationshipType === rel.type
+      );
+
+      if (!existingRelOfType && rel.type) {
+        // Correct direction for personnel flow
+        let edgeSource = sourceId;
+        let edgeTarget = targetId;
+        if (rel.type === 'PERSONNEL_FLOW') {
+          if (sourceCategory !== 'Personnel' && targetCategory === 'Personnel') {
+            edgeSource = targetId;
+            edgeTarget = sourceId;
+          }
+        }
+        const uniqueId = `edge-${edgeSource}-${edgeTarget}-${rel.type}-${Date.now()}-${index}`;
+        const metadata = getConnectorMetadata(rel.type);
+        
+        const newEdge: Edge<DiagramEdge> = {
+          id: uniqueId,
+          source: edgeSource,
+          target: edgeTarget,
+          type: 'multiRelationship',
+          animated: metadata.animated || false,
+          style: {
+            stroke: metadata.color,
+            strokeWidth: 2,
+            strokeDasharray: metadata.dashArray,
+          },
+          label: metadata.label,
+          labelShowBg: existingConnections.length > 0,
+          labelBgPadding: [8, 4],
+          labelBgBorderRadius: 4,
+          labelBgStyle: {
+            fill: '#fff',
+            fillOpacity: 0.9,
+            stroke: metadata.color,
+            strokeWidth: 1,
+          },
+          data: {
+            relationshipType: rel.type,
+            priority: rel.priority || 5,
+            reason: rel.reason || `Auto-generated ${rel.type} relationship`,
+            doorType: rel.doorType,
+            minDistance: rel.minDistance,
+            maxDistance: rel.maxDistance,
+            flowDirection: rel.flowDirection,
+            flowType: rel.flowType,
+            relationshipIndex: existingConnections.length + index,
+            creationDirection: 'source-to-target',
+            animated: metadata.animated || false,
+            mode: mode // Add mode information for proper rendering
+          } as any,
+        };
+
+        setEdges((eds) => addMultiEdge(eds, newEdge));
+        showSnackbar(`Auto-created ${metadata.label} connection`, 'success');
+      }
+    });
+  }, [edges, setEdges, showSnackbar]);
+
+  const handleGuidedNodeDragStart = useCallback((event: React.DragEvent, template: NodeTemplate) => {
+    console.log('🎯 Guided mode drag started for template:', template);
+    const templateData = JSON.stringify(template);
+    event.dataTransfer.setData('application/reactflow', templateData);
+    event.dataTransfer.effectAllowed = 'move';
+  }, []);
+
+  // Add a new function to handle node selection from palette in guided mode
+  const handleGuidedNodeSelection = useCallback(async (nodeId: string) => {
+    if (mode !== 'guided' || connectionStatus !== 'connected') return;
+
+    try {
+      console.log('🔍 Guided mode: Fetching relationships for node:', nodeId);
+      
+      // Fetch the node with its relationships
+      const nodeData = await apiService.getNodeWithRelationships(nodeId);
+      
+      console.log('🔍 Guided mode: Received node data:', nodeData);
+      
+      // Convert to ReactFlow format
+      const mainFlowNode = {
+        id: nodeData.mainNode.id,
+        type: 'functionalArea' as const,
+        position: {
+          x: nodeData.mainNode.x || 200,
+          y: nodeData.mainNode.y || 200
+        },
+        data: {
+          label: nodeData.mainNode.name,
+          category: nodeData.mainNode.category,
+          cleanroomClass: nodeData.mainNode.cleanroomClass,
+          color: getCategoryColor(nodeData.mainNode.category),
+          name: nodeData.mainNode.name,
+          width: nodeData.mainNode.width || 120,
+          height: nodeData.mainNode.height || 80
+        }
+      };
+
+      const relatedFlowNodes = nodeData.relatedNodes.map((node: any, index: number) => ({
+        id: node.id,
+        type: 'functionalArea' as const,
+        position: {
+          // Position related nodes around the main node
+          x: (node.x || 200) + (index * 250),
+          y: (node.y || 200) + (Math.sin(index * Math.PI / 3) * 150)
+        },
+        data: {
+          label: node.name,
+          category: node.category,
+          cleanroomClass: node.cleanroomClass,
+          color: getCategoryColor(node.category),
+          name: node.name,
+          width: node.width || 120,
+          height: node.height || 80
+        }
+      }));
+
+      // Group relationships by node pairs for proper indexing
+      const relationshipGroups = new Map<string, any[]>();
+      nodeData.relationships.forEach(rel => {
+        const nodeIds = [rel.fromId, rel.toId].sort();
+        const key = nodeIds.join('-');
+        if (!relationshipGroups.has(key)) {
+          relationshipGroups.set(key, []);
+        }
+        relationshipGroups.get(key)!.push(rel);
+      });
+
+      const flowEdges = nodeData.relationships.map(rel => {
+        const nodeIds = [rel.fromId, rel.toId].sort();
+        const key = nodeIds.join('-');
+        const groupRels = relationshipGroups.get(key)!;
+        const sortedGroupRels = [...groupRels].sort((a, b) => a.id.localeCompare(b.id));
+        const relationshipIndex = sortedGroupRels.findIndex(r => r.id === rel.id);
+
+        return {
+          id: rel.id,
+          source: rel.fromId,
+          target: rel.toId,
+          type: 'multiRelationship' as const,
+          animated: false,
+          style: {
+            stroke: getRelationshipColor(rel.type),
+            strokeWidth: 2,
+            strokeDasharray: getRelationshipDashArray(rel.type)
+          },
+          label: getRelationshipLabel(rel.type),
+          labelShowBg: relationshipIndex > 0,
+          labelBgPadding: [8, 4] as [number, number],
+          labelBgBorderRadius: 4,
+          labelBgStyle: {
+            fill: '#fff',
+            fillOpacity: 0.9,
+            stroke: getRelationshipColor(rel.type),
+            strokeWidth: 1
+          },
+          data: {
+            id: rel.id,
+            source: rel.fromId,
+            target: rel.toId,
+            type: rel.type,
+            relationshipType: rel.type,
+            priority: rel.priority,
+            reason: rel.reason,
+            doorType: rel.doorType,
+            minDistance: rel.minDistance,
+            maxDistance: rel.maxDistance,
+            flowDirection: rel.flowDirection,
+            flowType: rel.flowType,
+            relationshipIndex: relationshipIndex
+          }
+        };
+      });
+
+      // Update canvas with the selected node and its relationships
+      setNodes([mainFlowNode, ...relatedFlowNodes]);
+      setEdges(flowEdges);
+      
+      // Select the main node
+      setSelectedNode(mainFlowNode);
+      
+      // Open knowledge graph panel for the main node after loading
+      setTimeout(() => {
+        console.log('🎯 Guided mode: Opening knowledge graph panel for main node:', {
+          nodeId: mainFlowNode.id,
+          nodeName: mainFlowNode.data.label,
+          nodeCategory: mainFlowNode.data.category,
+          position: mainFlowNode.position
+        });
+        
+        // Open knowledge graph panel for the main node
+        knowledgeGraph.openPanel(mainFlowNode.id, mainFlowNode.data.label);
+        console.log('🎯 Guided mode: Knowledge graph panel opened for main node');
+      }, 500); // Small delay to ensure canvas update completes
+      
+      showSnackbar(`Loaded ${nodeData.mainNode.name} with ${nodeData.relatedNodes.length} related nodes`, 'success');
+      
+    } catch (error) {
+      console.error('Error fetching node relationships:', error);
+      showSnackbar('Failed to load node relationships', 'error');
+    }
+  }, [mode, connectionStatus, getCategoryColor, getRelationshipColor, getRelationshipDashArray, getRelationshipLabel, setNodes, setEdges, setSelectedNode, knowledgeGraph.openPanel, showSnackbar]);
+
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🎯 DiagramEditor: Node clicked:', {
+        nodeId: node.id,
+        nodeType: node.type,
+        mode,
+        isGroupMode: groupingState.isGroupMode
+      });
+    }
+
     if (groupingState.isGroupMode) {
       selectNodeForGroup(node.id);
     } else {
       setSelectedNode(node);
+      
+      // Check if we should open knowledge graph panel
+      const isCustomShapeWithAssignment = node.type === 'customShape' && 
+        (node.data as CustomShapeData)?.hasInheritedProperties && 
+        (node.data as CustomShapeData)?.assignedNodeId;
+      
+      const isCustomShapeUnassigned = node.type === 'customShape' && 
+        !(node.data as CustomShapeData)?.hasInheritedProperties && 
+        !(node.data as CustomShapeData)?.assignedNodeId &&
+        (node.data as CustomShapeData)?.label; // Must have a label to generate suggestions
+      
+      // Open knowledge graph panel ONLY for nodes that have been assigned to Neo4j properties
+      const shouldOpenKnowledgeGraph = mode === 'guided' && connectionStatus === 'connected' && 
+        (node.type === 'functionalArea' || isCustomShapeWithAssignment);
+      
+      if (shouldOpenKnowledgeGraph) {
+        // Get the proper display name - prioritize Neo4j assigned name
+        const displayName = (node.data as CustomShapeData)?.assignedNodeName || 
+                           node.data?.label || 
+                           node.data?.name || 
+                           `Node ${node.id}`;
+        // Prefer assigned Neo4j node NAME for both display and KG center key
+        const centerKey = (node.data as CustomShapeData)?.assignedNodeName || node.data?.label || node.data?.name || node.id;
+        
+        console.log('🎯 DiagramEditor: Opening Knowledge Graph Panel for assigned node:', {
+          nodeId: node.id,
+          displayName,
+          isAssigned: !!(node.data as CustomShapeData)?.assignedNodeName
+        });
+        
+        knowledgeGraph.openPanel(centerKey, displayName);
+        console.log('🎯 DiagramEditor: ✅ Knowledge Graph Panel opened successfully');
+      } else if (mode === 'guided' && isCustomShapeUnassigned) {
+        // For unassigned shapes, open assignment dialog
+        console.log('🎯 DiagramEditor: Unassigned shape clicked - opening assignment dialog');
+        setNodeToAssign(node);
+        setAssignmentDialogOpen(true);
+        showSnackbar('Please assign this shape to a Neo4j property to see its connections.', 'info');
+      }
     }
-  }, [groupingState.isGroupMode, selectNodeForGroup]);
+  }, [groupingState.isGroupMode, selectNodeForGroup, mode, connectionStatus, knowledgeGraph.openPanel, setSelectedNode, setNodeToAssign, setAssignmentDialogOpen, showSnackbar]);
+
+  // Clear selected node when clicking on empty canvas space
+  const onPaneClick = useCallback(() => {
+    // Clear selected node when clicking on canvas background
+    setSelectedNode(null);
+  }, [setSelectedNode]);
+
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -1236,43 +2046,79 @@ const DiagramEditor: React.FC = () => {
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
+      console.log('🎯 onDrop triggered:', {
+        eventType: event.type,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        dataTransfer: event.dataTransfer
+      });
+      
       event.preventDefault();
 
       const reactFlowBounds = reactFlowWrapper.current?.getBoundingClientRect();
       const templateData = event.dataTransfer.getData('application/reactflow');
+      
+      console.log('🎯 Drop data check:', {
+        reactFlowBounds: reactFlowBounds ? `${reactFlowBounds.width}x${reactFlowBounds.height}` : 'null',
+        templateData: templateData ? 'found' : 'empty',
+        reactFlowInstance: reactFlowInstance ? 'initialized' : 'null'
+      });
 
       if (templateData && reactFlowBounds && reactFlowInstance) {
-        const template: NodeTemplate = JSON.parse(templateData);
-        const position = reactFlowInstance.project({
-          x: event.clientX - reactFlowBounds.left,
-          y: event.clientY - reactFlowBounds.top,
+        try {
+          const template: NodeTemplate = JSON.parse(templateData);
+          console.log('🎯 Parsed template:', template);
+          
+          const position = reactFlowInstance.project({
+            x: event.clientX - reactFlowBounds.left,
+            y: event.clientY - reactFlowBounds.top,
+          });
+          
+          console.log('🎯 Calculated position:', position);
+
+          const newNode: Node = {
+            id: `node-${template.id}-${Date.now()}`,
+            type: 'functionalArea',
+            position,
+            data: {
+              label: template.name,
+              category: template.category,
+              cleanroomClass: template.cleanroomClass,
+              color: template.color,
+              name: template.name,
+              width: template.defaultSize.width,
+              height: template.defaultSize.height,
+              icon: template.icon,
+            },
+            connectable: true,
+          };
+
+          console.log('🎯 Creating new node:', newNode);
+          console.log('Node type:', newNode.type, 'Connectable:', newNode.connectable);
+          
+          setNodes((nds) => {
+            console.log('🎯 Adding node to', nds.length, 'existing nodes');
+            return nds.concat(newNode);
+          });
+          showSnackbar(`Added ${template.name} to diagram`, 'success');
+          
+        } catch (error) {
+          console.error('🎯 Error in onDrop:', error);
+          showSnackbar('Failed to add node to diagram', 'error');
+        }
+      } else {
+        console.warn('🎯 Drop failed - missing requirements:', {
+          hasTemplateData: !!templateData,
+          hasReactFlowBounds: !!reactFlowBounds,
+          hasReactFlowInstance: !!reactFlowInstance
         });
-
-        const newNode: Node = {
-          id: `node-${template.id}-${Date.now()}`,
-          type: 'functionalArea',
-          position,
-          data: {
-            label: template.name,
-            category: template.category,
-            cleanroomClass: template.cleanroomClass,
-            color: template.color,
-            name: template.name,
-            width: template.defaultSize.width,
-            height: template.defaultSize.height,
-            icon: template.icon,
-          },
-          connectable: true,
-        };
-
-        console.log('🎯 Creating new node:', newNode);
-        console.log('Node type:', newNode.type, 'Connectable:', newNode.connectable);
         
-        setNodes((nds) => nds.concat(newNode));
-        showSnackbar(`Added ${template.name} to diagram`, 'success');
+        if (!templateData) {
+          console.warn('🎯 No template data found in drag transfer');
+        }
       }
     },
-    [reactFlowInstance, setNodes]
+    [reactFlowInstance, setNodes, showSnackbar]
   );
 
   const handleValidate = async () => {
@@ -1409,23 +2255,123 @@ const DiagramEditor: React.FC = () => {
     setValidationResult(null);
   };
 
-  // Handle node changes with group boundary constraints
-  const handleNodeChange = useCallback((changes: any) => {
-    // Filter out position changes that violate group boundaries
-    const filteredChanges = changes.filter((change: any) => {
+  // Enhanced node change handler with physical constraint enforcement
+  const handleNodeChange = useCallback(async (changes: any) => {
+    console.log('🔄 Processing node changes:', changes.length);
+    
+    const filteredChanges = [];
+    
+    for (const change of changes) {
+      // Handle position changes with comprehensive constraint checking
       if (change.type === 'position' && change.position) {
-        const violation = checkGroupBoundaryViolation(change.id, change.position);
-        if (violation) {
+        console.log(`📍 Processing position change for node ${change.id}`, change.position);
+        
+        // Update drag tracking state
+        if (change.dragging) {
+          setDraggedNodeId(change.id);
+          setDragPosition(change.position);
+        } else {
+          setDraggedNodeId(null);
+          setDragPosition(null);
+          setConstraintFeedback({ isBlocked: false, blockedBy: [] });
+        }
+
+        // Check group boundary violations first
+        const groupViolation = checkGroupBoundaryViolation(change.id, change.position);
+        if (groupViolation) {
+          console.log('❌ Group boundary violation detected');
           showSnackbar('Cannot move node outside group boundary or into another group', 'error');
-          return false;
+          continue; // Skip this change
+        }
+
+        // Physical constraint enforcement for custom shapes in guided mode
+        if (mode === 'guided') {
+          const targetNode = nodes.find(n => n.id === change.id);
+          if (targetNode && targetNode.type === 'customShape') {
+            const customData = targetNode.data as any;
+            
+            // Only validate shapes with Neo4j assignments
+            if (customData?.assignedNodeId) {
+              console.log(`🔒 Checking physical constraints for ${change.id}...`);
+              
+              try {
+                // Check physical constraints synchronously first
+                const constraintResult = await physicalConstraints.checkPositionConstraints(
+                  change.id,
+                  change.position
+                );
+
+                console.log(`🔍 Constraint check result:`, constraintResult);
+
+                // Update visual feedback
+                const visualFeedback = physicalConstraints.getVisualFeedback(change.id, change.position);
+                setConstraintFeedback({
+                  isBlocked: visualFeedback.isBlocked,
+                  blockedBy: visualFeedback.blockedBy,
+                  feedbackMessage: visualFeedback.feedbackMessage
+                });
+
+                // If blocked, either constrain position or reject change
+                if (!constraintResult.canPlace) {
+                  console.log('🚫 Position blocked by physical constraints:', constraintResult.blockedBy);
+                  
+                  // If dragging, try to find a constrained position
+                  if (change.dragging && constraintResult.lastValidPosition) {
+                    const constrainedPosition = physicalConstraints.findConstrainedPosition(
+                      change.id,
+                      change.position,
+                      constraintResult.lastValidPosition
+                    );
+                    
+                    // Update change to use constrained position
+                    const constrainedChange = {
+                      ...change,
+                      position: constrainedPosition
+                    };
+                    
+                    console.log('📍 Using constrained position:', constrainedPosition);
+                    filteredChanges.push(constrainedChange);
+                    continue;
+                  } else {
+                    // Not dragging or no valid position - block the change completely
+                    showSnackbar(
+                      constraintResult.reason || 
+                      `Cannot place shape: blocked by ${constraintResult.blockedBy.length} shape(s)`, 
+                      'error'
+                    );
+                    continue; // Skip this change
+                  }
+                }
+
+                console.log('✅ Physical constraints passed');
+
+              } catch (error) {
+                console.error('❌ Error in physical constraint validation:', error);
+                // On validation error, be conservative and block the move
+                showSnackbar('Physical constraint validation error - placement blocked for safety', 'error');
+                continue;
+              }
+            }
+          }
         }
       }
-      return true;
-    });
+      
+      // Handle other change types (selection, deletion, etc.)
+      if (change.type === 'select') {
+        console.log(`👆 Node ${change.id} selection changed:`, change.selected);
+      }
+      
+      // If we get here, the change is valid or doesn't require validation
+      filteredChanges.push(change);
+    }
 
+    console.log(`✅ Applying ${filteredChanges.length}/${changes.length} filtered changes`);
+    
     // Apply the filtered changes
     onNodesChange(filteredChanges);
     
+    // TEMPORARY: Disable guided suggestions to isolate ghost suggestions
+    /*
     if (mode === 'guided') {
       // Get guided suggestions based on current nodes
       const getGuidedSuggestions = async (targetCategory?: string) => {
@@ -1461,7 +2407,21 @@ const DiagramEditor: React.FC = () => {
       // Debounce suggestions to avoid too many API calls
       setTimeout(() => getGuidedSuggestions(), 500);
     }
-  }, [mode, onNodesChange, nodes, connectionStatus, checkGroupBoundaryViolation]);
+    */
+  }, [
+    mode, 
+    onNodesChange, 
+    nodes, 
+    checkGroupBoundaryViolation, 
+    physicalConstraints.checkPositionConstraints,
+    physicalConstraints.getVisualFeedback,
+    physicalConstraints.findConstrainedPosition,
+    showSnackbar
+  ]);
+
+  // Use nodes and edges directly without ghost elements
+  const allNodes = nodes;
+  const allEdges = edges;
 
   if (loading) {
     return (
@@ -1497,7 +2457,7 @@ const DiagramEditor: React.FC = () => {
               'error'
             }
             sx={{ 
-              mr: 2, 
+              mr: 1, 
               color: 'white', 
               '& .MuiChip-icon': { color: 'white' },
               '& .rotating': {
@@ -1506,6 +2466,15 @@ const DiagramEditor: React.FC = () => {
             }}
             onClick={checkConnectionStatus}
           />
+          
+          <IconButton
+            color="inherit"
+            onClick={() => setIsNeo4jOverviewOpen(!isNeo4jOverviewOpen)}
+            sx={{ mr: 2 }}
+            title="Neo4j Database Overview"
+          >
+            <Storage />
+          </IconButton>
           
           <Chip
             icon={mode === 'creation' ? <Edit /> : <Search />}
@@ -1530,6 +2499,7 @@ const DiagramEditor: React.FC = () => {
               Guided
             </ToggleButton>
           </ToggleButtonGroup>
+          
           
           <Button
             color="inherit"
@@ -1573,56 +2543,280 @@ const DiagramEditor: React.FC = () => {
       </AppBar>
 
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 280 }}>
-          <NodePalette 
-            templates={mode === 'creation' ? nodeTemplates : existingNodes} 
-            mode={mode}
-            onCreateCustomNode={handleCreateCustomNode}
-          />
-          <RelationshipLegend />
+        <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: mode === 'guided' ? 0 : 280 }}>
+          {mode === 'guided' ? null : (
+            <>
+              <NodePalette 
+                templates={nodeTemplates} 
+                mode={mode}
+                onCreateCustomNode={handleCreateCustomNode}
+                onGuidedNodeSelect={handleGuidedNodeSelection}
+              />
+              <RelationshipLegend />
+            </>
+          )}
         </Box>
         
-        <Box sx={{ flex: 1, position: 'relative' }}>
-          <ReactFlowProvider>
-            <div
-              ref={reactFlowWrapper}
-              style={{ width: '100%', height: '100%' }}
-            >
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                defaultEdgeOptions={{ type: 'multiRelationship' }}
-                onNodesChange={handleNodeChange}
-                onEdgesChange={onEdgesChange}
-                onNodesDelete={onNodesDelete}
-                onEdgesDelete={onEdgesDelete}
+        <Box sx={{ 
+          flex: 1, 
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          minHeight: '400px',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          {mode === 'guided' ? (
+            <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+              <SnapCanvas
+                nodes={allNodes}
+                edges={allEdges}
+                onNodesChange={(newNodes) => setNodes(newNodes)}
+                onEdgesChange={(newEdges) => setEdges(newEdges)}
+                onSnapConnection={handleSnapConnection}
+                showSnapGuides={showSnapGuides}
+                nodeTypes={createNodeTypes(handleShapeEdit, handleShapeEditComplete, handleShapeResize)}
+                edgeTypes={edgeTypes}
                 onConnect={onConnect}
+                isValidConnection={isValidConnection}
                 onConnectStart={onConnectStart}
                 onConnectEnd={onConnectEnd}
-                isValidConnection={isValidConnection}
-                onNodeClick={onNodeClick}
-                onEdgeClick={handleEdgeClick}
-                onDrop={onDrop}
-                onDragOver={onDragOver}
-                onInit={setReactFlowInstance}
-                nodeTypes={nodeTypes}
-                edgeTypes={edgeTypes}
-                deleteKeyCode="Delete"
-                multiSelectionKeyCode="Meta"
-                connectOnClick={false}
-                connectionMode={ConnectionMode.Loose}
-                connectionLineType={ConnectionLineType.Straight}
-                connectionLineStyle={{ stroke: '#1976d2', strokeWidth: 3 }}
-                fitView
-                snapToGrid
-                snapGrid={[20, 20]}
+                guidedNoAdjacencyEdges={true}
+                knowledgeGraphData={knowledgeGraph.state.graphData}
+              />
+
+              {/* Adjacency constraint feedback for guided mode */}
+              <AdjacencyFeedback
+                violations={adjacencyConstraints.violations}
+                isValidating={adjacencyConstraints.isValidating}
+                mode="guided"
+                selectedShapeId={
+                  // Show feedback for dragged node first, then selected node
+                  (draggedNodeId && nodes.find(n => n.id === draggedNodeId)?.type === 'customShape') 
+                    ? draggedNodeId 
+                    : selectedNode?.type === 'customShape' ? selectedNode.id : undefined
+                }
+              />
+
+              {/* Vertical floating shape tools */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 16,
+                  left: 16,
+                  zIndex: 1100
+                }}
               >
-                <Background color="#f0f0f0" gap={20} />
-                <Controls />
-                <MiniMap />
-              </ReactFlow>
+                <ShapeDrawingToolbar
+                  activeShapeTool={activeShapeTool}
+                  onShapeToolChange={handleShapeToolChange}
+                  onUndoShape={handleUndoShape}
+                  onRedoShape={handleRedoShape}
+                  onToggleGrid={handleToggleGrid}
+                  onToggleSnap={handleToggleSnap}
+                  canUndo={shapeHistoryIndex > 0}
+                  canRedo={shapeHistoryIndex < shapeHistory.length - 1}
+                  isGridVisible={isGridVisible}
+                  isSnapEnabled={isSnapEnabled}
+                  orientation="vertical"
+                />
+              </Box>
+              
+              {/* Shape Drawing Canvas for Guided Mode */}
+              {activeShapeTool && (
+                <div style={{ 
+                  position: 'absolute', 
+                  top: 0, 
+                  left: 0, 
+                  right: 0, 
+                  bottom: 0,
+                  pointerEvents: 'all',
+                  zIndex: 1000
+                }}>
+                  <ShapeDrawingCanvas
+                    activeShapeTool={activeShapeTool}
+                    isDrawing={isDrawingShape}
+                    onShapeComplete={handleShapeComplete}
+                    onDrawingStateChange={setIsDrawingShape}
+                    canvasWidth={window.innerWidth - 320}
+                    canvasHeight={window.innerHeight - 64}
+                    isGridVisible={isGridVisible}
+                    isSnapEnabled={isSnapEnabled}
+                    gridSize={20}
+                    nodes={nodes}
+                    mode={mode as AppMode === 'guided' ? 'guided' : 'creation'}
+                    enforceBoundaries={mode === 'guided'}
+                    showValidationFeedback={true}
+                  />
+                </div>
+              )}
             </div>
-          </ReactFlowProvider>
+          ) : (
+              <ReactFlowProvider>
+              <div
+                ref={reactFlowWrapper}
+                style={{ 
+                  width: '100%', 
+                  height: '100%',
+                  minHeight: '400px',
+                  position: 'relative',
+                  flex: 1
+                }}
+              >
+                <ReactFlow
+                  nodes={allNodes}
+                  edges={allEdges}
+                  defaultEdgeOptions={{ type: 'multiRelationship' }}
+                  onNodesChange={handleNodeChange}
+                  onEdgesChange={onEdgesChange}
+                  onNodesDelete={onNodesDelete}
+                  onEdgesDelete={onEdgesDelete}
+                  onConnect={onConnect}
+                  onConnectStart={onConnectStart}
+                  onConnectEnd={onConnectEnd}
+                  isValidConnection={isValidConnection}
+                  onNodeClick={onNodeClick}
+                  onEdgeClick={handleEdgeClick}
+                  onPaneClick={onPaneClick}
+                  onDrop={onDrop}
+                  onDragOver={onDragOver}
+                  onNodeDragStart={(event, node) => {
+                    console.log('🎯 Node drag started:', node.id);
+                    setDraggedNodeId(node.id);
+                    
+                    // For custom shapes with Neo4j assignments, show constraint info
+                    if (node.type === 'customShape') {
+                      const customData = node.data as any;
+                      if (customData?.assignedNodeId) {
+                        showSnackbar('Adjacency constraints active - placement will be validated', 'info');
+                      } else {
+                        showSnackbar('Shape not assigned to Neo4j node - no constraint validation', 'info');
+                      }
+                    }
+                  }}
+                  onNodeDragStop={async (event, node) => {
+                    console.log('🎯 Node drag stopped:', node.id);
+                    setDraggedNodeId(null);
+                    
+                    // Final validation for custom shapes
+                    if (node.type === 'customShape') {
+                      const customData = node.data as any;
+                      if (customData?.assignedNodeId) {
+                        try {
+                          const finalValidation = await adjacencyConstraints.validateShapePosition(
+                            node.id,
+                            node.position
+                          );
+                          
+                          if (finalValidation.violations.length === 0) {
+                            showSnackbar('Shape placement validated successfully', 'success');
+                          } else {
+                            // Auto-correct preference: attempt to resolve overlap by nudging to nearest edge-touch
+                            const hasOverlap = finalValidation.violations.some(v => v.collisionType === 'overlap');
+                            if (hasOverlap) {
+                              try {
+                                // Nudge slightly along x or y to escape overlap; rely on snap to apply spacing
+                                const corrected = { x: node.position.x + 2, y: node.position.y + 2 };
+                                const recheck = await adjacencyConstraints.validateShapePosition(node.id, corrected);
+                                if (recheck.violations.length === 0) {
+                                  setNodes(nds => nds.map(n => n.id === node.id ? { ...n, position: corrected } : n));
+                                  showSnackbar('Auto-corrected to avoid overlap', 'info');
+                                } else {
+                                  // Revert to previous valid position if available
+                                  showSnackbar('Overlap detected. Please adjust position', 'error');
+                                }
+                              } catch (e) {
+                                console.warn('Auto-correct failed:', e);
+                              }
+                            }
+                            const warningCount = finalValidation.violations.filter(v => v.severity === 'warning').length;
+                            if (warningCount > 0) {
+                              showSnackbar(`Shape placed with ${warningCount} adjacency warning${warningCount > 1 ? 's' : ''}`, 'info');
+                            }
+                          }
+                        } catch (error) {
+                          console.error('Error in final validation:', error);
+                        }
+                      }
+                    }
+                  }}
+                  onInit={(instance) => {
+                    setReactFlowInstance(instance);
+                    // Ensure proper initial fit view with proper dimensions
+                    setTimeout(() => {
+                      try {
+                        instance.fitView({ padding: 20, duration: 200 });
+                      } catch (error) {
+                        if (process.env.NODE_ENV === 'development') {
+                          console.warn('Initial fitView failed:', error);
+                        }
+                      }
+                    }, 100);
+                  }}
+                  nodeTypes={createNodeTypes(handleShapeEdit, handleShapeEditComplete, handleShapeResize)}
+                  edgeTypes={edgeTypes}
+                  deleteKeyCode="Delete"
+                  multiSelectionKeyCode="Meta"
+                  connectOnClick={false}
+                  connectionMode={ConnectionMode.Loose}
+                  connectionLineType={ConnectionLineType.Straight}
+                  connectionLineStyle={{ stroke: '#1976d2', strokeWidth: 3 }}
+                  fitView
+                  fitViewOptions={{ padding: 20, duration: 200 }}
+                  snapToGrid
+                  snapGrid={[20, 20]}
+                  attributionPosition="bottom-left"
+                  proOptions={{ hideAttribution: true }}
+                  maxZoom={4}
+                  minZoom={0.1}
+                  defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+                >
+                  <Background color="#f0f0f0" gap={20} />
+                  <Controls />
+                  <MiniMap />
+                </ReactFlow>
+
+                {/* Physical Constraint Overlay for Guided Mode */}
+                <PhysicalConstraintOverlay
+                  nodes={allNodes}
+                  draggedNodeId={draggedNodeId}
+                  dragPosition={dragPosition}
+                  blockedBy={constraintFeedback.blockedBy}
+                  isBlocked={constraintFeedback.isBlocked}
+                  feedbackMessage={constraintFeedback.feedbackMessage}
+                  enabled={(mode as AppMode) === 'guided'}
+                />
+                
+                {/* Shape Drawing Canvas for Guided Mode */}
+                {(mode as AppMode) === 'guided' && (
+                  <ShapeDrawingCanvas
+                    activeShapeTool={activeShapeTool}
+                    isDrawing={isDrawingShape}
+                    onShapeComplete={handleShapeComplete}
+                    onDrawingStateChange={setIsDrawingShape}
+                    canvasWidth={1200}
+                    canvasHeight={800}
+                    isGridVisible={isGridVisible}
+                    isSnapEnabled={isSnapEnabled}
+                    gridSize={20}
+                    nodes={nodes}
+                    mode="guided"
+                    enforceBoundaries={true}
+                    showValidationFeedback={true}
+                  />
+                )}
+              </div>
+              </ReactFlowProvider>
+          )}
+          
+          {/* Edge proximity indicator for all modes */}
+          {draggedNodeId && edgeValidation.validationResults.length > 0 && (
+            <EdgeProximityIndicator
+              validationResults={edgeValidation.validationResults}
+              position="top-right"
+              compact={false}
+            />
+          )}
         </Box>
 
         <Box sx={{ width: 320, display: 'flex', flexDirection: 'column' }}>
@@ -1637,6 +2831,7 @@ const DiagramEditor: React.FC = () => {
               );
             }}
             onDeleteNode={handleDeleteNode}
+            connectionStatus={connectionStatus}
           />
           
           {/* Debug Panel for Relationships */}
@@ -2002,6 +3197,79 @@ const DiagramEditor: React.FC = () => {
         onClose={handleCloseInlineEditDialog}
         onUpdate={handleUpdateRelationship}
         onDelete={handleDeleteRelationship}
+      />
+
+      {/* Neo4j Node Assignment Dialog */}
+      <Dialog
+        open={assignmentDialogOpen}
+        onClose={() => {
+          setAssignmentDialogOpen(false);
+          setNodeToAssign(null);
+        }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Assign Neo4j Node Properties</DialogTitle>
+        <DialogContent>
+          {nodeToAssign && (
+            <Neo4jNodeAssignment
+              customShapeData={{
+                ...nodeToAssign.data as CustomShapeData,
+                id: nodeToAssign.id // Pass the node ID explicitly
+              }}
+              onAssignNode={handleNeo4jAssignment}
+              onInheritRelationships={(relationships) => {
+                console.log('Inherited relationships:', relationships);
+              }}
+              isConnected={connectionStatus === 'connected'}
+              autoOpen={true}
+              // New constraint validation props
+              shapePosition={nodeToAssign.position}
+              shapeGeometry={calculateShapeGeometry(
+                (nodeToAssign.data as CustomShapeData).shapePoints || [],
+                nodeToAssign.position
+              )}
+              nearbyShapes={getNearbyShapes(nodeToAssign, nodes)}
+              onConstraintValidation={(result: any) => {
+                console.log('🔍 Constraint validation result for assignment:', result);
+                if (result.violations?.length > 0) {
+                  console.warn(`⚠️ ${result.violations.length} constraint violations detected after assignment`);
+                }
+                // Could trigger UI updates or notifications here
+              }}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setAssignmentDialogOpen(false);
+              setNodeToAssign(null);
+            }}
+          >
+            Cancel
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Constraint Validation Feedback */}
+      <ConstraintValidationFeedback
+        nodes={nodes}
+        edges={edges}
+        mode={mode}
+        isVisible={showConstraintFeedback}
+        onToggleVisibility={() => setShowConstraintFeedback(!showConstraintFeedback)}
+      />
+
+      {/* Knowledge Graph Panel */}
+      <KnowledgeGraphPanel
+        onNodeMaterialize={handleNodeMaterialize}
+      />
+      
+      {/* Neo4j Database Overview Panel */}
+      <Neo4jOverview
+        isOpen={isNeo4jOverviewOpen}
+        onClose={() => setIsNeo4jOverviewOpen(false)}
       />
     </Box>
   );

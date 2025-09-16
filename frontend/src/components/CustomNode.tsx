@@ -77,11 +77,9 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
         alignItems: 'center',
         justifyContent: 'center',
         cursor: 'pointer',
-        transition: 'all 0.2s ease-in-out',
         position: 'relative',
         '&:hover': {
           boxShadow: 3,
-          transform: 'translateY(-2px)',
         },
       }}
     >
@@ -101,7 +99,6 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           cursor: 'crosshair',
           top: '50%',
           transform: 'translateY(-50%)',
-          transition: 'all 0.2s ease-in-out',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
         className="custom-handle"
@@ -123,7 +120,6 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           cursor: 'crosshair',
           top: '50%',
           transform: 'translateY(-50%)',
-          transition: 'all 0.2s ease-in-out',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
         className="custom-handle"
@@ -145,7 +141,6 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           cursor: 'crosshair',
           left: '50%',
           transform: 'translateX(-50%)',
-          transition: 'all 0.2s ease-in-out',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
         className="custom-handle"
@@ -167,7 +162,6 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
           cursor: 'crosshair',
           left: '50%',
           transform: 'translateX(-50%)',
-          transition: 'all 0.2s ease-in-out',
           boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         }}
         className="custom-handle"

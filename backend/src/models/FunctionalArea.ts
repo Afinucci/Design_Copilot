@@ -3,6 +3,7 @@
 import { Session } from 'neo4j-driver';
 import Neo4jService from '../config/database';
 import { FunctionalArea, NodeTemplate, NodeCategory, Equipment } from '../types';
+import { StaticNodeTemplatesService } from '../services/staticNodeTemplatesService';
 
 export class FunctionalAreaModel {
   private driver = Neo4jService.getInstance().getDriver();
@@ -17,12 +18,10 @@ export class FunctionalAreaModel {
         'CREATE CONSTRAINT unique_functional_area_id IF NOT EXISTS FOR (fa:FunctionalArea) REQUIRE fa.id IS UNIQUE'
       );
       
-      // Create unique constraint on NodeTemplate.id
-      await session.run(
-        'CREATE CONSTRAINT unique_node_template_id IF NOT EXISTS FOR (nt:NodeTemplate) REQUIRE nt.id IS UNIQUE'
-      );
+      // REMOVED: NodeTemplate constraint - no longer storing NodeTemplate nodes in Neo4j
+      // NodeTemplates are now managed statically via StaticNodeTemplatesService
       
-      console.log('✅ Unique constraints ensured for FunctionalArea and NodeTemplate IDs');
+      console.log('✅ Unique constraints ensured for FunctionalArea IDs (NodeTemplate constraints removed - using static templates)');
     } catch (error) {
       console.error('Error creating unique constraints:', error);
       // Don't throw error - constraints might already exist
@@ -169,6 +168,8 @@ export class FunctionalAreaModel {
   async initializeNodeTemplates(): Promise<void> {
     const session = this.driver.session();
     
+    console.log('🔵 Starting initializeNodeTemplates...');
+    
     try {
       const templates: NodeTemplate[] = [
         // Production Areas
@@ -209,13 +210,17 @@ export class FunctionalAreaModel {
         { id: 'shipping', name: 'Shipping Area', category: 'Support', color: '#85C1E9', defaultSize: { width: 150, height: 100 } }
       ];
 
+      console.log(`🔵 Creating ${templates.length} NodeTemplate nodes...`);
+      
       for (const template of templates) {
+        console.log(`🔵 Creating NodeTemplate: ${template.id} - ${template.name}`);
+        
         await session.run(
           `MERGE (nt:NodeTemplate {id: $id})
            ON CREATE SET
              nt.name = $name,
              nt.category = $category,
-             nt.cleanroomClass = $cleanroomClass,
+             nt.cleanroomClass = CASE WHEN $cleanroomClass IS NOT NULL THEN $cleanroomClass ELSE null END,
              nt.color = $color,
              nt.defaultWidth = $defaultWidth,
              nt.defaultHeight = $defaultHeight,
@@ -224,7 +229,7 @@ export class FunctionalAreaModel {
            ON MATCH SET
              nt.name = $name,
              nt.category = $category,
-             nt.cleanroomClass = $cleanroomClass,
+             nt.cleanroomClass = CASE WHEN $cleanroomClass IS NOT NULL THEN $cleanroomClass ELSE null END,
              nt.color = $color,
              nt.defaultWidth = $defaultWidth,
              nt.defaultHeight = $defaultHeight,
@@ -233,43 +238,33 @@ export class FunctionalAreaModel {
             id: template.id,
             name: template.name,
             category: template.category,
-            cleanroomClass: template.cleanroomClass,
+            cleanroomClass: template.cleanroomClass || null,
             color: template.color,
             defaultWidth: template.defaultSize.width,
             defaultHeight: template.defaultSize.height
           }
         );
       }
+      
+      console.log('🔵 Finished creating NodeTemplate nodes');
+      
+      // Verify creation
+      const countResult = await session.run('MATCH (n:NodeTemplate) RETURN count(n) as count');
+      const count = countResult.records[0].get('count').low;
+      console.log(`🔵 Total NodeTemplate nodes in database: ${count}`);
+      
+    } catch (error) {
+      console.error('❌ Error in initializeNodeTemplates:', error);
+      throw error;
     } finally {
       await session.close();
     }
   }
 
   async getNodeTemplates(): Promise<NodeTemplate[]> {
-    const session = this.driver.session();
-    
-    try {
-      const result = await session.run(
-        'MATCH (nt:NodeTemplate) RETURN nt ORDER BY nt.category, nt.name'
-      );
-      
-      return result.records.map(record => {
-        const props = record.get('nt').properties;
-        return {
-          id: props.id,
-          name: props.name,
-          category: props.category,
-          cleanroomClass: props.cleanroomClass,
-          color: props.color,
-          defaultSize: {
-            width: props.defaultWidth,
-            height: props.defaultHeight
-          }
-        };
-      });
-    } finally {
-      await session.close();
-    }
+    // Use static template service instead of querying Neo4j NodeTemplate nodes
+    const staticService = StaticNodeTemplatesService.getInstance();
+    return await staticService.getTemplates();
   }
 
   // Get existing nodes from knowledge graph (for exploration mode)

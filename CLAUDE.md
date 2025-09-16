@@ -2,193 +2,217 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+# Pharmaceutical Facility Design Copilot
+
 ## Project Overview
 
-The Pharmaceutical Facility Design Copilot is a specialized web application for designing adjacency diagrams for pharmaceutical facilities. It provides intelligent compliance checking and suggestions based on GMP (Good Manufacturing Practice) requirements and cleanroom standards.
+A sophisticated web application for designing GMP-compliant pharmaceutical manufacturing facility layouts using a logic-based approach. The system stores pharmaceutical design knowledge as reusable templates in Neo4j, which guide users in creating compliant facility adjacency diagrams.
 
-## Architecture
+## Core Concept
 
-### Frontend (React + TypeScript)
-- **Main Component**: `DiagramEditor.tsx` - Central editing interface with dual-mode operation
-- **Canvas System**: ReactFlow-based drag-and-drop interface for facility layout design
-- **Node System**: Custom pharmaceutical functional area nodes with cleanroom classification
-- **Validation System**: Real-time GMP compliance checking and violation highlighting
-- **Two Operation Modes**:
-  - **Creation Mode**: Design new facilities using template library
-  - **Exploration Mode**: Query and visualize existing knowledge graph data
+Instead of storing individual facility layouts in a graph database, this system uses Neo4j to store the **design logic and rules** that govern how pharmaceutical facilities should be laid out. This creates a knowledge base of pharmaceutical design patterns that can be reused across multiple projects.
 
-### Backend (Node.js + Express + TypeScript)
-- **Database**: Neo4j graph database for storing spatial relationships and compliance rules
-- **API Routes**: RESTful endpoints for diagrams, nodes, and validation
-- **Singleton Pattern**: `Neo4jService` for database connection management
-- **Health Check**: `/health` endpoint for database connectivity status
+## Key Features
 
-### Database Schema (Neo4j)
-- **Node Types**: `NodeTemplate`, `FunctionalArea`, `Diagram`
-- **Relationship Types**: `ADJACENT_TO`, `PROHIBITED_NEAR`, `REQUIRES_ACCESS`, `SHARES_UTILITY`
-- **Graph Structure**: Pharmaceutical facility relationships with GMP compliance rules
+### 1. Logic Template Management
+- Create and store pharmaceutical design logic as graph-based templates
+- Define room requirements, adjacency rules, and flow patterns
+- Support for various product types (mRNA vaccines, monoclonal antibodies, oral solids, etc.)
+- Version control for regulatory compliance
 
-## Development Commands
+### 2. Interactive Diagram Editor
+- Drag-and-drop interface for room placement
+- Real-time validation against selected logic templates
+- Visual connection system showing material/personnel flows
+- Room property editing (cleanroom grades, pressure differentials, etc.)
 
-### Backend Development
-```bash
-cd backend
-npm run dev     # Start with nodemon hot reload
-npm run build   # Compile TypeScript to JavaScript
-npm start       # Start production server
+### 3. Reference Library
+- Browse pre-built logic templates for common facility types
+- Visual previews of standard layouts
+- One-click loading of templates for new projects
+
+### 4. Design Wizard
+- Step-by-step guidance for inexperienced users
+- Automated layout generation based on requirements
+- Questions about facility type, product type, capacity, etc.
+
+## Technical Architecture
+
+### Database Design
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Neo4j Aura    │     │   PostgreSQL    │     │   S3/Blob       │
+├─────────────────┤     ├─────────────────┤     ├─────────────────┤
+│ Logic Templates │     │ Facility        │     │ Version History │
+│ Room Types      │     │ Diagrams        │     │ Exports         │
+│ Adjacency Rules │     │ User Management │     │ Documents       │
+│ Flow Patterns   │     │ Audit Trails    │     │ Attachments     │
+│ Compliance      │     │ Project Data    │     └─────────────────┘
+└─────────────────┘     └─────────────────┘
 ```
 
-### Frontend Development
-```bash
-cd frontend
-npm start       # Start development server (port 3000)
-npm run build   # Build for production
-npm test        # Run React tests
+### Neo4j Data Model
+
+#### Nodes
+1. **LogicTemplate**
+   - Properties: id, name, productType, version, status, regulatoryStandard
+   - Example: "mRNA_Vaccine_v2.1"
+
+2. **RoomType**
+   - Properties: name, cleanroomGrade, pressureRequirement, temperatureRange, humidityRange
+   - Example: "mRNA_Synthesis" with Grade B cleanroom
+
+3. **FlowRule**
+   - Properties: flowType, direction, criticality, validationMessage
+   - Example: Material flow must be unidirectional
+
+4. **ComplianceRule**
+   - Properties: ruleText, regulation, severity, checkQuery
+   - Example: "No direct path from waste to cleanroom"
+
+#### Relationships
+- `REQUIRES_ROOM`: Links templates to mandatory rooms
+- `MUST_CONNECT_TO`: Defines required adjacencies
+- `CANNOT_CONNECT_TO`: Defines prohibited connections
+- `HAS_FLOW_RULE`: Links templates to flow requirements
+
+### PostgreSQL Schema
+
+```sql
+-- Core tables
+CREATE TABLE facility_diagrams (
+    id UUID PRIMARY KEY,
+    name VARCHAR(255),
+    template_id VARCHAR(255),  -- References Neo4j template
+    template_version VARCHAR(50),
+    diagram_data JSONB,        -- Complete diagram structure
+    validation_status VARCHAR(50),
+    created_by UUID,
+    created_at TIMESTAMP
+);
+
+CREATE TABLE audit_logs (
+    id UUID PRIMARY KEY,
+    entity_type VARCHAR(50),
+    entity_id UUID,
+    action VARCHAR(50),
+    user_id UUID,
+    timestamp TIMESTAMP,
+    changes JSONB
+);
 ```
 
-### Database Setup
-```bash
-# Initialize pharmaceutical templates
-curl -X POST http://localhost:5000/api/nodes/initialize
+## User Workflows
+
+### Creating a Logic Template
+1. Expert defines product type and regulatory requirements
+2. Specifies required rooms and their properties
+3. Defines adjacency rules (must connect/cannot connect)
+4. Sets flow patterns and compliance rules
+5. Publishes template for use
+
+### Designing a Facility
+1. User selects appropriate logic template
+2. System loads required rooms and rules
+3. User places rooms with real-time validation
+4. System suggests valid connections
+5. Validates against all rules before saving
+6. Stores diagram with reference to logic version
+
+## Key Algorithms
+
+### Path Validation (Neo4j Cypher)
+```cypher
+// Find contamination paths
+MATCH path = (waste:Room {type: 'waste'})-[*]-(clean:Room {type: 'cleanroom'})
+WHERE length(path) < 5
+RETURN path
 ```
 
-## Key Domain Concepts
-
-### Pharmaceutical Functional Areas
-- **Production**: Weighing, Granulation, Compression, Coating, Packaging
-- **Quality Control**: Analytical Lab, Microbiology Lab, Stability Chamber
-- **Warehouse**: Raw Materials, Finished Goods, Quarantine, Cold Storage
-- **Utilities**: HVAC, Purified Water, Compressed Air, Electrical
-- **Personnel**: Gowning Area, Break Room, Offices, Training
-- **Support**: Waste Disposal, Maintenance, Receiving, Shipping
-
-### Cleanroom Classifications
-- **Class A-D**: Cleanroom air quality standards
-- **Transitions**: Compliance rules for cleanroom-to-cleanroom connections
-- **Contamination Control**: Automatic cross-contamination risk detection
-
-### Spatial Relationships
-- **Adjacency Requirements**: Must be positioned next to each other
-- **Prohibition Rules**: Cannot be placed near each other
-- **Access Control**: Controlled entry/exit requirements
-- **Utility Sharing**: Shared infrastructure connections
-
-## API Endpoints
-
-### Node Management
-- `GET /api/nodes/templates` - Get all pharmaceutical area templates
-- `GET /api/nodes/category/:category` - Get templates by category
-- `POST /api/nodes/initialize` - Initialize database with pharmaceutical templates
-
-### Diagram Operations
-- `GET /api/diagrams` - List all saved diagrams
-- `POST /api/diagrams` - Create new diagram
-- `PUT /api/diagrams/:id` - Update existing diagram
-- `DELETE /api/diagrams/:id` - Delete diagram
-
-### Validation
-- `POST /api/validation` - Validate diagram against GMP compliance
-- `GET /api/validation/requirements/:nodeType` - Get compliance requirements for area type
-
-## File Structure Patterns
-
-### Component Organization
-- `DiagramEditor.tsx` - Main editor with dual-mode operation
-- `NodePalette.tsx` - Draggable template/existing node library
-- `PropertyPanel.tsx` - Selected node property editing
-- `ValidationPanel.tsx` - Compliance violation display
-- `CustomNode.tsx` - Pharmaceutical area node rendering
-
-### Type Definitions
-- `shared/types/index.ts` - Core interfaces shared between frontend/backend
-- Key types: `FunctionalArea`, `SpatialRelationship`, `Diagram`, `ValidationResult`
-
-### Backend Structure
-- `routes/` - API endpoint handlers
-- `models/` - Data model definitions
-- `config/database.ts` - Neo4j connection singleton
-- `index.ts` - Express server setup with middleware
-
-## Development Patterns
-
-### State Management
-- ReactFlow hooks for node/edge state management
-- Custom hooks for API service integration
-- Dual-mode operation switching (Creation vs Exploration)
-
-### Error Handling
-- Offline mode fallback when Neo4j unavailable
-- Connection status monitoring with health checks
-- Graceful degradation with local storage backup
-
-### Validation Flow
-1. Extract functional areas and relationships from canvas
-2. Send to validation service with pharmaceutical context
-3. Display violations with color-coded severity
-4. Provide suggestions for compliance improvements
-
-## Testing Strategy
-
-### Unit Tests
-- React component rendering and interaction
-- API service method functionality
-- Validation logic accuracy
-
-### Integration Tests
-- Full diagram creation and validation workflow
-- Database connectivity and data persistence
-- Cross-component communication
-
-### Business Logic Tests
-- GMP compliance rule validation
-- Spatial relationship constraint checking
-- Pharmaceutical area classification rules
-
-## Environment Configuration
-
-### Backend Environment Variables
-```bash
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=password
-PORT=5000
-NODE_ENV=development
+### Connection Suggestions
+```cypher
+// Suggest valid connections for selected room
+MATCH (selected:RoomType {name: $selectedRoom})
+OPTIONAL MATCH (selected)-[rule:MUST_CONNECT_TO]->(mandatory)
+OPTIONAL MATCH (selected)-[can:CAN_CONNECT_TO]->(optional)
+RETURN mandatory, optional
 ```
 
-### Database Requirements
-- Neo4j 5.x database instance
-- Graph data model for pharmaceutical relationships
-- Initialized with pharmaceutical area templates
+## Implementation Technologies
 
-## Common Issues
+- **Frontend**: React with Tailwind CSS
+- **Graph Database**: Neo4j Aura for logic storage
+- **Relational Database**: PostgreSQL for project data
+- **File Storage**: S3 for version history and documents
+- **Real-time**: Redis for collaborative editing (optional)
 
-### Connection Problems
-- Check Neo4j database connectivity via `/health` endpoint
-- Verify environment variables are properly configured
-- Application runs in offline mode with local fallback data
+## Business Benefits
 
-### Validation Issues
-- Ensure all functional areas have required properties
-- Check spatial relationships are properly defined
-- Verify cleanroom classification compatibility
+1. **Compliance Assurance**: Can't create non-compliant designs
+2. **Knowledge Reuse**: One template guides many facilities
+3. **Reduced Errors**: Real-time validation prevents mistakes
+4. **Faster Design**: Guided process speeds up layout creation
+5. **Regulatory Tracking**: Know which logic version each facility used
 
-### Performance Considerations
-- ReactFlow optimization for large diagrams
-- Neo4j query optimization for complex relationships
-- Memory management for real-time validation
+## Future Enhancements
 
-## Pharmaceutical Compliance Notes
-
-### GMP Requirements
-- Good Manufacturing Practice validation rules
-- Cleanroom air quality standards (Class A-D)
-- Personnel and material flow optimization
+### Advanced Validation
+- Contamination risk scoring
+- Automated flow analysis
+- Pressure cascade verification
 - Cross-contamination prevention
 
-### Industry Standards
-- FDA pharmaceutical facility guidelines
-- European EMA manufacturing requirements
-- ICH quality guidelines implementation
-- Risk-based approach to facility design
+### Integration Features
+- CAD export (DXF, DWG)
+- BIM integration
+- Equipment database connection
+- Regulatory submission generation
 
-This application serves pharmaceutical engineers and regulatory professionals who require precise compliance checking and evidence-based facility design recommendations.
+### Collaboration
+- Multi-user real-time editing
+- Comment and annotation system
+- Approval workflows
+- Change request management
+
+### Analytics
+- Design pattern analysis
+- Compliance trend tracking
+- Optimization suggestions
+- Cost estimation
+
+## Example Use Cases
+
+1. **mRNA Vaccine Facility**
+   - Template enforces Grade B cleanrooms for synthesis
+   - Requires unidirectional material flow
+   - Mandates airlocks between different grades
+
+2. **Monoclonal Antibody Plant**
+   - Template includes cell culture requirements
+   - Defines harvest to purification flow
+   - Enforces segregation of pre/post viral clearance
+
+3. **Oral Solid Dosage Facility**
+   - Template for tablet/capsule production
+   - Defines powder handling requirements
+   - Includes containment rules for potent compounds
+
+## Critical Success Factors
+
+1. **Expert Input**: Logic templates must be created by GMP experts
+2. **Regular Updates**: Templates need updates as regulations change
+3. **User Training**: Designers need to understand the logic system
+4. **Performance**: Real-time validation must be fast
+5. **Flexibility**: System must handle exceptions and special cases
+
+## Notes for Implementation
+
+- Start with a few well-tested logic templates
+- Focus on the most common facility types first
+- Ensure strong version control for regulatory compliance
+- Build comprehensive validation error messages
+- Consider offline mode for remote site work
+- Plan for template migration as regulations evolve
+
+This system transforms pharmaceutical facility design from an art to a science by encoding expert knowledge into reusable, validated patterns.

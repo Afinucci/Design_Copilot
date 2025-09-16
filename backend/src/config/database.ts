@@ -48,6 +48,10 @@ class Neo4jService {
     return this.driver;
   }
 
+  public getSession() {
+    return this.driver.session();
+  }
+
   public async close(): Promise<void> {
     await this.driver.close();
   }

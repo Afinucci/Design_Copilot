@@ -17,5 +17,9 @@
   "workspaces": [
     "backend",
     "frontend"
-  ]
+  ],
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "puppeteer": "^24.15.0"
+  }
 }

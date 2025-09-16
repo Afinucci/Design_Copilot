@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import {
   Box,
   Paper,
@@ -23,10 +23,48 @@ import {
   DialogActions,
   IconButton,
 } from '@mui/material';
-import { Settings, Room, Speed, Warning, CheckCircle, Edit, Visibility, Lock, Delete, GroupWork, Build, Add, Remove, SwapHoriz, Person } from '@mui/icons-material';
-import { SpatialRelationship, NodeData, AppMode, GuidedSuggestion, NodeGroup, Equipment } from '../types';
+import { Settings, Room, Speed, Warning, CheckCircle, Edit, Visibility, Lock, Delete, GroupWork, Build, Add, Remove, SwapHoriz, Person, Link } from '@mui/icons-material';
+import { SpatialRelationship, NodeData, AppMode, GuidedSuggestion, NodeGroup, Equipment, CustomShapeData } from '../types';
 import { apiService } from '../services/api';
 import { Node } from 'reactflow';
+import Neo4jNodeAssignment from './Neo4jNodeAssignment';
+import { calculateBoundingBox } from '../utils/shapeCollision';
+
+// Helper function for shape geometry
+const calculateShapeGeometry = (shapePoints: any[], position: { x: number; y: number }) => {
+  if (!shapePoints || shapePoints.length === 0) {
+    return {
+      vertices: [],
+      boundingBox: {
+        minX: position.x,
+        maxX: position.x + 100,
+        minY: position.y,
+        maxY: position.y + 100,
+        width: 100,
+        height: 100
+      }
+    };
+  }
+
+  const vertices = shapePoints.map(point => ({
+    x: position.x + point.x,
+    y: position.y + point.y
+  }));
+
+  const boundingBox = calculateBoundingBox(shapePoints);
+  
+  return {
+    vertices,
+    boundingBox: {
+      minX: position.x + boundingBox.minX,
+      maxX: position.x + boundingBox.maxX,
+      minY: position.y + boundingBox.minY,
+      maxY: position.y + boundingBox.maxY,
+      width: boundingBox.width,
+      height: boundingBox.height
+    }
+  };
+};
 
 interface PropertyPanelProps {
   selectedNode: Node | null;
@@ -35,9 +73,11 @@ interface PropertyPanelProps {
   mode?: AppMode;
   guidedSuggestions?: GuidedSuggestion[];
   groups?: NodeGroup[];
+  isVisible?: boolean;
+  connectionStatus?: 'connected' | 'disconnected' | 'checking';
 }
 
-const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNode, onDeleteNode, mode = 'creation', guidedSuggestions = [], groups = [] }) => {
+const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNode, onDeleteNode, mode = 'creation', guidedSuggestions = [], groups = [], isVisible = true, connectionStatus = 'disconnected' }) => {
   const [editedNode, setEditedNode] = useState<Node | null>(null);
   const [relationships, setRelationships] = useState<SpatialRelationship[]>([]);
   const [requirements, setRequirements] = useState<{
@@ -72,7 +112,13 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
 
   const loadNodeRelationships = async (nodeId: string) => {
     try {
-      const rels = await apiService.getRelationshipsForNode(nodeId);
+      console.log(`🔗 PropertyPanel: Loading relationships for ${nodeId} in ${mode} mode`);
+      const rels = await apiService.getRelationshipsForNode(nodeId, {
+        mode: mode,
+        includeIcons: mode === 'guided',
+        priority: mode === 'guided' ? 7 : undefined
+      });
+      console.log(`🔗 PropertyPanel: Loaded ${rels.length} relationships`);
       setRelationships(rels);
     } catch (error) {
       console.error('Error loading relationships:', error);
@@ -199,6 +245,100 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
     }
   };
 
+  // Neo4j node assignment handlers
+  const handleAssignNeo4jNode = useCallback((nodeId: string, nodeData: any) => {
+    console.log('🎯 PropertyPanel: Neo4j assignment initiated:', {
+      targetNodeId: editedNode?.id,
+      assignedNodeId: nodeId,
+      assignedNodeData: nodeData
+    });
+    
+    if (editedNode) {
+      const updatedNode = {
+        ...editedNode,
+        data: {
+          ...editedNode.data,
+          ...nodeData,
+          // Force re-render by updating timestamp
+          lastAssignmentUpdate: Date.now(),
+          // Ensure the label is updated to reflect the assignment
+          label: nodeData.assignedNodeName || editedNode.data.label,
+        } as CustomShapeData,
+      };
+      
+      console.log('✅ PropertyPanel: Updated node data:', {
+        nodeId: updatedNode.id,
+        hasInheritedProperties: updatedNode.data.hasInheritedProperties,
+        assignedNodeName: updatedNode.data.assignedNodeName,
+        assignedNodeCategory: updatedNode.data.assignedNodeCategory,
+        showAssignmentDialog: updatedNode.data.showAssignmentDialog,
+        label: updatedNode.data.label
+      });
+      
+      // Update local state immediately
+      setEditedNode(updatedNode);
+      
+      // Propagate changes to parent immediately with forced update
+      setTimeout(() => {
+        console.log('🚀 PropertyPanel: Propagating node update to parent');
+        onUpdateNode(updatedNode);
+      }, 0);
+      
+      console.log('🎉 PropertyPanel: Assignment complete - node should update immediately');
+    } else {
+      console.warn('⚠️ PropertyPanel: No edited node available for assignment');
+    }
+  }, [editedNode, onUpdateNode]);
+
+  const handleInheritRelationships = useCallback((relationships: any[]) => {
+    console.log('🔗 PropertyPanel: Inheriting relationships:', {
+      targetNodeId: editedNode?.id,
+      relationshipCount: relationships.length,
+      relationships: relationships.map(r => ({ type: r.type, target: r.targetNodeName || r.targetCategory }))
+    });
+    
+    if (editedNode && editedNode.type === 'customShape') {
+      const customShapeData = editedNode.data as CustomShapeData;
+      const updatedNode = {
+        ...editedNode,
+        data: {
+          ...customShapeData,
+          inheritedRelationships: relationships,
+          showAssignmentDialog: false, // Clear dialog flag after assignment
+          lastAssignmentUpdate: new Date(), // Ensure re-render tracking
+        } as CustomShapeData,
+      };
+      
+      console.log('✅ PropertyPanel: Relationships inherited successfully:', {
+        nodeId: updatedNode.id,
+        relationshipCount: relationships.length,
+        showAssignmentDialog: false
+      });
+      
+      // Update local state immediately
+      setEditedNode(updatedNode);
+      
+      // Propagate changes to parent immediately
+      onUpdateNode(updatedNode);
+      
+      console.log('🚀 PropertyPanel: Relationship inheritance complete - node should update immediately');
+    } else {
+      console.warn('⚠️ PropertyPanel: Cannot inherit relationships - invalid node type or missing node');
+    }
+  }, [editedNode, onUpdateNode]);
+
+  // Effect to handle automatic Neo4j assignment dialog trigger
+  useEffect(() => {
+    if (editedNode?.type === 'customShape' && mode === 'guided') {
+      const customShapeData = editedNode.data as CustomShapeData;
+      if (customShapeData.showAssignmentDialog && !customShapeData.hasInheritedProperties) {
+        // Auto-scroll to assignment section or show visual indicator
+        console.log('🎯 PropertyPanel: Auto-showing Neo4j assignment for new shape');
+        // The assignment section will be visible by default when the flag is true
+      }
+    }
+  }, [editedNode, mode]);
+
   const getEquipmentStatusColor = (status: string) => {
     switch (status) {
       case 'operational':
@@ -259,7 +399,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
           p: 2,
           borderRadius: 0,
           borderLeft: '1px solid #e0e0e0',
-          display: 'flex',
+          display: isVisible ? 'flex' : 'none',
           alignItems: 'center',
           justifyContent: 'center',
           color: 'text.secondary',
@@ -278,7 +418,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
         height: 'calc(100vh - 64px)',
         borderRadius: 0,
         borderLeft: '1px solid #e0e0e0',
-        display: 'flex',
+        display: isVisible ? 'flex' : 'none',
         flexDirection: 'column',
         overflow: 'hidden',
       }}
@@ -429,6 +569,132 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
             )}
           </CardContent>
         </Card>
+
+        {/* Neo4j Node Assignment for Custom Shapes */}
+        {mode === 'guided' && selectedNode?.type === 'customShape' && (
+          <Box 
+            sx={{ 
+              border: (editedNode?.data as CustomShapeData)?.showAssignmentDialog ? '2px solid #1976d2' : 'none',
+              borderRadius: (editedNode?.data as CustomShapeData)?.showAssignmentDialog ? 1 : 0,
+              animation: (editedNode?.data as CustomShapeData)?.showAssignmentDialog ? 'pulse 2s ease-in-out' : 'none',
+              '@keyframes pulse': {
+                '0%': { borderColor: '#1976d2' },
+                '50%': { borderColor: '#42a5f5' },
+                '100%': { borderColor: '#1976d2' }
+              }
+            }}
+          >
+            {(editedNode?.data as CustomShapeData)?.showAssignmentDialog && (
+              <Alert severity="info" sx={{ mb: 1 }}>
+                <Typography variant="body2">
+                  🎯 Please assign this shape to a Neo4j node to enable intelligent connections!
+                </Typography>
+              </Alert>
+            )}
+            <Neo4jNodeAssignment
+              customShapeData={editedNode?.data as CustomShapeData}
+              onAssignNode={handleAssignNeo4jNode}
+              onInheritRelationships={handleInheritRelationships}
+              isConnected={connectionStatus === 'connected'}
+              // Add constraint validation props when available
+              shapePosition={selectedNode?.position}
+              shapeGeometry={selectedNode?.position ? calculateShapeGeometry(
+                (editedNode?.data as CustomShapeData)?.shapePoints || [],
+                selectedNode.position
+              ) : undefined}
+              onConstraintValidation={(result: any) => {
+                console.log('🔍 PropertyPanel constraint validation:', result);
+                if (result.violations?.length > 0) {
+                  console.warn(`⚠️ ${result.violations.length} constraint violations detected in PropertyPanel`);
+                }
+              }}
+            />
+          </Box>
+        )}
+
+        {/* Inherited Relationships Display for Custom Shapes */}
+        {mode === 'guided' && selectedNode?.type === 'customShape' && 
+         (editedNode?.data as CustomShapeData)?.hasInheritedProperties && 
+         ((editedNode?.data as CustomShapeData)?.inheritedRelationships?.length ?? 0) > 0 && (
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Link color="primary" />
+                Inherited Relationships ({((editedNode?.data as CustomShapeData)?.inheritedRelationships?.length ?? 0)})
+                <Chip 
+                  label={`From: ${(editedNode?.data as CustomShapeData)?.assignedNodeName || 'Unknown'}`}
+                  size="small" 
+                  color="primary" 
+                  variant="outlined"
+                  sx={{ ml: 'auto' }}
+                />
+              </Typography>
+              
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  These relationships are inherited from the assigned Neo4j node and will guide connection suggestions.
+                </Typography>
+              </Alert>
+
+              <List dense>
+                {((editedNode?.data as CustomShapeData)?.inheritedRelationships || []).map((rel: any, index: number) => (
+                  <ListItem key={index} sx={{ pl: 0 }}>
+                    <ListItemIcon>
+                      {getRelationshipIcon(rel.type)}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body1" component="span">
+                            {rel.type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" component="span">
+                            → {rel.targetNodeName || rel.targetCategory}
+                          </Typography>
+                        </Box>
+                      }
+                      secondary={
+                        <Box sx={{ mt: 0.5 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            {rel.reason || 'Pharmaceutical design rule'}
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                            <Chip
+                              label={`Priority: ${rel.priority || 5}`}
+                              size="small"
+                              sx={{ 
+                                backgroundColor: getRelationshipColor(rel.type), 
+                                color: 'white',
+                                fontSize: '0.7rem',
+                                height: '20px'
+                              }}
+                            />
+                            <Chip
+                              label={`Confidence: ${Math.round((rel.confidence || 0.8) * 100)}%`}
+                              size="small"
+                              color="default"
+                              variant="outlined"
+                              sx={{ fontSize: '0.7rem', height: '20px' }}
+                            />
+                            {rel.flowDirection && (
+                              <Chip
+                                label={rel.flowDirection}
+                                size="small"
+                                color="secondary"
+                                variant="outlined"
+                                sx={{ fontSize: '0.7rem', height: '20px' }}
+                              />
+                            )}
+                          </Box>
+                        </Box>
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Equipment Management */}
         <Card sx={{ mb: 2 }}>
@@ -922,4 +1188,4 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
   );
 };
 
-export default PropertyPanel;
+export default memo(PropertyPanel);

@@ -28,7 +28,7 @@ export interface FunctionalArea {
 
 export interface SpatialRelationship {
   id: string;
-  type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW';
+  type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW' | 'WORKFLOW_SUGGESTION';
   fromId: string;
   toId: string;
   priority: number;
@@ -45,8 +45,8 @@ export interface Diagram {
   name: string;
   nodes: FunctionalArea[];
   relationships: SpatialRelationship[];
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface ValidationResult {
@@ -97,4 +97,33 @@ export interface NodeGroup {
   description?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Ghost suggestion types for Guided Mode
+export interface GhostSuggestion {
+  id: string;
+  nodeId: string;
+  name: string;
+  category: NodeCategory;
+  cleanroomClass?: string;
+  suggestedPosition: { x: number; y: number };
+  confidence: number; // 0-1 scale
+  reason: string;
+  sourceNodeId: string; // The node that triggered this suggestion
+  sourceNodeName: string;
+  sourceNodeCategory: string;
+  sourceNodeCleanroomClass?: string;
+  relationships: GhostRelationship[];
+}
+
+export interface GhostRelationship {
+  id: string;
+  type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW' | 'WORKFLOW_SUGGESTION';
+  toNodeId: string;
+  fromNodeId: string;
+  priority: number;
+  reason: string;
+  confidence: number;
+  flowDirection?: 'bidirectional' | 'unidirectional';
+  flowType?: 'raw_material' | 'finished_product' | 'waste' | 'personnel' | 'equipment';
 }

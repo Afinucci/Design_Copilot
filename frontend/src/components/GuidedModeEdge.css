@@ -1,0 +1,124 @@
+/* Enhanced CSS animations for GuidedModeEdge with pharmaceutical design system */
+
+@keyframes pulse-flow {
+  0%, 100% { 
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.8;
+    transform: scale(1.03);
+  }
+}
+
+@keyframes warning-blink {
+  0%, 100% { 
+    opacity: 1;
+    background-color: #fff;
+  }
+  50% { 
+    opacity: 0.7;
+    background-color: #ffebee;
+  }
+}
+
+@keyframes guided-glow {
+  0%, 100% {
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  }
+  50% {
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25), 0 0 20px rgba(255,255,255,0.3);
+  }
+}
+
+@keyframes overlap-attention {
+  0%, 100% {
+    box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+    border-color: rgba(255,255,255,0.9);
+  }
+  50% {
+    box-shadow: 0 8px 28px rgba(0,0,0,0.35), 0 0 25px rgba(255,255,255,0.5);
+    border-color: rgba(255,255,255,1);
+  }
+}
+
+@keyframes critical-overlap-pulse {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.05);
+    box-shadow: 0 10px 35px rgba(0,0,0,0.45), 0 0 30px rgba(255,255,255,0.6);
+  }
+}
+
+.guided-edge-pulse {
+  animation: pulse-flow 2.5s ease-in-out 3; /* Slower, more elegant pulse */
+}
+
+.guided-edge-warning {
+  animation: warning-blink 2s ease-in-out 2; /* Smoother warning animation */
+}
+
+.guided-edge-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, box-shadow;
+}
+
+.guided-edge-hover:hover {
+  transform: translate(-50%, -50%) scale(1.15);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+  animation: guided-glow 2s ease-in-out infinite;
+}
+
+/* Special styles for overlapping icons */
+.guided-edge-overlap {
+  animation: overlap-attention 3s ease-in-out infinite;
+}
+
+.guided-edge-critical-overlap {
+  animation: critical-overlap-pulse 2s ease-in-out infinite;
+  border-width: 3px !important;
+}
+
+/* Ensure overlapping icons are clearly visible */
+.guided-edge-overlap:hover,
+.guided-edge-critical-overlap:hover {
+  animation: none;
+  transform: translate(-50%, -50%) scale(1.2) !important;
+  z-index: 1700 !important;
+}
+
+.guided-edge-focus {
+  outline: 3px solid #1976d2;
+  outline-offset: 3px;
+  border-radius: 22px; /* Match the enhanced border radius */
+}
+
+/* Add subtle entrance animation for new guided edges */
+@keyframes guided-enter {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.guided-edge-hover {
+  animation: guided-enter 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Enhanced responsiveness for different screen sizes */
+@media (max-width: 768px) {
+  .guided-edge-hover {
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  
+  .guided-edge-hover:hover {
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
