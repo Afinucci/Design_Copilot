@@ -2,6 +2,7 @@ import React from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { Box } from '@mui/material';
+import { ReactFlowProvider } from 'reactflow';
 import DiagramEditor from './components/DiagramEditor';
 import './App.css';
 
@@ -19,12 +20,14 @@ const theme = createTheme({
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <DiagramEditor />
-      </Box>
-    </ThemeProvider>
+    <ReactFlowProvider>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+          <DiagramEditor />
+        </Box>
+      </ThemeProvider>
+    </ReactFlowProvider>
   );
 }
 

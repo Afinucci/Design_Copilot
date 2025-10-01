@@ -27,7 +27,6 @@ import { Settings, Room, Speed, Warning, CheckCircle, Edit, Visibility, Lock, De
 import { SpatialRelationship, NodeData, AppMode, GuidedSuggestion, NodeGroup, Equipment, CustomShapeData } from '../types';
 import { apiService } from '../services/api';
 import { Node } from 'reactflow';
-import Neo4jNodeAssignment from './Neo4jNodeAssignment';
 import { calculateBoundingBox } from '../utils/shapeCollision';
 
 // Helper function for shape geometry
@@ -113,13 +112,21 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
   const loadNodeRelationships = async (nodeId: string) => {
     try {
       console.log(`🔗 PropertyPanel: Loading relationships for ${nodeId} in ${mode} mode`);
-      const rels = await apiService.getRelationshipsForNode(nodeId, {
-        mode: mode,
-        includeIcons: mode === 'guided',
-        priority: mode === 'guided' ? 7 : undefined
-      });
-      console.log(`🔗 PropertyPanel: Loaded ${rels.length} relationships`);
-      setRelationships(rels);
+
+      // Only load relationships for supported modes
+      if (mode === 'creation' || mode === 'exploration') {
+        const rels = await apiService.getRelationshipsForNode(nodeId, {
+          mode: mode,
+          includeIcons: mode === 'exploration',
+          priority: mode === 'exploration' ? 7 : undefined
+        });
+        console.log(`🔗 PropertyPanel: Loaded ${rels.length} relationships`);
+        setRelationships(rels);
+      } else {
+        // For other modes like layoutDesigner, don't load relationships
+        console.log(`🔗 PropertyPanel: Skipping relationship loading for ${mode} mode`);
+        setRelationships([]);
+      }
     } catch (error) {
       console.error('Error loading relationships:', error);
     }
@@ -329,7 +336,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
 
   // Effect to handle automatic Neo4j assignment dialog trigger
   useEffect(() => {
-    if (editedNode?.type === 'customShape' && mode === 'guided') {
+    if (editedNode?.type === 'customShape' && mode === 'exploration') {
       const customShapeData = editedNode.data as CustomShapeData;
       if (customShapeData.showAssignmentDialog && !customShapeData.hasInheritedProperties) {
         // Auto-scroll to assignment section or show visual indicator
@@ -431,10 +438,10 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
           </Typography>
         </Box>
         
-        {mode === 'guided' && (
+        {mode === 'exploration' && (
           <Alert severity="info" sx={{ mb: 1 }}>
             <Typography variant="caption">
-              Guided mode: Properties are read-only from the knowledge graph
+              Exploration mode: Properties are read-only from the knowledge graph
             </Typography>
           </Alert>
         )}
@@ -454,10 +461,10 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
               onChange={(e) => handleFieldChange('name', e.target.value)}
               margin="normal"
               size="small"
-              disabled={mode === 'guided'}
+              disabled={mode === 'exploration'}
               InputProps={{
-                readOnly: mode === 'guided',
-                endAdornment: mode === 'guided' ? <Lock fontSize="small" /> : null,
+                readOnly: mode === 'exploration',
+                endAdornment: mode === 'exploration' ? <Lock fontSize="small" /> : null,
               }}
             />
 
@@ -467,7 +474,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
                 value={(editedNode.data as NodeData).category}
                 label="Category"
                 onChange={(e) => handleFieldChange('category', e.target.value)}
-                disabled={mode === 'guided'}
+                disabled={mode === 'exploration'}
               >
                 <MenuItem value="Production">Production</MenuItem>
                 <MenuItem value="Quality Control">Quality Control</MenuItem>
@@ -484,7 +491,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
                 value={(editedNode.data as NodeData).cleanroomClass || ''}
                 label="Cleanroom Class"
                 onChange={(e) => handleFieldChange('cleanroomClass', e.target.value)}
-                disabled={mode === 'guided'}
+                disabled={mode === 'exploration'}
               >
                 <MenuItem value="">None</MenuItem>
                 <MenuItem value="A">Class A (Highest)</MenuItem>
@@ -502,7 +509,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
                 onChange={(e) => handleFieldChange('width', parseInt(e.target.value))}
                 size="small"
                 sx={{ flex: 1 }}
-                disabled={mode === 'guided'}
+                disabled={mode === 'exploration'}
               />
               <TextField
                 label="Height"
@@ -511,7 +518,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
                 onChange={(e) => handleFieldChange('height', parseInt(e.target.value))}
                 size="small"
                 sx={{ flex: 1 }}
-                disabled={mode === 'guided'}
+                disabled={mode === 'exploration'}
               />
             </Box>
 
@@ -523,7 +530,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
                 onChange={(e) => handleFieldChange('position', { ...editedNode.position, x: parseInt(e.target.value) })}
                 size="small"
                 sx={{ flex: 1 }}
-                disabled={mode === 'guided'}
+                disabled={mode === 'exploration'}
               />
               <TextField
                 label="Y Position"
@@ -532,7 +539,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
                 onChange={(e) => handleFieldChange('position', { ...editedNode.position, y: parseInt(e.target.value) })}
                 size="small"
                 sx={{ flex: 1 }}
-                disabled={mode === 'guided'}
+                disabled={mode === 'exploration'}
               />
             </Box>
 
@@ -560,10 +567,10 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
               </Button>
             )}
             
-            {mode === 'guided' && (
+            {mode === 'exploration' && (
               <Alert severity="info" sx={{ mt: 2 }}>
                 <Typography variant="caption">
-                  Node properties are read-only in guided mode
+                  Node properties are read-only in exploration mode
                 </Typography>
               </Alert>
             )}
@@ -571,7 +578,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
         </Card>
 
         {/* Neo4j Node Assignment for Custom Shapes */}
-        {mode === 'guided' && selectedNode?.type === 'customShape' && (
+        {mode === 'exploration' && selectedNode?.type === 'customShape' && (
           <Box 
             sx={{ 
               border: (editedNode?.data as CustomShapeData)?.showAssignmentDialog ? '2px solid #1976d2' : 'none',
@@ -591,29 +598,11 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
                 </Typography>
               </Alert>
             )}
-            <Neo4jNodeAssignment
-              customShapeData={editedNode?.data as CustomShapeData}
-              onAssignNode={handleAssignNeo4jNode}
-              onInheritRelationships={handleInheritRelationships}
-              isConnected={connectionStatus === 'connected'}
-              // Add constraint validation props when available
-              shapePosition={selectedNode?.position}
-              shapeGeometry={selectedNode?.position ? calculateShapeGeometry(
-                (editedNode?.data as CustomShapeData)?.shapePoints || [],
-                selectedNode.position
-              ) : undefined}
-              onConstraintValidation={(result: any) => {
-                console.log('🔍 PropertyPanel constraint validation:', result);
-                if (result.violations?.length > 0) {
-                  console.warn(`⚠️ ${result.violations.length} constraint violations detected in PropertyPanel`);
-                }
-              }}
-            />
           </Box>
         )}
 
         {/* Inherited Relationships Display for Custom Shapes */}
-        {mode === 'guided' && selectedNode?.type === 'customShape' && 
+        {mode === 'exploration' && selectedNode?.type === 'customShape' && 
          (editedNode?.data as CustomShapeData)?.hasInheritedProperties && 
          ((editedNode?.data as CustomShapeData)?.inheritedRelationships?.length ?? 0) > 0 && (
           <Card sx={{ mb: 2 }}>
@@ -1049,7 +1038,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
         )}
 
         {/* Guided Suggestions Section */}
-        {mode === 'guided' && guidedSuggestions.length > 0 && (
+        {mode === 'exploration' && guidedSuggestions.length > 0 && (
           <Card sx={{ mb: 2 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

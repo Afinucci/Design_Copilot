@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Node, useReactFlow } from 'reactflow';
-import { useGuidedAdjacency } from '../hooks/useGuidedAdjacency';
+// Removed useGuidedAdjacency hook dependency as guided mode is deprecated
 
 interface AdjacencyHighlightsProps {
   nodes: Node[];
   edges: any[];
   isDragging: boolean;
   draggedNodeId: string | null;
-  knowledgeGraphData?: any;
 }
 
 export const AdjacencyHighlights: React.FC<AdjacencyHighlightsProps> = ({
@@ -15,18 +14,13 @@ export const AdjacencyHighlights: React.FC<AdjacencyHighlightsProps> = ({
   edges,
   isDragging,
   draggedNodeId,
-  knowledgeGraphData,
 }) => {
   const { project, getViewport } = useReactFlow();
   const [debugInfo, setDebugInfo] = useState<string>('');
   
-  const { edgeHighlights, getEdgeHighlightStyle } = useGuidedAdjacency({
-    nodes,
-    edges,
-    isDragging,
-    draggedNodeId,
-    knowledgeGraphData,
-  });
+  // Stubbed out guided adjacency functionality
+  const edgeHighlights: any[] = [];
+  const getEdgeHighlightStyle = () => ({ stroke: '#666', strokeWidth: 1 });
 
   // Debug logging
   useEffect(() => {

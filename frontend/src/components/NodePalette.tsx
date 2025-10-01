@@ -39,13 +39,13 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
   const [guidedNodes, setGuidedNodes] = useState<NodeTemplate[]>([]);
 
   useEffect(() => {
-    if (mode === 'guided') {
+    if (mode === 'exploration') {
       apiService.getExistingGraphNodes().then(setGuidedNodes).catch(() => setGuidedNodes([]));
     }
   }, [mode]);
 
   const filteredTemplates = useMemo(() => {
-    const source = mode === 'guided' ? guidedNodes : templates;
+    const source = mode === 'exploration' ? guidedNodes : templates;
     return source.filter(template =>
       (template.name && template.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (template.category && template.category.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -90,7 +90,7 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
   };
 
   const handleNodeClick = (template: NodeTemplate) => {
-    if (mode === 'guided' && onGuidedNodeSelect) {
+    if (mode === 'exploration' && onGuidedNodeSelect) {
       // In guided mode, clicking a node should fetch its relationships
       onGuidedNodeSelect(template.id);
     }
@@ -169,7 +169,7 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
           </Typography>
         </Box>
         
-        {mode === 'guided' && (
+        {mode === 'exploration' && (
           <Box sx={{ 
             mb: 2, 
             p: 1.5, 
@@ -289,13 +289,13 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                     onDragStart={(e) => handleDragStart(e, template)}
                     onClick={() => handleNodeClick(template)}
                     sx={{
-                      cursor: mode === 'guided' ? 'pointer' : 'grab',
+                      cursor: mode === 'exploration' ? 'pointer' : 'grab',
                       borderBottom: '1px solid #f0f0f0',
                       '&:hover': {
                         backgroundColor: '#f5f5f5',
                       },
                       '&:active': {
-                        cursor: mode === 'guided' ? 'pointer' : 'grabbing',
+                        cursor: mode === 'exploration' ? 'pointer' : 'grabbing',
                       },
                     }}
                   >

@@ -26,6 +26,55 @@ export interface FunctionalArea {
   equipment?: Equipment[];
 }
 
+/**
+ * Door types for pharmaceutical facilities with GMP compliance considerations
+ */
+export type DoorType =
+  | 'standard'           // Regular hinged door
+  | 'double'             // Double door for material transfer
+  | 'sliding'            // Sliding door for personnel
+  | 'airlock'            // Airlock/interlocked doors (GMP critical)
+  | 'pass-through'       // Pass-through window/hatch
+  | 'emergency'          // Emergency exit
+  | 'roll-up'            // Roll-up door for large equipment
+  | 'automatic'          // Automatic sliding door
+  | 'cleanroom-rated';   // Specialized cleanroom door
+
+/**
+ * Flow type for door connections between shapes
+ */
+export type DoorFlowType = 'material' | 'personnel' | 'waste';
+
+/**
+ * Flow direction for door connections
+ */
+export type DoorFlowDirection = 'unidirectional' | 'bidirectional';
+
+/**
+ * Point on a shape edge where door connection is placed
+ */
+export interface DoorConnectionPoint {
+  shapeId: string;
+  x: number; // Absolute canvas coordinates
+  y: number; // Absolute canvas coordinates
+  edgeIndex: number; // Which edge of the polygon (0-based)
+  normalizedPosition: number; // Position along edge (0.0 to 1.0)
+}
+
+/**
+ * Door connection between two shapes
+ */
+export interface DoorConnection {
+  id: string;
+  fromShape: DoorConnectionPoint;
+  toShape: DoorConnectionPoint;
+  flowType: DoorFlowType;
+  flowDirection: DoorFlowDirection;
+  doorType?: DoorType; // Optional door type for GMP compliance
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 export interface SpatialRelationship {
   id: string;
   type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW' | 'WORKFLOW_SUGGESTION';
@@ -33,7 +82,7 @@ export interface SpatialRelationship {
   toId: string;
   priority: number;
   reason: string;
-  doorType?: string;
+  doorType?: DoorType;
   minDistance?: number;
   maxDistance?: number;
   flowDirection?: 'bidirectional' | 'unidirectional';

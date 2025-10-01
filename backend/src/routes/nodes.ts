@@ -2911,14 +2911,14 @@ router.post('/relationships/optimal-positioning', async (req, res) => {
       iconPositions,
       summary: {
         total: iconPositions.length,
-        noCollision: iconPositions.filter(p => p.collisionRisk === 'none').length,
-        lowRisk: iconPositions.filter(p => p.collisionRisk === 'low').length,
-        mediumRisk: iconPositions.filter(p => p.collisionRisk === 'medium').length,
-        highRisk: iconPositions.filter(p => p.collisionRisk === 'high').length
+        noCollision: iconPositions.filter((p: any) => p.collisionRisk === 'none').length,
+        lowRisk: iconPositions.filter((p: any) => p.collisionRisk === 'low').length,
+        mediumRisk: iconPositions.filter((p: any) => p.collisionRisk === 'medium').length,
+        highRisk: iconPositions.filter((p: any) => p.collisionRisk === 'high').length
       },
       layoutSuggestions: iconPositions
-        .filter(p => p.collisionRisk === 'high')
-        .map(p => `Relationship ${p.relationshipId} may need manual positioning due to overlaps`)
+        .filter((p: any) => p.collisionRisk === 'high')
+        .map((p: any) => `Relationship ${p.relationshipId} may need manual positioning due to overlaps`)
     };
     
     res.json(positioningResults);

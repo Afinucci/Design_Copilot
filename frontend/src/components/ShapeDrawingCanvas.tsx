@@ -1,15 +1,16 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Box, Alert, AlertTitle } from '@mui/material';
+import { Box, Alert, AlertTitle, Typography, Chip } from '@mui/material';
 import { Node } from 'reactflow';
 import { ShapePoint, ShapeType, CustomShapeData } from '../types';
 import { shapeTemplates } from './ShapeDrawingToolbar';
-import { 
+import {
   calculateBoundingBox,
   nodeToShapeGeometry,
   findCollisions,
   ShapeGeometry,
   CollisionResult
 } from '../utils/shapeCollision';
+import { generateShapePath, generateDefaultPoints, calculateShapeArea } from '../utils/shapeGeometry';
 // import { useAdjacencyConstraints } from '../hooks/useAdjacencyConstraints';
 
 interface ShapeDrawingCanvasProps {
@@ -223,16 +224,11 @@ const ShapeDrawingCanvas: React.FC<ShapeDrawingCanvasProps> = ({
         setIsCurrentlyDrawing(true);
         onDrawingStateChange(true);
       } else {
-        // Check if we can complete the rectangle
-        if (!collisionState.canComplete && enforceBoundaries) {
-          return; // Block completion if there are constraint violations
-        }
-
         // Complete rectangle
         const startPoint = currentPoints[0];
         const width = Math.abs(point.x - startPoint.x);
         const height = Math.abs(point.y - startPoint.y);
-        
+
         const finalPoints = [
           { x: Math.min(startPoint.x, point.x), y: Math.min(startPoint.y, point.y) },
           { x: Math.min(startPoint.x, point.x) + width, y: Math.min(startPoint.y, point.y) + height }
@@ -248,10 +244,132 @@ const ShapeDrawingCanvas: React.FC<ShapeDrawingCanvasProps> = ({
         setCurrentPoints([]);
         setIsCurrentlyDrawing(false);
         setPreviewPoint(null);
-        setCollisionState({ hasCollisions: false, collisions: [], canComplete: true, validationMessage: '' });
+        onDrawingStateChange(false);
+      }
+    } else if (activeShapeTool === 'circle') {
+      // Circle: click center, then click to set radius
+      if (!isCurrentlyDrawing) {
+        // Start circle - set center point
+        setCurrentPoints([point]);
+        setIsCurrentlyDrawing(true);
+        onDrawingStateChange(true);
+      } else {
+        // Complete circle - calculate radius from center to current point
+        const center = currentPoints[0];
+        const radius = Math.sqrt(
+          Math.pow(point.x - center.x, 2) + Math.pow(point.y - center.y, 2)
+        );
+        const width = radius * 2;
+        const height = radius * 2;
+
+        onShapeComplete({
+          shapeType: 'circle',
+          shapePoints: [center],
+          width,
+          height
+        });
+
+        setCurrentPoints([]);
+        setIsCurrentlyDrawing(false);
+        setPreviewPoint(null);
+        onDrawingStateChange(false);
+      }
+    } else if (activeShapeTool === 'ellipse') {
+      // Ellipse: click center, then click to set size
+      if (!isCurrentlyDrawing) {
+        // Start ellipse - set center point
+        setCurrentPoints([point]);
+        setIsCurrentlyDrawing(true);
+        onDrawingStateChange(true);
+      } else {
+        // Complete ellipse
+        const center = currentPoints[0];
+        const width = Math.abs(point.x - center.x) * 2;
+        const height = Math.abs(point.y - center.y) * 2;
+
+        onShapeComplete({
+          shapeType: 'ellipse',
+          shapePoints: [center],
+          width,
+          height
+        });
+
+        setCurrentPoints([]);
+        setIsCurrentlyDrawing(false);
+        setPreviewPoint(null);
+        onDrawingStateChange(false);
+      }
+    } else if (activeShapeTool === 'triangle') {
+      // Triangle: 3 clicks for 3 vertices
+      if (!isCurrentlyDrawing) {
+        // Start triangle
+        setCurrentPoints([point]);
+        setIsCurrentlyDrawing(true);
+        onDrawingStateChange(true);
+      } else if (currentPoints.length < 2) {
+        // Add second point
+        setCurrentPoints(prev => [...prev, point]);
+      } else {
+        // Complete triangle with third point
+        const finalPoints = [...currentPoints, point];
+        const xs = finalPoints.map(p => p.x);
+        const ys = finalPoints.map(p => p.y);
+        const width = Math.max(...xs) - Math.min(...xs);
+        const height = Math.max(...ys) - Math.min(...ys);
+
+        onShapeComplete({
+          shapeType: 'triangle',
+          shapePoints: finalPoints,
+          width,
+          height
+        });
+
+        setCurrentPoints([]);
+        setIsCurrentlyDrawing(false);
+        setPreviewPoint(null);
+        onDrawingStateChange(false);
+      }
+    } else if (activeShapeTool === 'hexagon' || activeShapeTool === 'octagon' ||
+               activeShapeTool === 'pentagon' || activeShapeTool === 'star' ||
+               activeShapeTool === 'diamond') {
+      // Regular polygons: click center, then click to set size
+      if (!isCurrentlyDrawing) {
+        // Start shape - set center point
+        setCurrentPoints([point]);
+        setIsCurrentlyDrawing(true);
+        onDrawingStateChange(true);
+      } else {
+        // Complete shape - calculate size from center to current point
+        const center = currentPoints[0];
+        const radius = Math.sqrt(
+          Math.pow(point.x - center.x, 2) + Math.pow(point.y - center.y, 2)
+        );
+        const width = radius * 2;
+        const height = radius * 2;
+
+        // Generate proper points for the shape
+        const shapePoints = generateDefaultPoints(
+          activeShapeTool,
+          center.x - radius,
+          center.y - radius,
+          width,
+          height
+        );
+
+        onShapeComplete({
+          shapeType: activeShapeTool,
+          shapePoints,
+          width,
+          height
+        });
+
+        setCurrentPoints([]);
+        setIsCurrentlyDrawing(false);
+        setPreviewPoint(null);
         onDrawingStateChange(false);
       }
     } else if (activeShapeTool === 'polygon') {
+      // Custom polygon: multi-click
       if (!isCurrentlyDrawing) {
         // Start polygon
         setCurrentPoints([point]);
@@ -261,52 +379,58 @@ const ShapeDrawingCanvas: React.FC<ShapeDrawingCanvasProps> = ({
         // Add point to polygon
         setCurrentPoints(prev => [...prev, point]);
       }
-    } else if (['L-shape', 'U-shape', 'T-shape'].includes(activeShapeTool)) {
-      // Handle template shapes
+    } else {
+      // Handle template-based shapes (L, U, T, cross, etc.)
       const template = shapeTemplates.find(t => t.shapeType === activeShapeTool);
-      if (template) {
-        // Position template at click point
-        const offsetPoints = template.defaultPoints.map(p => ({
-          x: p.x + point.x,
-          y: p.y + point.y
-        }));
 
-        // For template shapes, check collision before completing
-        const templateGeometry = {
-          id: 'template-preview',
-          type: 'polygon' as const,
-          boundingBox: calculateBoundingBox(offsetPoints),
-          vertices: offsetPoints,
-          edges: offsetPoints.map((p, i) => ({
-            start: p,
-            end: offsetPoints[(i + 1) % offsetPoints.length]
-          }))
-        };
+      const clickToPlaceShapes = [
+        'L-shape', 'U-shape', 'T-shape', 'cross', 'trapezoid',
+        'parallelogram', 'rounded-rectangle'
+      ];
 
-        const existingGeometries: ShapeGeometry[] = [];
-        for (const node of nodes) {
-          const geometry = nodeToShapeGeometry(node);
-          if (geometry) {
-            existingGeometries.push(geometry);
-          }
+      if (clickToPlaceShapes.includes(activeShapeTool)) {
+        if (!isCurrentlyDrawing) {
+          // Start shape - set anchor point
+          setCurrentPoints([point]);
+          setIsCurrentlyDrawing(true);
+          onDrawingStateChange(true);
+        } else {
+          // Complete shape - calculate size from anchor to current point
+          const anchor = currentPoints[0];
+          const width = Math.abs(point.x - anchor.x) || template?.defaultWidth || 120;
+          const height = Math.abs(point.y - anchor.y) || template?.defaultHeight || 80;
+
+          // Generate points for the shape
+          const shapePoints = generateDefaultPoints(
+            activeShapeTool,
+            Math.min(anchor.x, point.x),
+            Math.min(anchor.y, point.y),
+            width,
+            height
+          );
+
+          onShapeComplete({
+            shapeType: activeShapeTool,
+            shapePoints,
+            width,
+            height
+          });
+
+          setCurrentPoints([]);
+          setIsCurrentlyDrawing(false);
+          setPreviewPoint(null);
+          onDrawingStateChange(false);
         }
-
-        const collisions = findCollisions(templateGeometry, existingGeometries, 2);
-        const hasOverlaps = collisions.some(c => c.collision.collisionType === 'body-overlap');
-
-        if (hasOverlaps && enforceBoundaries) {
-          return; // Block template placement if it would overlap
+      } else if (activeShapeTool === 'freeform') {
+        // Start freeform drawing
+        if (!isCurrentlyDrawing) {
+          setCurrentPoints([point]);
+          setIsCurrentlyDrawing(true);
+          onDrawingStateChange(true);
         }
-
-        onShapeComplete({
-          shapeType: activeShapeTool,
-          shapePoints: offsetPoints,
-          width: template.defaultWidth,
-          height: template.defaultHeight
-        });
       }
     }
-  }, [activeShapeTool, isCurrentlyDrawing, currentPoints, getCanvasPoint, onShapeComplete, onDrawingStateChange, collisionState.canComplete, enforceBoundaries, nodes]);
+  }, [activeShapeTool, isCurrentlyDrawing, currentPoints, getCanvasPoint, onShapeComplete, onDrawingStateChange, nodes]);
 
   // Handle mouse move for preview
   const handleMouseMove = useCallback((event: React.MouseEvent) => {
@@ -352,6 +476,35 @@ const ShapeDrawingCanvas: React.FC<ShapeDrawingCanvasProps> = ({
     }
   }, [activeShapeTool, isCurrentlyDrawing, currentPoints, onShapeComplete, onDrawingStateChange, collisionState.canComplete, enforceBoundaries]);
 
+  // Calculate dimensions for display
+  const calculateCurrentDimensions = useCallback(() => {
+    if (currentPoints.length === 0) return { width: 0, height: 0, area: 0 };
+
+    if (activeShapeTool === 'rectangle' && previewPoint && currentPoints.length === 1) {
+      const startPoint = currentPoints[0];
+      const width = Math.abs(previewPoint.x - startPoint.x);
+      const height = Math.abs(previewPoint.y - startPoint.y);
+      return {
+        width: Math.round(width),
+        height: Math.round(height),
+        area: Math.round(width * height)
+      };
+    }
+
+    // For template shapes or completed shapes
+    const template = shapeTemplates.find(t => t.shapeType === activeShapeTool);
+    if (template && activeShapeTool) {
+      const area = calculateShapeArea(activeShapeTool, template.defaultWidth, template.defaultHeight);
+      return {
+        width: template.defaultWidth,
+        height: template.defaultHeight,
+        area: Math.round(area)
+      };
+    }
+
+    return { width: 0, height: 0, area: 0 };
+  }, [currentPoints, activeShapeTool, previewPoint]);
+
   // Generate preview path
   const generatePreviewPath = useCallback(() => {
     if (currentPoints.length === 0) return '';
@@ -362,8 +515,53 @@ const ShapeDrawingCanvas: React.FC<ShapeDrawingCanvasProps> = ({
       const height = Math.abs(previewPoint.y - startPoint.y);
       const minX = Math.min(startPoint.x, previewPoint.x);
       const minY = Math.min(startPoint.y, previewPoint.y);
-      
       return `M ${minX} ${minY} L ${minX + width} ${minY} L ${minX + width} ${minY + height} L ${minX} ${minY + height} Z`;
+    }
+
+    if (activeShapeTool === 'circle' && currentPoints.length === 1 && previewPoint) {
+      const center = currentPoints[0];
+      const radius = Math.sqrt(
+        Math.pow(previewPoint.x - center.x, 2) + Math.pow(previewPoint.y - center.y, 2)
+      );
+      return generateShapePath('circle', [center], radius * 2, radius * 2);
+    }
+
+    if (activeShapeTool === 'ellipse' && currentPoints.length === 1 && previewPoint) {
+      const center = currentPoints[0];
+      const width = Math.abs(previewPoint.x - center.x) * 2;
+      const height = Math.abs(previewPoint.y - center.y) * 2;
+      return generateShapePath('ellipse', [center], width, height);
+    }
+
+    if (activeShapeTool === 'triangle') {
+      const points = previewPoint ? [...currentPoints, previewPoint] : currentPoints;
+      if (points.length >= 2) {
+        let path = `M ${points[0].x} ${points[0].y}`;
+        for (let i = 1; i < points.length; i++) {
+          path += ` L ${points[i].x} ${points[i].y}`;
+        }
+        if (points.length === 3 || (points.length === 2 && previewPoint)) {
+          path += ' Z';
+        }
+        return path;
+      }
+    }
+
+    if ((activeShapeTool === 'hexagon' || activeShapeTool === 'octagon' ||
+         activeShapeTool === 'pentagon' || activeShapeTool === 'star' ||
+         activeShapeTool === 'diamond') && currentPoints.length === 1 && previewPoint) {
+      const center = currentPoints[0];
+      const radius = Math.sqrt(
+        Math.pow(previewPoint.x - center.x, 2) + Math.pow(previewPoint.y - center.y, 2)
+      );
+      const shapePoints = generateDefaultPoints(
+        activeShapeTool,
+        center.x - radius,
+        center.y - radius,
+        radius * 2,
+        radius * 2
+      );
+      return generateShapePath(activeShapeTool, shapePoints, radius * 2, radius * 2);
     }
 
     if (activeShapeTool === 'polygon') {
@@ -371,7 +569,7 @@ const ShapeDrawingCanvas: React.FC<ShapeDrawingCanvasProps> = ({
       for (let i = 1; i < currentPoints.length; i++) {
         path += ` L ${currentPoints[i].x} ${currentPoints[i].y}`;
       }
-      if (previewPoint && currentPoints.length > 0) {
+      if (previewPoint) {
         path += ` L ${previewPoint.x} ${previewPoint.y}`;
       }
       return path;
@@ -566,17 +764,93 @@ const ShapeDrawingCanvas: React.FC<ShapeDrawingCanvasProps> = ({
             }}
           >
             {activeShapeTool === 'rectangle' && !isCurrentlyDrawing && 'Click to start rectangle'}
-            {activeShapeTool === 'rectangle' && isCurrentlyDrawing && (
-              collisionState.canComplete ? 'Click to complete rectangle' : 'Cannot complete - shape conflicts'
-            )}
+            {activeShapeTool === 'rectangle' && isCurrentlyDrawing && 'Click to complete rectangle'}
+
+            {activeShapeTool === 'circle' && !isCurrentlyDrawing && 'Click to place circle center'}
+            {activeShapeTool === 'circle' && isCurrentlyDrawing && 'Click to set radius'}
+
+            {activeShapeTool === 'ellipse' && !isCurrentlyDrawing && 'Click to place ellipse center'}
+            {activeShapeTool === 'ellipse' && isCurrentlyDrawing && 'Click to set size'}
+
+            {activeShapeTool === 'triangle' && !isCurrentlyDrawing && 'Click for first vertex'}
+            {activeShapeTool === 'triangle' && isCurrentlyDrawing && currentPoints.length === 1 && 'Click for second vertex'}
+            {activeShapeTool === 'triangle' && isCurrentlyDrawing && currentPoints.length === 2 && 'Click for third vertex'}
+
+            {activeShapeTool === 'hexagon' && !isCurrentlyDrawing && 'Click to place hexagon center'}
+            {activeShapeTool === 'hexagon' && isCurrentlyDrawing && 'Click to set size'}
+
+            {activeShapeTool === 'octagon' && !isCurrentlyDrawing && 'Click to place octagon center'}
+            {activeShapeTool === 'octagon' && isCurrentlyDrawing && 'Click to set size'}
+
+            {activeShapeTool === 'pentagon' && !isCurrentlyDrawing && 'Click to place pentagon center'}
+            {activeShapeTool === 'pentagon' && isCurrentlyDrawing && 'Click to set size'}
+
+            {activeShapeTool === 'star' && !isCurrentlyDrawing && 'Click to place star center'}
+            {activeShapeTool === 'star' && isCurrentlyDrawing && 'Click to set size'}
+
+            {activeShapeTool === 'diamond' && !isCurrentlyDrawing && 'Click to place diamond center'}
+            {activeShapeTool === 'diamond' && isCurrentlyDrawing && 'Click to set size'}
+
             {activeShapeTool === 'polygon' && !isCurrentlyDrawing && 'Click to start polygon'}
-            {activeShapeTool === 'polygon' && isCurrentlyDrawing && (
-              collisionState.canComplete 
-                ? 'Click to add points, double-click to finish' 
-                : 'Cannot complete - shape conflicts'
-            )}
-            {['L-shape', 'U-shape', 'T-shape'].includes(activeShapeTool) && 'Click to place shape'}
+            {activeShapeTool === 'polygon' && isCurrentlyDrawing && 'Click to add points, double-click to finish'}
+
+            {activeShapeTool === 'freeform' && !isCurrentlyDrawing && 'Click to start drawing'}
+            {activeShapeTool === 'freeform' && isCurrentlyDrawing && 'Draw shape, release to finish'}
+
+            {['L-shape', 'U-shape', 'T-shape', 'cross', 'trapezoid', 'parallelogram', 'rounded-rectangle'].includes(activeShapeTool) && !isCurrentlyDrawing && 'Click to place shape'}
+            {['L-shape', 'U-shape', 'T-shape', 'cross', 'trapezoid', 'parallelogram', 'rounded-rectangle'].includes(activeShapeTool) && isCurrentlyDrawing && 'Click to set size'}
           </Box>
+
+          {/* Real-time Dimensions Display */}
+          {isCurrentlyDrawing && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                padding: 1.5,
+                borderRadius: 1,
+                fontSize: '0.8rem',
+                pointerEvents: 'none',
+                minWidth: 150,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              }}
+            >
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                Shape Dimensions
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="caption" color="text.secondary">Width:</Typography>
+                  <Typography variant="caption" fontWeight="medium">
+                    {calculateCurrentDimensions().width}px
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="caption" color="text.secondary">Height:</Typography>
+                  <Typography variant="caption" fontWeight="medium">
+                    {calculateCurrentDimensions().height}px
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="caption" color="text.secondary">Area:</Typography>
+                  <Typography variant="caption" fontWeight="medium">
+                    {calculateCurrentDimensions().area}px²
+                  </Typography>
+                </Box>
+                {activeShapeTool && (
+                  <Chip
+                    label={activeShapeTool}
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    sx={{ mt: 0.5, fontSize: '0.7rem' }}
+                  />
+                )}
+              </Box>
+            </Box>
+          )}
 
           {/* Validation Feedback */}
           {showValidationFeedback && collisionState.validationMessage && (

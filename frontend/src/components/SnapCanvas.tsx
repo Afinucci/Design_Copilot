@@ -24,7 +24,7 @@ import MultiRelationshipEdge from './MultiRelationshipEdge';
 import ErrorBoundary from './ErrorBoundary';
 import { useSnapToGrid } from '../hooks/useSnapToGrid';
 import { useSnapConnection } from '../hooks/useSnapConnection';
-import { useGuidedAdjacency } from '../hooks/useGuidedAdjacency';
+// Removed useGuidedAdjacency hook dependency as guided mode is deprecated
 import { AdjacencyHighlights } from './AdjacencyHighlights';
 import { getConnectorMetadata } from '../services/connectorLogic';
 import { NodeData, DiagramEdge, SpatialRelationship } from '../types';
@@ -53,8 +53,6 @@ interface SnapCanvasProps {
   onConnectEnd?: (event: any) => void;
   // Guided mode behavior: don't render adjacency edges, allow overlap only if adjacency exists
   guidedNoAdjacencyEdges?: boolean;
-  // Knowledge graph data for guided mode
-  knowledgeGraphData?: any;
 }
 
 const SnapCanvasCore: React.FC<SnapCanvasProps> = ({
@@ -71,7 +69,6 @@ const SnapCanvasCore: React.FC<SnapCanvasProps> = ({
   onConnectStart,
   onConnectEnd,
   guidedNoAdjacencyEdges = false,
-  knowledgeGraphData,
 }) => {
   const { project } = useReactFlow();
   const [snapIndicators, setSnapIndicators] = useState<
@@ -90,19 +87,11 @@ const SnapCanvasCore: React.FC<SnapCanvasProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
 
-  // Use guided adjacency for adjacency rules
-  const {
-    adjacencyRules,
-    canNodesBeAdjacent,
-    areNodesProhibited,
-    edgeHighlights,
-  } = useGuidedAdjacency({
-    nodes,
-    edges,
-    isDragging,
-    draggedNodeId,
-    knowledgeGraphData,
-  });
+  // Stubbed out guided adjacency functionality
+  const adjacencyRules: any[] = [];
+  const canNodesBeAdjacent = () => true;
+  const areNodesProhibited = () => false;
+  const edgeHighlights: any[] = [];
 
   const {
     getSnappedPosition,
@@ -268,7 +257,6 @@ const SnapCanvasCore: React.FC<SnapCanvasProps> = ({
             edges={edges}
             isDragging={isDragging}
             draggedNodeId={draggedNodeId}
-            knowledgeGraphData={knowledgeGraphData}
           />
         )}
 

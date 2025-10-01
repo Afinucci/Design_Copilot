@@ -150,9 +150,9 @@ class ApiService {
 
   // Enhanced method with mode-awareness for relationship fetching
   async getRelationshipsForNode(
-    nodeId: string, 
-    options?: { 
-      mode?: 'creation' | 'guided';
+    nodeId: string,
+    options?: {
+      mode?: 'creation' | 'exploration';
       includeIcons?: boolean;
       priority?: number;
     }

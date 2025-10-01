@@ -270,17 +270,37 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
                 Door Type
               </Typography>
               {editMode ? (
-                <TextField
-                  fullWidth
-                  size="small"
-                  value={formData.doorType || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, doorType: e.target.value }))}
-                  placeholder="e.g., airlock, pass-through, standard"
-                />
+                <FormControl fullWidth size="small">
+                  <Select
+                    value={formData.doorType || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, doorType: e.target.value as string }))}
+                    displayEmpty
+                  >
+                    <MenuItem value="">
+                      <em>No door specified</em>
+                    </MenuItem>
+                    <MenuItem value="standard">Standard - Regular hinged door</MenuItem>
+                    <MenuItem value="double">Double - Wide material/equipment transfer</MenuItem>
+                    <MenuItem value="sliding">Sliding - Space-efficient personnel access</MenuItem>
+                    <MenuItem value="airlock">Airlock - GMP critical interlocked doors</MenuItem>
+                    <MenuItem value="pass-through">Pass-Through - Small material transfer hatch</MenuItem>
+                    <MenuItem value="emergency">Emergency - Fire-rated exit door</MenuItem>
+                    <MenuItem value="roll-up">Roll-Up - Overhead for large equipment</MenuItem>
+                    <MenuItem value="automatic">Automatic - Sensor-activated sliding</MenuItem>
+                    <MenuItem value="cleanroom-rated">Cleanroom-Rated - Airtight seal door</MenuItem>
+                  </Select>
+                </FormControl>
               ) : (
-                <Typography variant="body2" color="text.secondary">
-                  {formData.doorType || 'Not specified'}
-                </Typography>
+                <Box>
+                  <Typography variant="body2" fontWeight="medium">
+                    {formData.doorType ? formData.doorType.replace('-', ' ').toUpperCase() : 'Not specified'}
+                  </Typography>
+                  {formData.doorType && (
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                      {formData.doorType}
+                    </Typography>
+                  )}
+                </Box>
               )}
             </Box>
           )}

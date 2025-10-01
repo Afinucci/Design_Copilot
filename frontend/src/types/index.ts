@@ -1,6 +1,30 @@
 // Import shared types
 import type { KnowledgeGraphNode, KnowledgeGraphRelationship } from '../../../shared/types';
 
+// Door connection types (defined locally for frontend build compatibility)
+export type DoorFlowType = 'material' | 'personnel' | 'waste';
+export type DoorFlowDirection = 'unidirectional' | 'bidirectional';
+
+export interface DoorConnectionPoint {
+  shapeId: string;
+  x: number;
+  y: number;
+  edgeIndex: number;
+  normalizedPosition: number;
+}
+
+export interface DoorConnection {
+  id: string;
+  fromShape: DoorConnectionPoint;
+  toShape: DoorConnectionPoint;
+  flowType: DoorFlowType;
+  flowDirection: DoorFlowDirection;
+  edgeStartPoint?: { x: number; y: number }; // Start of shared edge
+  edgeEndPoint?: { x: number; y: number }; // End of shared edge
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 export interface Equipment {
   id: string;
   name: string;
@@ -129,7 +153,27 @@ export interface ShapePoint {
   y: number;
 }
 
-export type ShapeType = 'rectangle' | 'polygon' | 'custom' | 'L-shape' | 'U-shape' | 'T-shape';
+export type ShapeType =
+  | 'rectangle'
+  | 'polygon'
+  | 'custom'
+  | 'L-shape'
+  | 'U-shape'
+  | 'T-shape'
+  | 'C-shape'
+  | 'circle'
+  | 'ellipse'
+  | 'hexagon'
+  | 'octagon'
+  | 'triangle'
+  | 'pentagon'
+  | 'cross'
+  | 'star'
+  | 'diamond'
+  | 'trapezoid'
+  | 'parallelogram'
+  | 'rounded-rectangle'
+  | 'freeform';
 
 // Resize handle types
 export type ResizeHandleType = 'corner' | 'edge';
@@ -150,6 +194,7 @@ export interface CustomShapeData extends NodeData {
   shapePoints: ShapePoint[];
   isEditing?: boolean;
   isResizing?: boolean; // Whether shape is in resize mode
+  rotation?: number; // Rotation angle in degrees
   highlighted?: boolean; // Whether shape is highlighted
   assignedNodeId?: string; // Neo4j node ID
   assignedNodeName?: string; // Neo4j node name
@@ -176,6 +221,7 @@ export interface ShapeTemplate {
   defaultHeight: number;
   description: string;
   preview?: string; // SVG path for preview
+  pharmaceuticalContext?: string; // Context for pharmaceutical applications
 }
 
 export interface DiagramNode {
@@ -206,7 +252,7 @@ export interface DiagramEdge {
 }
 
 // New types for enhanced modes
-export type AppMode = 'creation' | 'guided';
+export type AppMode = 'creation' | 'exploration' | 'layoutDesigner';
 
 export interface KnowledgeGraphData {
   nodes: FunctionalArea[];
@@ -251,6 +297,8 @@ export interface ModeConfig {
   dataSource: 'templates' | 'knowledge_graph';
   allowPersistence: boolean;
   showSuggestions: boolean;
+  canAddEdges: boolean;
+  canDeleteNodes: boolean;
 }
 
 export interface NodeGroup {

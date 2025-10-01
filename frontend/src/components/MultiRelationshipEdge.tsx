@@ -1,6 +1,6 @@
 import React from 'react';
-import { 
-  EdgeProps, 
+import {
+  EdgeProps,
   EdgeLabelRenderer,
   BaseEdge,
   getStraightPath,
@@ -9,11 +9,10 @@ import {
   Edge
 } from 'reactflow';
 import PersonnelFlowIcon from './PersonnelFlowIcon';
-import GuidedModeEdge from './GuidedModeEdge';
-import { 
-  EDGE_SPACING, 
-  DEFAULT_NODE_WIDTH, 
-  DEFAULT_NODE_HEIGHT, 
+import {
+  EDGE_SPACING,
+  DEFAULT_NODE_WIDTH,
+  DEFAULT_NODE_HEIGHT,
   ARROW_SIZE,
   EDGE_FONT_SIZE,
   EDGE_FONT_WEIGHT,
@@ -114,30 +113,6 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   
   if (sourceX === targetX && sourceY === targetY) return null;
   
-  // If we're in guided mode, use the specialized GuidedModeEdge component
-  if (data.mode === 'guided') {
-    return (
-      <GuidedModeEdge
-        id={id}
-        sourceX={sourceX}
-        sourceY={sourceY}
-        targetX={targetX}
-        targetY={targetY}
-        sourcePosition={sourcePosition}
-        targetPosition={targetPosition}
-        style={style}
-        data={data}
-        label={label}
-        labelStyle={labelStyle}
-        labelShowBg={labelShowBg}
-        labelBgStyle={labelBgStyle}
-        labelBgPadding={labelBgPadding}
-        labelBgBorderRadius={labelBgBorderRadius}
-        source={source}
-        target={target}
-      />
-    );
-  }
   
   // For creation mode, continue with original line-based rendering below
   
@@ -276,7 +251,7 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   const { showSourceArrow, showTargetArrow } = data?.renderAsIcon
     ? { showSourceArrow: false, showTargetArrow: false }
     : getArrowConfig();
-  
+
   return (
     <>
       {!data?.renderAsIcon && (

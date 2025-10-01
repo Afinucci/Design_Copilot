@@ -34,7 +34,7 @@ export const useGhostSuggestions = ({
   const [ghostState, setGhostState] = useState<GhostState>({
     suggestions: [],
     isLoading: false,
-    showGhosts: mode === 'guided', // Auto-enable in guided mode
+    showGhosts: mode === 'exploration', // Auto-enable in exploration mode
     triggerNode: null,
     triggerNodeId: null,
   });
@@ -54,15 +54,15 @@ export const useGhostSuggestions = ({
   const ghostRequestRef = useRef<AbortController | null>(null);
   const lastTriggerNodeRef = useRef<string | null>(null);
 
-  // Auto-enable ghost suggestions when switching to guided mode
+  // Auto-enable ghost suggestions when switching to exploration mode
   useEffect(() => {
     setGhostState(prev => ({
       ...prev,
-      showGhosts: mode === 'guided',
+      showGhosts: mode === 'exploration',
     }));
 
-    // Clear suggestions when leaving guided mode
-    if (mode !== 'guided') {
+    // Clear suggestions when leaving exploration mode
+    if (mode !== 'exploration') {
       setGhostState(prev => ({
         ...prev,
         suggestions: [],
@@ -83,11 +83,11 @@ export const useGhostSuggestions = ({
       mode
     });
 
-    if (!isConnected || mode !== 'guided') {
+    if (!isConnected || mode !== 'exploration') {
       console.log('🎯 useGhostSuggestions: Skipping generation because:', {
         isConnected,
         mode,
-        expectedMode: 'guided'
+        expectedMode: 'exploration'
       });
       return;
     }

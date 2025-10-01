@@ -1,0 +1,1472 @@
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Box, Paper, Typography, Button } from '@mui/material';
+import DrawingCanvas from './DrawingCanvas';
+import ShapeLibrary, { PharmaceuticalShapeTemplate } from './ShapeLibrary';
+import DrawingTools from './DrawingTools';
+import PropertiesPanel, { ShapeProperties } from './PropertiesPanel';
+import ValidationOverlay, { ValidationResult } from './ValidationOverlay';
+import ConnectionRenderer from './ConnectionRenderer';
+import { ShapeType, NodeCategory } from '../../types';
+import {
+  DrawingMode,
+  Connection,
+  ConnectionDrawingState,
+  DoorConnectionDrawingState,
+  areShapesAdjacent
+} from './types';
+import { DoorConnection, DoorFlowType, DoorFlowDirection } from '../../types';
+import DoorConnectionRenderer from '../DoorConnectionRenderer';
+import DoorConnectionDialog from '../DoorConnectionDialog';
+import DoorConnectionEditDialog from '../DoorConnectionEditDialog';
+
+export interface LayoutDesignerProps {
+  onClose?: () => void;
+  onSave?: (layoutData: LayoutData) => void;
+  onLoad?: () => void;
+  initialLayout?: LayoutData;
+}
+
+export interface LayoutData {
+  id: string;
+  name: string;
+  shapes: ShapeProperties[];
+  connections: Connection[];
+  doorConnections: DoorConnection[];
+  canvasSettings: {
+    width: number;
+    height: number;
+    backgroundColor: string;
+  };
+  metadata: {
+    createdAt: Date;
+    modifiedAt: Date;
+    version: string;
+  };
+}
+
+interface DrawingState {
+  activeShapeTool: ShapeType | null;
+  isDrawing: boolean;
+  selectedShapeId: string | null;
+  hoveredShapeId: string | null;
+}
+
+interface CanvasSettings {
+  width: number;
+  height: number;
+  backgroundColor: string;
+  showGrid: boolean;
+  snapToGrid: boolean;
+  gridSize: number;
+  zoom: number;
+}
+
+interface HistoryState {
+  shapes: ShapeProperties[];
+  timestamp: number;
+}
+
+const DEFAULT_CANVAS_SETTINGS: CanvasSettings = {
+  width: 1200,
+  height: 800,
+  backgroundColor: '#f8f9fa',
+  showGrid: true,
+  snapToGrid: true,
+  gridSize: 20,
+  zoom: 1,
+};
+
+const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
+  onClose,
+  onSave,
+  onLoad,
+  initialLayout,
+}) => {
+  // Helper: which shape types should render as polygons
+  const polygonRenderTypes = new Set<ShapeType>([
+    'triangle',
+    'polygon',
+    'pentagon',
+    'hexagon',
+    'octagon',
+    'diamond',
+    'trapezoid',
+    'parallelogram',
+    'L-shape',
+    'C-shape',
+  ]);
+
+  const generateRegularPolygonPoints = (sides: number, width: number, height: number) => {
+    const cx = width / 2;
+    const cy = height / 2;
+    const r = Math.max(1, Math.min(width, height) / 2);
+    const points: { x: number; y: number }[] = [];
+    // Rotate so one vertex is at top for odd sides
+    const startAngle = -Math.PI / 2;
+    for (let i = 0; i < sides; i++) {
+      const angle = startAngle + (i * 2 * Math.PI) / sides;
+      points.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+    }
+    return points;
+  };
+
+  const computePointsRelative = (shape: ShapeProperties) => {
+    const rel: Array<{ x: number; y: number }> | undefined = (shape as any).customProperties?.pointsRelative;
+    if (Array.isArray(rel) && rel.length >= 3) return rel;
+
+    // Fallbacks for template-based polygonal shapes
+    if (shape.shapeType === 'diamond') {
+      const w = shape.width, h = shape.height;
+      return [
+        { x: w / 2, y: 0 },
+        { x: w, y: h / 2 },
+        { x: w / 2, y: h },
+        { x: 0, y: h / 2 },
+      ];
+    }
+    if (shape.shapeType === 'trapezoid') {
+      const w = shape.width, h = shape.height;
+      const inset = Math.min(w, h) * 0.2;
+      return [
+        { x: inset, y: 0 },
+        { x: w - inset, y: 0 },
+        { x: w, y: h },
+        { x: 0, y: h },
+      ];
+    }
+    if (shape.shapeType === 'parallelogram') {
+      const w = shape.width, h = shape.height;
+      const skew = Math.min(w, h) * 0.2;
+      return [
+        { x: skew, y: 0 },
+        { x: w, y: 0 },
+        { x: w - skew, y: h },
+        { x: 0, y: h },
+      ];
+    }
+    if (shape.shapeType === 'pentagon' || shape.shapeType === 'hexagon' || shape.shapeType === 'octagon') {
+      const sides = shape.shapeType === 'pentagon' ? 5 : shape.shapeType === 'hexagon' ? 6 : 8;
+      return generateRegularPolygonPoints(sides, shape.width, shape.height);
+    }
+    if (shape.shapeType === 'L-shape') {
+      const w = shape.width, h = shape.height;
+      const arm = Math.min(w, h) * 0.45; // thickness of the L arms
+      return [
+        { x: 0, y: 0 },
+        { x: w, y: 0 },
+        { x: w, y: arm },
+        { x: arm, y: arm },
+        { x: arm, y: h },
+        { x: 0, y: h },
+      ];
+    }
+    if (shape.shapeType === 'C-shape') {
+      const w = shape.width, h = shape.height;
+      const t = Math.min(w, h) * 0.25; // thickness of the C
+      return [
+        { x: 0, y: 0 },
+        { x: w, y: 0 },
+        { x: w, y: t },
+        { x: t, y: t },
+        { x: t, y: h - t },
+        { x: w, y: h - t },
+        { x: w, y: h },
+        { x: 0, y: h },
+      ];
+    }
+    if (shape.shapeType === 'triangle') {
+      const w = shape.width, h = shape.height;
+      return [
+        { x: w / 2, y: 0 },
+        { x: w, y: h },
+        { x: 0, y: h },
+      ];
+    }
+    // Default: rectangle
+    return [
+      { x: 0, y: 0 },
+      { x: shape.width, y: 0 },
+      { x: shape.width, y: shape.height },
+      { x: 0, y: shape.height },
+    ];
+  };
+  // Core state
+  const [shapes, setShapes] = useState<ShapeProperties[]>(initialLayout?.shapes || []);
+  const [connections, setConnections] = useState<Connection[]>(initialLayout?.connections || []);
+  const [doorConnections, setDoorConnections] = useState<DoorConnection[]>(initialLayout?.doorConnections || []);
+  const [canvasSettings, setCanvasSettings] = useState<CanvasSettings>(DEFAULT_CANVAS_SETTINGS);
+  const [drawingState, setDrawingState] = useState<DrawingState>({
+    activeShapeTool: null,
+    isDrawing: false,
+    selectedShapeId: null,
+    hoveredShapeId: null,
+  });
+  const [drawingMode, setDrawingMode] = useState<DrawingMode>('select');
+  const [connectionDrawing, setConnectionDrawing] = useState<ConnectionDrawingState>({
+    isDrawing: false,
+    fromShapeId: null,
+    hoveredShapeId: null,
+  });
+  const [doorConnectionDrawing, setDoorConnectionDrawing] = useState<DoorConnectionDrawingState>({
+    step: 'idle',
+    firstShapeId: null,
+    secondShapeId: null,
+    edgePoint: null,
+  });
+  const [showDoorDialog, setShowDoorDialog] = useState(false);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const [selectedDoorConnectionId, setSelectedDoorConnectionId] = useState<string | null>(null);
+
+  // Derived state: get selected connection object from ID
+  const selectedConnection = selectedConnectionId
+    ? connections.find(conn => conn.id === selectedConnectionId) || null
+    : null;
+
+  // History for undo/redo
+  const [history, setHistory] = useState<HistoryState[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const historyRef = useRef<HistoryState[]>([]);
+  const shapesRef = useRef<ShapeProperties[]>(shapes);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    shapesRef.current = shapes;
+  }, [shapes]);
+
+  // Initialize history with initial layout or empty state
+  useEffect(() => {
+    if (historyRef.current.length === 0) {
+      const initialHistoryEntry: HistoryState = {
+        shapes: JSON.parse(JSON.stringify(initialLayout?.shapes || [])),
+        timestamp: Date.now(),
+      };
+      historyRef.current = [initialHistoryEntry];
+      setHistory([initialHistoryEntry]);
+      setHistoryIndex(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // UI state
+  const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
+  const [showValidationOverlay, setShowValidationOverlay] = useState(true);
+  const [validationResult, setValidationResult] = useState<ValidationResult>({
+    isValid: true,
+    issues: [],
+    summary: { errors: 0, warnings: 0, infos: 0 },
+  });
+
+  // Generate unique ID for new shapes
+  const generateShapeId = useCallback(() => {
+    return `shape-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  }, []);
+
+  // Add to history
+  const addToHistory = useCallback((newShapes: ShapeProperties[]) => {
+    const historyEntry: HistoryState = {
+      shapes: JSON.parse(JSON.stringify(newShapes)),
+      timestamp: Date.now(),
+    };
+
+    // Remove any history after current index
+    const newHistory = historyRef.current.slice(0, historyIndex + 1);
+    newHistory.push(historyEntry);
+
+    // Limit history size to 50 entries
+    if (newHistory.length > 50) {
+      newHistory.shift();
+    }
+
+    historyRef.current = newHistory;
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  }, [historyIndex]);
+
+  // Get category color
+  const getCategoryColor = useCallback((category: NodeCategory): string => {
+    const colors: Record<NodeCategory, string> = {
+      'Production': '#3B82F6',
+      'Storage': '#10B981',
+      'Quality Control': '#F59E0B',
+      'Quality Assurance': '#EF4444',
+      'Utilities': '#6B7280',
+      'Support': '#8B5CF6',
+      'Logistics': '#14B8A6',
+      'Personnel': '#F97316',
+      'Waste Management': '#991B1B',
+    };
+    return colors[category] || '#94A3B8';
+  }, []);
+
+  // Validation
+  const runValidation = useCallback((shapesToValidate: ShapeProperties[]) => {
+    setValidationResult({
+      isValid: shapesToValidate.length > 0,
+      issues: [],
+      summary: { errors: 0, warnings: 0, infos: 0 },
+    });
+  }, []);
+
+  // Handle shape creation from template
+  const handleShapeSelect = useCallback((template: PharmaceuticalShapeTemplate) => {
+    const newShape: ShapeProperties = {
+      id: generateShapeId(),
+      name: template.name,
+      shapeType: template.shapeType,
+      category: template.category,
+      cleanroomClass: (template.cleanroomClass as 'A' | 'B' | 'C' | 'D' | 'CNC') || 'D',
+
+      x: canvasSettings.width / 2 - template.defaultDimensions.width / 2,
+      y: canvasSettings.height / 2 - template.defaultDimensions.height / 2,
+
+      width: template.defaultDimensions.width,
+      height: template.defaultDimensions.height,
+      area: template.defaultDimensions.width * template.defaultDimensions.height,
+
+      pressureRegime: 'positive',
+      temperatureRange: { min: 18, max: 26, unit: 'C' },
+      humidityRange: { min: 30, max: 60 },
+
+      fillColor: getCategoryColor(template.category),
+      borderColor: '#333333',
+      borderWidth: 2,
+      opacity: 0.8,
+
+      isCompliant: true,
+      complianceIssues: [],
+
+      customProperties: {
+        templateId: template.id,
+        pharmaceuticalContext: template.pharmaceuticalContext,
+        typicalUse: template.typicalUse,
+      },
+    };
+
+    setShapes(prevShapes => {
+      const newShapes = [...prevShapes, newShape];
+      addToHistory(newShapes);
+      runValidation(newShapes);
+      return newShapes;
+    });
+
+    setDrawingState(prev => ({ ...prev, selectedShapeId: newShape.id }));
+    setShowPropertiesPanel(true);
+  }, [canvasSettings, generateShapeId, addToHistory, runValidation, getCategoryColor]);
+
+  // Handle free-form shape creation
+  const handleShapeComplete = useCallback((shapeData: {
+    shapeType: ShapeType;
+    points: any[];
+    dimensions: { width: number; height: number; area: number };
+  }) => {
+    // Calculate bounding box to anchor the shape correctly
+    const xs = (shapeData.points || []).map((p: any) => p.x);
+    const ys = (shapeData.points || []).map((p: any) => p.y);
+    const minX = xs.length ? Math.min(...xs) : 0;
+    const minY = ys.length ? Math.min(...ys) : 0;
+
+    const newShape: ShapeProperties = {
+      id: generateShapeId(),
+      name: `New ${shapeData.shapeType} Room`,
+      shapeType: shapeData.shapeType,
+      category: 'Production', // Default category
+      cleanroomClass: 'D',
+
+      // Use bounding box top-left as position
+      x: minX,
+      y: minY,
+
+      // FIX: Use dimensions from shapeData instead of calculating again
+      width: shapeData.dimensions.width,
+      height: shapeData.dimensions.height,
+      area: shapeData.dimensions.area,
+
+      // Default pharmaceutical properties
+      pressureRegime: 'positive',
+      temperatureRange: { min: 18, max: 26, unit: 'C' },
+      humidityRange: { min: 30, max: 60 },
+
+      // Visual properties
+      fillColor: getCategoryColor('Production'),
+      borderColor: '#333333',
+      borderWidth: 2,
+      opacity: 0.8,
+
+      // Compliance
+      isCompliant: true,
+      complianceIssues: [],
+
+      // Custom properties
+      customProperties: {
+        // Store original points and relative points for rendering polygons
+        points: shapeData.points,
+        pointsRelative: (shapeData.points || []).map((p: any) => ({ x: p.x - minX, y: p.y - minY })),
+      },
+    };
+
+    setShapes(prevShapes => {
+      const newShapes = [...prevShapes, newShape];
+      addToHistory(newShapes);
+      runValidation(newShapes);
+      return newShapes;
+    });
+
+    setDrawingState(prev => ({
+      ...prev,
+      selectedShapeId: newShape.id,
+      activeShapeTool: null,
+      isDrawing: false,
+    }));
+    setShowPropertiesPanel(true);
+  }, [generateShapeId, addToHistory, runValidation, getCategoryColor]);
+
+  
+
+  // Handle shape updates
+  const handleShapeUpdate = useCallback((id: string, updates: Partial<ShapeProperties>) => {
+    setShapes(prevShapes => {
+      const newShapes = prevShapes.map(shape =>
+        shape.id === id ? { ...shape, ...updates } : shape
+      );
+      addToHistory(newShapes);
+      runValidation(newShapes);
+      return newShapes;
+    });
+  }, [addToHistory, runValidation]);
+
+  // Handle shape deletion
+  const handleShapeDelete = useCallback((id: string) => {
+    setShapes(prevShapes => {
+      const newShapes = prevShapes.filter(shape => shape.id !== id);
+      addToHistory(newShapes);
+      runValidation(newShapes);
+      return newShapes;
+    });
+
+    if (drawingState.selectedShapeId === id) {
+      setDrawingState(prev => ({ ...prev, selectedShapeId: null }));
+      setShowPropertiesPanel(false);
+    }
+  }, [drawingState.selectedShapeId, addToHistory, runValidation]);
+
+  // Handle shape duplication
+  const handleShapeDuplicate = useCallback((id: string) => {
+    setShapes(prevShapes => {
+      const originalShape = prevShapes.find(shape => shape.id === id);
+      if (!originalShape) return prevShapes;
+
+      const duplicatedShape: ShapeProperties = {
+        ...originalShape,
+        id: generateShapeId(),
+        name: `${originalShape.name} (Copy)`,
+        x: originalShape.x + 20,
+        y: originalShape.y + 20,
+      };
+
+      const newShapes = [...prevShapes, duplicatedShape];
+      addToHistory(newShapes);
+      runValidation(newShapes);
+
+      setDrawingState(prev => ({ ...prev, selectedShapeId: duplicatedShape.id }));
+      return newShapes;
+    });
+  }, [generateShapeId, addToHistory, runValidation]);
+
+  // Handle rotation
+  const handleRotateLeft = useCallback(() => {
+    if (!drawingState.selectedShapeId) return;
+
+    const shape = shapes.find(s => s.id === drawingState.selectedShapeId);
+    if (!shape) return;
+
+    handleShapeUpdate(drawingState.selectedShapeId, {
+      rotation: ((shape.rotation || 0) - 15 + 360) % 360
+    });
+  }, [drawingState.selectedShapeId, shapes, handleShapeUpdate]);
+
+  const handleRotateRight = useCallback(() => {
+    if (!drawingState.selectedShapeId) return;
+
+    const shape = shapes.find(s => s.id === drawingState.selectedShapeId);
+    if (!shape) return;
+
+    handleShapeUpdate(drawingState.selectedShapeId, {
+      rotation: ((shape.rotation || 0) + 15) % 360
+    });
+  }, [drawingState.selectedShapeId, shapes, handleShapeUpdate]);
+
+  // Connection handlers
+  const handleShapeClickForConnection = useCallback((shapeId: string) => {
+    if (drawingMode !== 'connection') return;
+
+    const clickedShape = shapes.find(s => s.id === shapeId);
+    if (!clickedShape) return;
+
+    if (!connectionDrawing.isDrawing) {
+      // Start connection from this shape
+      setConnectionDrawing({
+        isDrawing: true,
+        fromShapeId: shapeId,
+        hoveredShapeId: null,
+      });
+    } else if (connectionDrawing.fromShapeId === shapeId) {
+      // Clicked same shape - cancel
+      setConnectionDrawing({
+        isDrawing: false,
+        fromShapeId: null,
+        hoveredShapeId: null,
+      });
+    } else {
+      // Clicked different shape - check if adjacent and create connection
+      const fromShape = shapes.find(s => s.id === connectionDrawing.fromShapeId);
+      if (!fromShape) return;
+
+      if (areShapesAdjacent(fromShape, clickedShape)) {
+        // Create connection with default values
+        // fromShapeId is guaranteed to be non-null here because we checked fromShape exists above
+        const fromId = connectionDrawing.fromShapeId!;
+        const newConnection: Connection = {
+          id: `connection-${Date.now()}`,
+          fromShapeId: fromId,
+          toShapeId: shapeId,
+          type: 'personnel', // Default to personnel
+          direction: 'bidirectional', // Default to bidirectional
+          createdAt: new Date(),
+        };
+        setConnections(prev => [...prev, newConnection]);
+      } else {
+        alert('Shapes must share a common edge to create a connection!');
+      }
+
+      // Reset connection drawing state
+      setConnectionDrawing({
+        isDrawing: false,
+        fromShapeId: null,
+        hoveredShapeId: null,
+      });
+    }
+  }, [drawingMode, connectionDrawing, shapes]);
+
+  const handleConnectionUpdate = useCallback((id: string, updates: Partial<Connection>) => {
+    setConnections(prev => prev.map(conn =>
+      conn.id === id ? { ...conn, ...updates } : conn
+    ));
+  }, []);
+
+  const handleConnectionDelete = useCallback((id: string) => {
+    setConnections(prev => prev.filter(conn => conn.id !== id));
+    setSelectedConnectionId(null);
+  }, []);
+
+  // Door connection update/delete handlers
+  const handleDoorConnectionUpdate = useCallback((id: string, flowType: DoorFlowType, flowDirection: DoorFlowDirection) => {
+    setDoorConnections(prev => prev.map(conn =>
+      conn.id === id ? { ...conn, flowType, flowDirection, updatedAt: new Date() } : conn
+    ));
+    setSelectedDoorConnectionId(null);
+  }, []);
+
+  const handleDoorConnectionDelete = useCallback((id: string) => {
+    setDoorConnections(prev => prev.filter(conn => conn.id !== id));
+    setSelectedDoorConnectionId(null);
+  }, []);
+
+  // Door connection handlers (3-step process)
+  const handleDoorConnectionClick = useCallback((event: React.MouseEvent, shapeId?: string) => {
+    if (drawingMode !== 'door') return;
+
+    const step = doorConnectionDrawing.step;
+
+    // Step 1: Select first shape
+    if (step === 'idle' && shapeId) {
+      setDoorConnectionDrawing({
+        step: 'selectSecondShape',
+        firstShapeId: shapeId,
+        secondShapeId: null,
+        edgePoint: null,
+      });
+      return;
+    }
+
+    // Step 2: Select second shape
+    if (step === 'selectSecondShape' && shapeId) {
+      if (shapeId === doorConnectionDrawing.firstShapeId) {
+        // Clicked same shape - cancel
+        setDoorConnectionDrawing({
+          step: 'idle',
+          firstShapeId: null,
+          secondShapeId: null,
+          edgePoint: null,
+        });
+        return;
+      }
+
+      setDoorConnectionDrawing(prev => ({
+        ...prev,
+        step: 'selectEdgePoint',
+        secondShapeId: shapeId,
+      }));
+      return;
+    }
+
+    // Step 3: Select edge on one of the two shapes
+    if (step === 'selectEdgePoint' && shapeId) {
+      // Only allow clicking on one of the two selected shapes
+      if (shapeId !== doorConnectionDrawing.firstShapeId && shapeId !== doorConnectionDrawing.secondShapeId) {
+        return;
+      }
+
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      const clickX = (event.clientX - rect.left) / canvasSettings.zoom;
+      const clickY = (event.clientY - rect.top) / canvasSettings.zoom;
+
+      setDoorConnectionDrawing(prev => ({
+        ...prev,
+        edgePoint: { x: clickX, y: clickY },
+      }));
+
+      // Show dialog to select flow type and direction
+      setShowDoorDialog(true);
+    }
+  }, [drawingMode, doorConnectionDrawing, canvasSettings.zoom]);
+
+  const handleDoorDialogConfirm = useCallback((flowType: DoorFlowType, flowDirection: DoorFlowDirection) => {
+    if (!doorConnectionDrawing.firstShapeId || !doorConnectionDrawing.secondShapeId || !doorConnectionDrawing.edgePoint) {
+      return;
+    }
+
+    const firstShape = shapes.find(s => s.id === doorConnectionDrawing.firstShapeId);
+    const secondShape = shapes.find(s => s.id === doorConnectionDrawing.secondShapeId);
+
+    if (!firstShape || !secondShape) {
+      setShowDoorDialog(false);
+      setDoorConnectionDrawing({ step: 'idle', firstShapeId: null, secondShapeId: null, edgePoint: null });
+      return;
+    }
+
+    // Find the shared edge between the two shapes
+    const findSharedEdge = () => {
+      const shape1Points = computePointsRelative(firstShape);
+      const shape2Points = computePointsRelative(secondShape);
+      const tolerance = 5;
+
+      // Convert relative points to absolute coordinates
+      const shape1Edges = shape1Points.map((p, i) => ({
+        p1: { x: firstShape.x + p.x, y: firstShape.y + p.y },
+        p2: {
+          x: firstShape.x + shape1Points[(i + 1) % shape1Points.length].x,
+          y: firstShape.y + shape1Points[(i + 1) % shape1Points.length].y
+        },
+        index: i
+      }));
+
+      const shape2Edges = shape2Points.map((p, i) => ({
+        p1: { x: secondShape.x + p.x, y: secondShape.y + p.y },
+        p2: {
+          x: secondShape.x + shape2Points[(i + 1) % shape2Points.length].x,
+          y: secondShape.y + shape2Points[(i + 1) % shape2Points.length].y
+        },
+        index: i
+      }));
+
+      // Find overlapping edges
+      for (const edge1 of shape1Edges) {
+        for (const edge2 of shape2Edges) {
+          // Check if edges overlap (are on same line and overlap in their ranges)
+          const isVertical1 = Math.abs(edge1.p2.x - edge1.p1.x) < tolerance;
+          const isVertical2 = Math.abs(edge2.p2.x - edge2.p1.x) < tolerance;
+          const isHorizontal1 = Math.abs(edge1.p2.y - edge1.p1.y) < tolerance;
+          const isHorizontal2 = Math.abs(edge2.p2.y - edge2.p1.y) < tolerance;
+
+          // Check for horizontal overlap
+          if (isHorizontal1 && isHorizontal2 && Math.abs(edge1.p1.y - edge2.p1.y) < tolerance) {
+            const minX1 = Math.min(edge1.p1.x, edge1.p2.x);
+            const maxX1 = Math.max(edge1.p1.x, edge1.p2.x);
+            const minX2 = Math.min(edge2.p1.x, edge2.p2.x);
+            const maxX2 = Math.max(edge2.p1.x, edge2.p2.x);
+
+            const overlapStart = Math.max(minX1, minX2);
+            const overlapEnd = Math.min(maxX1, maxX2);
+
+            if (overlapStart < overlapEnd) {
+              const midX = (overlapStart + overlapEnd) / 2;
+              const midY = (edge1.p1.y + edge2.p1.y) / 2;
+              return {
+                point1: { x: overlapStart, y: midY },
+                point2: { x: overlapEnd, y: midY },
+                midpoint: { x: midX, y: midY },
+                edge1Index: edge1.index,
+                edge2Index: edge2.index
+              };
+            }
+          }
+
+          // Check for vertical overlap
+          if (isVertical1 && isVertical2 && Math.abs(edge1.p1.x - edge2.p1.x) < tolerance) {
+            const minY1 = Math.min(edge1.p1.y, edge1.p2.y);
+            const maxY1 = Math.max(edge1.p1.y, edge1.p2.y);
+            const minY2 = Math.min(edge2.p1.y, edge2.p2.y);
+            const maxY2 = Math.max(edge2.p1.y, edge2.p2.y);
+
+            const overlapStart = Math.max(minY1, minY2);
+            const overlapEnd = Math.min(maxY1, maxY2);
+
+            if (overlapStart < overlapEnd) {
+              const midX = (edge1.p1.x + edge2.p1.x) / 2;
+              const midY = (overlapStart + overlapEnd) / 2;
+              return {
+                point1: { x: midX, y: overlapStart },
+                point2: { x: midX, y: overlapEnd },
+                midpoint: { x: midX, y: midY },
+                edge1Index: edge1.index,
+                edge2Index: edge2.index
+              };
+            }
+          }
+        }
+      }
+
+      return null;
+    };
+
+    const sharedEdge = findSharedEdge();
+
+    if (!sharedEdge) {
+      alert('Shapes must share a common edge to create a door connection!');
+      setShowDoorDialog(false);
+      setDoorConnectionDrawing({ step: 'idle', firstShapeId: null, secondShapeId: null, edgePoint: null });
+      return;
+    }
+
+    const newDoorConnection: DoorConnection = {
+      id: `door-${Date.now()}`,
+      fromShape: {
+        shapeId: doorConnectionDrawing.firstShapeId,
+        x: sharedEdge.midpoint.x,
+        y: sharedEdge.midpoint.y,
+        edgeIndex: sharedEdge.edge1Index,
+        normalizedPosition: 0.5,
+      },
+      toShape: {
+        shapeId: doorConnectionDrawing.secondShapeId,
+        x: sharedEdge.midpoint.x,
+        y: sharedEdge.midpoint.y,
+        edgeIndex: sharedEdge.edge2Index,
+        normalizedPosition: 0.5,
+      },
+      flowType,
+      flowDirection,
+      edgeStartPoint: sharedEdge.point1,
+      edgeEndPoint: sharedEdge.point2,
+      createdAt: new Date(),
+    };
+
+    setDoorConnections(prev => [...prev, newDoorConnection]);
+    setShowDoorDialog(false);
+    setDoorConnectionDrawing({ step: 'idle', firstShapeId: null, secondShapeId: null, edgePoint: null });
+  }, [doorConnectionDrawing, shapes]);
+
+  const handleDoorDialogCancel = useCallback(() => {
+    setShowDoorDialog(false);
+    setDoorConnectionDrawing({ step: 'idle', firstShapeId: null, secondShapeId: null, edgePoint: null });
+  }, []);
+
+  // History operations
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      const previousState = historyRef.current[historyIndex - 1];
+      setShapes(previousState.shapes);
+      setHistoryIndex(historyIndex - 1);
+      runValidation(previousState.shapes);
+    }
+  }, [historyIndex, runValidation]);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndex < historyRef.current.length - 1) {
+      const nextState = historyRef.current[historyIndex + 1];
+      setShapes(nextState.shapes);
+      setHistoryIndex(historyIndex + 1);
+      runValidation(nextState.shapes);
+    }
+  }, [historyIndex, runValidation]);
+
+  const handleClear = useCallback(() => {
+    setShapes([]);
+    addToHistory([]);
+    setDrawingState({
+      activeShapeTool: null,
+      isDrawing: false,
+      selectedShapeId: null,
+      hoveredShapeId: null,
+    });
+    setShowPropertiesPanel(false);
+    runValidation([]);
+  }, [addToHistory, runValidation]);
+
+  // Canvas settings
+  const handleCanvasSizeChange = useCallback((width: number, height: number) => {
+    setCanvasSettings(prev => ({ ...prev, width, height }));
+  }, []);
+
+  const handleZoomChange = useCallback((zoom: number) => {
+    setCanvasSettings(prev => ({ ...prev, zoom }));
+  }, []);
+
+  const handleToggleGrid = useCallback(() => {
+    setCanvasSettings(prev => ({ ...prev, showGrid: !prev.showGrid }));
+  }, []);
+
+  const handleToggleSnap = useCallback(() => {
+    setCanvasSettings(prev => ({ ...prev, snapToGrid: !prev.snapToGrid }));
+  }, []);
+
+  const handleGridSizeChange = useCallback((size: number) => {
+    setCanvasSettings(prev => ({ ...prev, gridSize: size }));
+  }, []);
+
+  // Get selected shape
+  const selectedShape = drawingState.selectedShapeId
+    ? shapes.find(shape => shape.id === drawingState.selectedShapeId)
+    : null;
+
+  // Drag state for moving shapes
+  const draggingRef = useRef<{
+    id: string;
+    startClientX: number;
+    startClientY: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+
+  // Middle-mouse panning state
+  const panningRef = useRef<{
+    startClientX: number;
+    startClientY: number;
+    startScrollLeft: number;
+    startScrollTop: number;
+    active: boolean;
+  }>({ startClientX: 0, startClientY: 0, startScrollLeft: 0, startScrollTop: 0, active: false });
+
+  // Resize state
+  const resizingRef = useRef<{
+    id: string;
+    handle: 'tl' | 'tr' | 'bl' | 'br' | 't' | 'r' | 'b' | 'l';
+    startClientX: number;
+    startClientY: number;
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
+
+  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+  const startShapeDrag = useCallback((e: React.MouseEvent, shape: ShapeProperties) => {
+    if (e.button !== 0) return; // only left-click drags shape
+    // Prevent starting drag while drawing a shape
+    if (drawingState.isDrawing) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    setDrawingState(prev => ({ ...prev, selectedShapeId: shape.id }));
+
+    draggingRef.current = {
+      id: shape.id,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startX: shape.x,
+      startY: shape.y,
+    };
+
+    const handleMouseMove = (me: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const { id, startClientX, startClientY, startX, startY } = draggingRef.current;
+
+      const dx = (me.clientX - startClientX) / (canvasSettings.zoom || 1);
+      const dy = (me.clientY - startClientY) / (canvasSettings.zoom || 1);
+
+      let newX = startX + dx;
+      let newY = startY + dy;
+
+      // Snap to grid if enabled
+      if (canvasSettings.snapToGrid) {
+        const g = canvasSettings.gridSize || 20;
+        newX = Math.round(newX / g) * g;
+        newY = Math.round(newY / g) * g;
+      }
+
+      // Clamp within canvas
+      newX = clamp(newX, 0, Math.max(0, canvasSettings.width - shape.width));
+      newY = clamp(newY, 0, Math.max(0, canvasSettings.height - shape.height));
+
+      // Update position without pushing history on every frame
+      setShapes(prev => prev.map(s => (s.id === id ? { ...s, x: newX, y: newY } : s)));
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+
+      // Push final position to history and re-run validation
+      addToHistory(shapesRef.current);
+      runValidation(shapesRef.current);
+
+      draggingRef.current = null;
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [drawingState.isDrawing, canvasSettings, addToHistory, runValidation]);
+
+  // Middle mouse panning handlers on the scroll container
+  const handleContainerMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 1) return; // middle button only
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    panningRef.current = {
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startScrollLeft: el.scrollLeft,
+      startScrollTop: el.scrollTop,
+      active: true,
+    };
+    (e.currentTarget as HTMLElement).style.cursor = 'grabbing';
+    e.preventDefault();
+  }, []);
+
+  const handleContainerMouseMove = useCallback((e: React.MouseEvent) => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    if (!panningRef.current.active) return;
+    const dx = e.clientX - panningRef.current.startClientX;
+    const dy = e.clientY - panningRef.current.startClientY;
+    el.scrollLeft = panningRef.current.startScrollLeft - dx;
+    el.scrollTop = panningRef.current.startScrollTop - dy;
+  }, []);
+
+  const handleContainerMouseUp = useCallback(() => {
+    if (panningRef.current.active) {
+      const el = scrollContainerRef.current;
+      if (el) el.style.cursor = 'default';
+      panningRef.current.active = false;
+    }
+  }, []);
+
+  const clampZoom = (z: number) => Math.min(4, Math.max(0.25, z));
+
+  const handleWheelZoom = useCallback((e: React.WheelEvent) => {
+    // Zoom with wheel (middle wheel). Prevent default scrolling.
+    e.preventDefault();
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const oldZoom = canvasSettings.zoom;
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+    const newZoom = clampZoom(oldZoom * zoomFactor);
+    if (newZoom === oldZoom) return;
+
+    // Mouse position relative to container content
+    const rect = container.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const scrollLeft = container.scrollLeft;
+    const scrollTop = container.scrollTop;
+
+    const offsetX = mouseX + scrollLeft;
+    const offsetY = mouseY + scrollTop;
+    const scale = newZoom / oldZoom;
+
+    setCanvasSettings(prev => ({ ...prev, zoom: newZoom }));
+
+    // Adjust scroll to keep mouse focus stable
+    const newScrollLeft = offsetX * scale - mouseX;
+    const newScrollTop = offsetY * scale - mouseY;
+    // Slight delay to allow layout apply transform
+    requestAnimationFrame(() => {
+      container.scrollLeft = newScrollLeft;
+      container.scrollTop = newScrollTop;
+    });
+  }, [canvasSettings.zoom]);
+
+  // Double-click background to deselect
+  const handleBackgroundDoubleClick = useCallback((e: React.MouseEvent) => {
+    // Ignore when drawing
+    if (drawingState.isDrawing || drawingState.activeShapeTool) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-shape-overlay="true"]')) return; // clicked a shape
+    setDrawingState(prev => ({ ...prev, selectedShapeId: null }));
+    setShowPropertiesPanel(false);
+  }, [drawingState.isDrawing, drawingState.activeShapeTool]);
+
+  const handleCanvasClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+
+    // Only handle canvas background clicks (not shape clicks) in door mode
+    if (drawingMode === 'door' && !target.closest('[data-shape-overlay="true"]')) {
+      handleDoorConnectionClick(e);
+    }
+  }, [drawingMode, handleDoorConnectionClick]);
+
+  const startShapeResize = useCallback((e: React.MouseEvent, shape: ShapeProperties, handle: 'tl' | 'tr' | 'bl' | 'br' | 't' | 'r' | 'b' | 'l') => {
+    if (drawingState.isDrawing) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    setDrawingState(prev => ({ ...prev, selectedShapeId: shape.id }));
+
+    resizingRef.current = {
+      id: shape.id,
+      handle,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startX: shape.x,
+      startY: shape.y,
+      startW: shape.width,
+      startH: shape.height,
+    };
+
+    const minSize = 20;
+
+    const handleMouseMove = (me: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const { id, handle, startClientX, startClientY, startX, startY, startW, startH } = resizingRef.current;
+
+      const dx = (me.clientX - startClientX) / (canvasSettings.zoom || 1);
+      const dy = (me.clientY - startClientY) / (canvasSettings.zoom || 1);
+
+      let newX = startX;
+      let newY = startY;
+      let newW = startW;
+      let newH = startH;
+
+      switch (handle) {
+        case 'tl':
+          newX = startX + dx;
+          newY = startY + dy;
+          newW = startW - dx;
+          newH = startH - dy;
+          break;
+        case 'tr':
+          newY = startY + dy;
+          newW = startW + dx;
+          newH = startH - dy;
+          break;
+        case 'bl':
+          newX = startX + dx;
+          newW = startW - dx;
+          newH = startH + dy;
+          break;
+        case 'br':
+          newW = startW + dx;
+          newH = startH + dy;
+          break;
+        case 't':
+          newY = startY + dy;
+          newH = startH - dy;
+          break;
+        case 'b':
+          newH = startH + dy;
+          break;
+        case 'l':
+          newX = startX + dx;
+          newW = startW - dx;
+          break;
+        case 'r':
+          newW = startW + dx;
+          break;
+      }
+
+      // Enforce min size before snapping
+      newW = Math.max(minSize, newW);
+      newH = Math.max(minSize, newH);
+
+      // Clamp within canvas bounds
+      newX = clamp(newX, 0, canvasSettings.width - newW);
+      newY = clamp(newY, 0, canvasSettings.height - newH);
+
+      // Snap to grid
+      if (canvasSettings.snapToGrid) {
+        const g = canvasSettings.gridSize || 20;
+        const snappedX = Math.round(newX / g) * g;
+        const snappedY = Math.round(newY / g) * g;
+        const snappedW = Math.max(minSize, Math.round(newW / g) * g);
+        const snappedH = Math.max(minSize, Math.round(newH / g) * g);
+
+        newX = clamp(snappedX, 0, canvasSettings.width - snappedW);
+        newY = clamp(snappedY, 0, canvasSettings.height - snappedH);
+        newW = Math.min(snappedW, canvasSettings.width - newX);
+        newH = Math.min(snappedH, canvasSettings.height - newY);
+      }
+
+      setShapes(prev => prev.map(s => (s.id === id ? { ...s, x: newX, y: newY, width: newW, height: newH, area: Math.round(newW * newH) } : s)));
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      addToHistory(shapesRef.current);
+      runValidation(shapesRef.current);
+      resizingRef.current = null;
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [drawingState.isDrawing, canvasSettings, addToHistory, runValidation]);
+
+  // Keyboard nudging and deletion for selected shape
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const selectedId = drawingState.selectedShapeId;
+      if (!selectedId) return;
+
+      // Handle Delete and Backspace keys
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        handleShapeDelete(selectedId);
+        return;
+      }
+
+      let dx = 0;
+      let dy = 0;
+      const baseStep = canvasSettings.snapToGrid ? canvasSettings.gridSize : 5;
+      const step = e.shiftKey ? baseStep * 2 : baseStep;
+
+      if (e.key === 'ArrowLeft') dx = -step;
+      else if (e.key === 'ArrowRight') dx = step;
+      else if (e.key === 'ArrowUp') dy = -step;
+      else if (e.key === 'ArrowDown') dy = step;
+      else return;
+
+      e.preventDefault();
+
+      setShapes(prev => {
+        const newShapes = prev.map(s => {
+          if (s.id !== selectedId) return s;
+          const nx = clamp(s.x + dx, 0, Math.max(0, canvasSettings.width - s.width));
+          const ny = clamp(s.y + dy, 0, Math.max(0, canvasSettings.height - s.height));
+          return { ...s, x: nx, y: ny };
+        });
+        addToHistory(newShapes);
+        runValidation(newShapes);
+        return newShapes;
+      });
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [drawingState.selectedShapeId, canvasSettings, addToHistory, runValidation, handleShapeDelete]);
+
+  return (
+    <Box sx={{ height: '100vh', display: 'flex', position: 'relative' }}>
+      {/* Shape Library Sidebar */}
+      <Paper
+        elevation={2}
+        sx={{
+          width: 320,
+          display: 'flex',
+          flexDirection: 'column',
+          borderRadius: 0,
+          zIndex: 100,
+        }}
+      >
+        <ShapeLibrary
+          onShapeSelect={handleShapeSelect}
+          onShapeToolSelect={(tool) =>
+            setDrawingState(prev => ({
+              ...prev,
+              activeShapeTool: prev.activeShapeTool === tool ? null : tool,
+            }))
+          }
+          selectedShapeType={drawingState.activeShapeTool}
+        />
+      </Paper>
+
+      {/* Main Canvas Area */}
+      <Box sx={{ flexGrow: 1, position: 'relative', overflow: 'hidden' }}>
+        {/* Canvas Container */}
+        <Box
+          ref={scrollContainerRef}
+          sx={{
+            width: '100%',
+            height: '100%',
+            overflow: 'auto',
+            backgroundColor: '#e5e5e5',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 2,
+          }}
+          onMouseDown={handleContainerMouseDown}
+          onMouseMove={handleContainerMouseMove}
+          onMouseUp={handleContainerMouseUp}
+          onMouseLeave={handleContainerMouseUp}
+          onWheel={handleWheelZoom}
+          onClick={handleCanvasClick}
+          onDoubleClick={handleBackgroundDoubleClick}
+        >
+          <Box
+            ref={contentRef}
+            sx={{
+              transform: `scale(${canvasSettings.zoom})`,
+              transformOrigin: 'center',
+              boxShadow: 3,
+              borderRadius: 1,
+              overflow: 'hidden',
+            }}
+          >
+            <DrawingCanvas
+              width={canvasSettings.width}
+              height={canvasSettings.height}
+              onShapeComplete={handleShapeComplete}
+              gridSize={canvasSettings.gridSize}
+              showGrid={canvasSettings.showGrid}
+              snapToGrid={canvasSettings.snapToGrid}
+              activeShapeTool={drawingState.activeShapeTool}
+              isDrawing={drawingState.isDrawing}
+              onDrawingStateChange={React.useCallback((drawing: boolean) => {
+                setDrawingState(prev => ({ ...prev, isDrawing: drawing }));
+              }, [])}
+              backgroundColor={canvasSettings.backgroundColor}
+            />
+
+            {/* Connection Layer (SVG) */}
+            <svg
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: canvasSettings.width,
+                height: canvasSettings.height,
+                pointerEvents: 'none',
+                zIndex: 1,
+              }}
+            >
+              <g style={{ pointerEvents: 'all' }}>
+                <ConnectionRenderer
+                  connections={connections}
+                  shapes={shapes}
+                  selectedConnectionId={selectedConnectionId}
+                  onConnectionClick={(id) => {
+                    setSelectedConnectionId(id);
+                    setDrawingState(prev => ({ ...prev, selectedShapeId: null }));
+                    setShowPropertiesPanel(true);
+                  }}
+                />
+              </g>
+            </svg>
+
+            {/* Door Connection Layer */}
+            <DoorConnectionRenderer
+              connections={doorConnections}
+              onConnectionClick={(id) => setSelectedDoorConnectionId(id)}
+            />
+
+            {/* Shape Overlays */}
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: canvasSettings.width,
+                height: canvasSettings.height,
+                pointerEvents: 'none',
+                zIndex: 2,
+              }}
+            >
+              {shapes.map((shape) => (
+                <Box
+                  key={shape.id}
+                  data-shape-overlay="true"
+                  sx={{
+                    position: 'absolute',
+                    left: shape.x,
+                    top: shape.y,
+                    width: shape.width,
+                    height: shape.height,
+                    backgroundColor:
+                      polygonRenderTypes.has(shape.shapeType)
+                        ? 'transparent'
+                        : shape.fillColor + '40',
+                    border: polygonRenderTypes.has(shape.shapeType)
+                      ? 'none'
+                      : `${shape.borderWidth}px solid ${shape.borderColor}`,
+                    borderRadius: shape.shapeType === 'circle' ? '50%' : 1,
+                    opacity: shape.opacity,
+                    cursor: 'grab',
+                    pointerEvents: 'all',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s',
+                    transform: `rotate(${shape.rotation || 0}deg)`,
+                    transformOrigin: 'center center',
+                    ...(polygonRenderTypes.has(shape.shapeType)
+                      ? {
+                          '&:hover': {
+                            backgroundColor: 'transparent',
+                          },
+                        }
+                      : {
+                          '&:hover': {
+                            backgroundColor: shape.fillColor + '60',
+                            transform: `rotate(${shape.rotation || 0}deg) scale(1.02)`,
+                          },
+                          ...(drawingState.selectedShapeId === shape.id && {
+                            boxShadow: `0 0 0 3px ${shape.fillColor}`,
+                          }),
+                        }),
+                  }}
+                  onClick={(e) => {
+                    if (drawingMode === 'connection') {
+                      handleShapeClickForConnection(shape.id);
+                    } else if (drawingMode === 'door') {
+                      handleDoorConnectionClick(e, shape.id);
+                    } else {
+                      setDrawingState(prev => ({
+                        ...prev,
+                        selectedShapeId: shape.id,
+                      }));
+                      setShowPropertiesPanel(true);
+                    }
+                  }}
+                  onMouseDown={(e) => {
+                    if (drawingMode !== 'connection') {
+                      startShapeDrag(e, shape);
+                    }
+                  }}
+                >
+                  {/* SVG for polygonal shapes */}
+                  {polygonRenderTypes.has(shape.shapeType) && (
+                    <svg
+                      width={shape.width}
+                      height={shape.height}
+                      style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+                      data-testid={`polygon-path-${shape.id}`}
+                    >
+                      <g transform={`rotate(${shape.rotation || 0} ${shape.width / 2} ${shape.height / 2})`}>
+                        {drawingState.selectedShapeId === shape.id && (
+                          <path
+                            d={`M ${computePointsRelative(shape).map((p, i) => `${i === 0 ? '' : 'L '}${p.x} ${p.y}`).join(' ')} Z`}
+                            fill="none"
+                            stroke={shape.fillColor}
+                            strokeOpacity={0.5}
+                            strokeWidth={4}
+                          />
+                        )}
+                        <path
+                          d={`M ${computePointsRelative(shape).map((p, i) => `${i === 0 ? '' : 'L '}${p.x} ${p.y}`).join(' ')} Z`}
+                          fill={shape.fillColor + '40'}
+                          stroke={shape.borderColor}
+                          strokeWidth={shape.borderWidth}
+                        />
+                      </g>
+                    </svg>
+                  )}
+                  <Typography
+                    variant="caption"
+                    fontWeight="bold"
+                    color="text.primary"
+                    textAlign="center"
+                    sx={{ wordBreak: 'break-word', px: 1 }}
+                  >
+                    {shape.name}
+                  </Typography>
+
+                  {/* Resize handles - show only for selected shape */}
+                  {drawingState.selectedShapeId === shape.id && (
+                    <>
+                      {/* Corner handles */}
+                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'tl')} sx={{ position: 'absolute', left: -6, top: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'nw-resize' }} />
+                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'tr')} sx={{ position: 'absolute', right: -6, top: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'ne-resize' }} />
+                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'bl')} sx={{ position: 'absolute', left: -6, bottom: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'sw-resize' }} />
+                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'br')} sx={{ position: 'absolute', right: -6, bottom: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'se-resize' }} />
+
+                      {/* Edge handles */}
+                      <Box onMouseDown={(e) => startShapeResize(e, shape, 't')} sx={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 'n-resize' }} />
+                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'b')} sx={{ position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 's-resize' }} />
+                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'l')} sx={{ position: 'absolute', left: -6, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 'w-resize' }} />
+                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'r')} sx={{ position: 'absolute', right: -6, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 'e-resize' }} />
+                    </>
+                  )}
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Drawing Tools */}
+      <DrawingTools
+        drawingMode={drawingMode}
+        onDrawingModeChange={setDrawingMode}
+        activeShapeTool={drawingState.activeShapeTool}
+        onShapeToolChange={(tool) => {
+          setDrawingState(prev => ({ ...prev, activeShapeTool: tool }));
+          if (tool) setDrawingMode('shape');
+        }}
+        showGrid={canvasSettings.showGrid}
+        onToggleGrid={handleToggleGrid}
+        snapToGrid={canvasSettings.snapToGrid}
+        onToggleSnap={handleToggleSnap}
+        gridSize={canvasSettings.gridSize}
+        onGridSizeChange={handleGridSizeChange}
+        canvasWidth={canvasSettings.width}
+        canvasHeight={canvasSettings.height}
+        onCanvasSizeChange={handleCanvasSizeChange}
+        zoom={canvasSettings.zoom}
+        onZoomChange={handleZoomChange}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onClear={handleClear}
+        onRotateLeft={handleRotateLeft}
+        onRotateRight={handleRotateRight}
+        canUndo={historyIndex > 0}
+        canRedo={historyIndex < history.length - 1}
+        isDrawing={drawingState.isDrawing}
+        hasSelectedShape={!!drawingState.selectedShapeId}
+        position="bottom"
+      />
+
+      {/* Properties Panel */}
+      {showPropertiesPanel && (selectedShape || selectedConnection) && (
+        <PropertiesPanel
+          selectedShape={selectedShape || null}
+          selectedConnection={selectedConnection}
+          onShapeUpdate={handleShapeUpdate}
+          onConnectionUpdate={handleConnectionUpdate}
+          onShapeDelete={handleShapeDelete}
+          onConnectionDelete={handleConnectionDelete}
+          onShapeDuplicate={handleShapeDuplicate}
+          onClose={() => {
+            setShowPropertiesPanel(false);
+            setDrawingState(prev => ({ ...prev, selectedShapeId: null }));
+            setSelectedConnectionId(null);
+          }}
+          isVisible={showPropertiesPanel}
+        />
+      )}
+
+      {/* Door Connection Dialog */}
+      <DoorConnectionDialog
+        open={showDoorDialog}
+        onClose={handleDoorDialogCancel}
+        onConfirm={handleDoorDialogConfirm}
+        fromShapeId={doorConnectionDrawing.firstShapeId || undefined}
+        toShapeId={doorConnectionDrawing.secondShapeId || undefined}
+      />
+
+      {/* Door Connection Edit Dialog */}
+      <DoorConnectionEditDialog
+        open={!!selectedDoorConnectionId}
+        connection={doorConnections.find(c => c.id === selectedDoorConnectionId) || null}
+        onClose={() => setSelectedDoorConnectionId(null)}
+        onUpdate={handleDoorConnectionUpdate}
+        onDelete={handleDoorConnectionDelete}
+      />
+    </Box>
+  );
+};
+
+export default LayoutDesigner;

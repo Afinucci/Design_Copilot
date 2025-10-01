@@ -12,7 +12,9 @@
     "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@playwright/test": "^1.55.1",
+    "concurrently": "^8.2.2",
+    "playwright": "^1.55.1"
   },
   "workspaces": [
     "backend",
@@ -21,5 +23,21 @@
   "dependencies": {
     "node-fetch": "^3.3.2",
     "puppeteer": "^24.15.0"
-  }
+  },
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Afinucci/Design_Copilot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Afinucci/Design_Copilot/issues"
+  },
+  "homepage": "https://github.com/Afinucci/Design_Copilot#readme"
 }
