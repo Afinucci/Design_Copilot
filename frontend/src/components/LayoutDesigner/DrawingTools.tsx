@@ -30,6 +30,8 @@ import {
   RotateLeft as RotateLeftIcon,
   RotateRight as RotateRightIcon,
   MeetingRoom as DoorIcon,
+  Menu as MenuIcon,
+  MenuOpen as MenuOpenIcon,
 } from '@mui/icons-material';
 import { ShapeType } from '../../types';
 import { DrawingMode } from './types';
@@ -67,6 +69,10 @@ export interface DrawingToolsProps {
   onRotateLeft?: () => void;
   onRotateRight?: () => void;
 
+  // Sidebar toggle
+  onToggleSidebar?: () => void;
+  isSidebarVisible?: boolean;
+
   // State
   canUndo: boolean;
   canRedo: boolean;
@@ -99,6 +105,8 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
   onClear,
   onRotateLeft,
   onRotateRight,
+  onToggleSidebar,
+  isSidebarVisible = true,
   canUndo,
   canRedo,
   isDrawing,
@@ -180,6 +188,23 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
   return (
     <>
       <Paper sx={getToolbarSx()} data-testid="drawing-toolbar">
+        {/* Sidebar Toggle */}
+        {onToggleSidebar && (
+          <>
+            <Tooltip title={isSidebarVisible ? 'Hide Shape Library' : 'Show Shape Library'} arrow>
+              <IconButton
+                size="medium"
+                onClick={onToggleSidebar}
+                color={isSidebarVisible ? 'primary' : 'default'}
+              >
+                {isSidebarVisible ? <MenuOpenIcon /> : <MenuIcon />}
+              </IconButton>
+            </Tooltip>
+
+            <Divider orientation={orientation === 'vertical' ? 'horizontal' : 'vertical'} flexItem />
+          </>
+        )}
+
         {/* Connection Mode Button */}
         <Box display="flex" gap={0.5} flexDirection={orientation === 'vertical' ? 'column' : 'row'}>
           <Tooltip title="Connection Mode - Create connections between adjacent shapes" arrow>

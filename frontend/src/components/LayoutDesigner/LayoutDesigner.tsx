@@ -248,9 +248,43 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Update canvas size to match viewport dimensions
+  useEffect(() => {
+    const updateCanvasSize = () => {
+      if (scrollContainerRef.current) {
+        const rect = scrollContainerRef.current.getBoundingClientRect();
+        const newWidth = Math.max(Math.floor(rect.width), 2000);
+        const newHeight = Math.max(Math.floor(rect.height), 1500);
+
+        setCanvasSettings(prev => {
+          // Only update if dimensions changed significantly (avoid infinite loops)
+          if (Math.abs(prev.width - newWidth) > 10 || Math.abs(prev.height - newHeight) > 10) {
+            return {
+              ...prev,
+              width: newWidth,
+              height: newHeight,
+            };
+          }
+          return prev;
+        });
+      }
+    };
+
+    // Delay initial size calculation to ensure container is mounted
+    const timeoutId = setTimeout(updateCanvasSize, 100);
+
+    // Update on window resize
+    window.addEventListener('resize', updateCanvasSize);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', updateCanvasSize);
+    };
+  }, []);
+
   // UI state
   const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
   const [showValidationOverlay, setShowValidationOverlay] = useState(true);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [validationResult, setValidationResult] = useState<ValidationResult>({
     isValid: true,
     issues: [],
@@ -1159,32 +1193,9 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   }, [drawingState.selectedShapeId, canvasSettings, addToHistory, runValidation, handleShapeDelete]);
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', position: 'relative' }}>
-      {/* Shape Library Sidebar */}
-      <Paper
-        elevation={2}
-        sx={{
-          width: 320,
-          display: 'flex',
-          flexDirection: 'column',
-          borderRadius: 0,
-          zIndex: 100,
-        }}
-      >
-        <ShapeLibrary
-          onShapeSelect={handleShapeSelect}
-          onShapeToolSelect={(tool) =>
-            setDrawingState(prev => ({
-              ...prev,
-              activeShapeTool: prev.activeShapeTool === tool ? null : tool,
-            }))
-          }
-          selectedShapeType={drawingState.activeShapeTool}
-        />
-      </Paper>
-
-      {/* Main Canvas Area */}
-      <Box sx={{ flexGrow: 1, position: 'relative', overflow: 'hidden' }}>
+    <Box sx={{ height: '100vh', position: 'relative' }}>
+      {/* Main Canvas Area - Full viewport */}
+      <Box sx={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
         {/* Canvas Container */}
         <Box
           ref={scrollContainerRef}
@@ -1193,10 +1204,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
             height: '100%',
             overflow: 'auto',
             backgroundColor: '#e5e5e5',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 2,
+            position: 'relative',
           }}
           onMouseDown={handleContainerMouseDown}
           onMouseMove={handleContainerMouseMove}
@@ -1210,10 +1218,9 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
             ref={contentRef}
             sx={{
               transform: `scale(${canvasSettings.zoom})`,
-              transformOrigin: 'center',
-              boxShadow: 3,
-              borderRadius: 1,
-              overflow: 'hidden',
+              transformOrigin: 'top left',
+              minWidth: '100%',
+              minHeight: '100%',
             }}
           >
             <DrawingCanvas
@@ -1397,6 +1404,35 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         </Box>
       </Box>
 
+      {/* Shape Library Sidebar - Floating overlay */}
+      {isSidebarVisible && (
+        <Paper
+          elevation={2}
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: 320,
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            borderRadius: 0,
+            zIndex: 100,
+          }}
+        >
+          <ShapeLibrary
+            onShapeSelect={handleShapeSelect}
+            onShapeToolSelect={(tool) =>
+              setDrawingState(prev => ({
+                ...prev,
+                activeShapeTool: prev.activeShapeTool === tool ? null : tool,
+              }))
+            }
+            selectedShapeType={drawingState.activeShapeTool}
+          />
+        </Paper>
+      )}
+
       {/* Drawing Tools */}
       <DrawingTools
         drawingMode={drawingMode}
@@ -1422,6 +1458,8 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         onClear={handleClear}
         onRotateLeft={handleRotateLeft}
         onRotateRight={handleRotateRight}
+        onToggleSidebar={() => setIsSidebarVisible(!isSidebarVisible)}
+        isSidebarVisible={isSidebarVisible}
         canUndo={historyIndex > 0}
         canRedo={historyIndex < history.length - 1}
         isDrawing={drawingState.isDrawing}
