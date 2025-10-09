@@ -1,177 +1,142 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Box } from '@mui/material';
-import { Node, Edge } from 'reactflow';
-import { ReactFlowProvider } from 'reactflow';
-import NodePalette from '../NodePalette';
-import SnapCanvas from '../SnapCanvas';
-import PropertyPanel from '../PropertyPanel';
-import ValidationPanel from '../ValidationPanel';
-import KnowledgeGraphPanel from '../KnowledgeGraphPanel';
-import { NodeTemplate, SpatialRelationship, AppMode, NodeData } from '../../types';
-import { apiService } from '../../services/api';
+import ReactFlow, {
+  Node,
+  Edge,
+  Controls,
+  Background,
+  BackgroundVariant,
+  ReactFlowProvider,
+  useReactFlow,
+  NodeChange,
+  EdgeChange,
+  applyNodeChanges,
+  applyEdgeChanges,
+} from 'reactflow';
 import 'reactflow/dist/style.css';
+import NodePalette from '../NodePalette';
+import { NodeTemplate, AppMode } from '../../types';
+import { apiService } from '../../services/api';
 
 interface CreationModeProps {
   mode: AppMode;
-  onSave?: (data: { nodes: Node[]; edges: Edge[] }) => void;
-  onLoad?: () => void;
+  onSave: (data: any) => void;
+  onLoad: () => void;
 }
 
-const CreationMode: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }) => {
+const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }) => {
+  const reactFlowInstance = useReactFlow();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [templates, setTemplates] = useState<NodeTemplate[]>([]);
-  const [selectedNode] = useState<Node | null>(null);
 
   // Load templates on mount
-  useEffect(() => {
+  React.useEffect(() => {
     apiService.getNodeTemplates()
       .then(setTemplates)
-      .catch(err => console.error('Failed to load templates:', err));
+      .catch(err => {
+        console.error('Failed to load templates:', err);
+        setTemplates([]);
+      });
   }, []);
 
-  const handleNodesChange = useCallback((changes: Node[]) => {
-    setNodes(changes);
-  }, []);
+  // Handle node changes
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      setNodes((nds) => applyNodeChanges(changes, nds));
+    },
+    []
+  );
 
-  const handleEdgesChange = useCallback((changes: Edge[]) => {
-    setEdges(changes);
-  }, []);
+  // Handle edge changes
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      setEdges((eds) => applyEdgeChanges(changes, eds));
+    },
+    []
+  );
 
-  const handleSnapConnection = useCallback((
-    sourceId: string,
-    targetId: string,
-    relationships: Partial<SpatialRelationship>[]
-  ) => {
-    const newEdge: Edge = {
-      id: `${sourceId}-${targetId}`,
-      source: sourceId,
-      target: targetId,
-      type: 'multiRelationship',
-      data: {
-        relationships: relationships.map(rel => ({
-          ...rel,
-          reason: rel.reason || 'User-defined connection',
-          priority: rel.priority || 1,
-        })),
-      },
-    };
-    setEdges(prev => [...prev, newEdge]);
-  }, []);
-
-  const handleDragOver = useCallback((event: React.DragEvent) => {
+  // Allow drop
+  const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const handleDrop = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
+  // Handle drop - create new node
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
 
-    const templateData = event.dataTransfer.getData('application/reactflow');
-    if (!templateData) return;
+      const templateData = event.dataTransfer.getData('application/reactflow');
+      if (!templateData) {
+        console.warn('No template data in drop event');
+        return;
+      }
 
-    const template: NodeTemplate = JSON.parse(templateData);
-    const reactFlowBounds = (event.target as HTMLElement).getBoundingClientRect();
+      const template: NodeTemplate = JSON.parse(templateData);
 
-    const position = {
-      x: event.clientX - reactFlowBounds.left,
-      y: event.clientY - reactFlowBounds.top,
-    };
+      // Get position from ReactFlow
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
 
-    const newNode: Node = {
-      id: `${template.id}-${Date.now()}`,
-      type: 'functionalArea',
-      position,
-      data: {
-        label: template.name,
-        name: template.name,
-        category: template.category,
-        cleanroomClass: template.cleanroomClass,
-        color: template.color,
-        width: template.defaultSize?.width,
-        height: template.defaultSize?.height,
-      } as NodeData,
-    };
+      console.log('✅ Creating node:', {
+        template: template.name,
+        position,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
 
-    setNodes(prev => [...prev, newNode]);
-  }, []);
+      // Create new node
+      const newNode: Node = {
+        id: `${template.id}-${Date.now()}`,
+        type: 'default',
+        position,
+        data: {
+          label: template.name,
+          ...template,
+        },
+      };
 
-  const handleCreateCustomNode = useCallback((nodeTemplate: Omit<NodeTemplate, 'id'>) => {
-    // Generate a unique ID for the custom node template
-    const customId = `custom-${nodeTemplate.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
-    
-    const newTemplate: NodeTemplate = {
-      ...nodeTemplate,
-      id: customId,
-    };
-
-    // Add the new template to the templates list
-    setTemplates(prev => [...prev, newTemplate]);
-    
-    console.log('Custom node template created:', newTemplate);
-  }, []);
+      setNodes((nds) => [...nds, newNode]);
+    },
+    [reactFlowInstance]
+  );
 
   return (
-    <ReactFlowProvider>
-      <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
-        {/* Left Panel - Node Palette */}
-        <NodePalette
-          templates={templates}
-          mode={mode}
-          isVisible={true}
-          onCreateCustomNode={handleCreateCustomNode}
-        />
+    <Box sx={{ display: 'flex', height: '100%', width: '100%' }}>
+      {/* Node Palette */}
+      <NodePalette
+        templates={templates}
+        mode={mode}
+        isVisible={true}
+      />
 
-        {/* Center - Canvas */}
-        <Box
-          sx={{ flexGrow: 1, position: 'relative' }}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
+      {/* ReactFlow Canvas */}
+      <Box sx={{ flexGrow: 1, position: 'relative' }}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          fitView
         >
-          <SnapCanvas
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={handleNodesChange}
-            onEdgesChange={handleEdgesChange}
-            onSnapConnection={handleSnapConnection}
-            showSnapGuides={true}
-          />
-        </Box>
-
-        {/* Right Panel - Properties & Validation */}
-        <Box sx={{ width: 320, display: 'flex', flexDirection: 'column', gap: 2, p: 2, bgcolor: 'background.paper' }}>
-          {selectedNode && (
-            <PropertyPanel
-              selectedNode={selectedNode}
-              onUpdateNode={(updatedNode: Node) => {
-                setNodes(prev => prev.map(n => n.id === updatedNode.id ? updatedNode : n));
-              }}
-              onDeleteNode={(nodeId: string) => {
-                setNodes(prev => prev.filter(n => n.id !== nodeId));
-              }}
-              mode={mode}
-            />
-          )}
-
-          <ValidationPanel
-            validationResult={{
-              isValid: true,
-              violations: []
-            }}
-            onViolationClick={(violation) => {
-              console.log('Violation clicked:', violation);
-            }}
-          />
-
-          {mode === 'creation' && (
-            <KnowledgeGraphPanel
-              onNodeMaterialize={(nodeData: any) => {
-                console.log('Node materialized:', nodeData);
-              }}
-            />
-          )}
-        </Box>
+          <Controls />
+          <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+        </ReactFlow>
       </Box>
+    </Box>
+  );
+};
+
+// Wrapper with ReactFlowProvider
+const CreationMode: React.FC<CreationModeProps> = (props) => {
+  return (
+    <ReactFlowProvider>
+      <CreationModeInner {...props} />
     </ReactFlowProvider>
   );
 };

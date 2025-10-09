@@ -6,8 +6,6 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   ConnectionMode,
-  ReactFlowProvider,
-  useReactFlow,
   NodeChange,
   EdgeChange,
   applyNodeChanges,
@@ -27,7 +25,7 @@ import { useSnapConnection } from '../hooks/useSnapConnection';
 // Removed useGuidedAdjacency hook dependency as guided mode is deprecated
 import { AdjacencyHighlights } from './AdjacencyHighlights';
 import { getConnectorMetadata } from '../services/connectorLogic';
-import { NodeData, DiagramEdge, SpatialRelationship } from '../types';
+import { SpatialRelationship } from '../types';
 import 'reactflow/dist/style.css';
 
 const defaultNodeTypes = {
@@ -53,6 +51,11 @@ interface SnapCanvasProps {
   onConnectEnd?: (event: any) => void;
   // Guided mode behavior: don't render adjacency edges, allow overlap only if adjacency exists
   guidedNoAdjacencyEdges?: boolean;
+  // External drag-and-drop handlers
+  onDragOver?: (event: React.DragEvent) => void;
+  onDrop?: (event: React.DragEvent) => void;
+  // ReactFlow instance initialization
+  onInit?: (instance: any) => void;
 }
 
 const SnapCanvasCore: React.FC<SnapCanvasProps> = ({
@@ -69,8 +72,10 @@ const SnapCanvasCore: React.FC<SnapCanvasProps> = ({
   onConnectStart,
   onConnectEnd,
   guidedNoAdjacencyEdges = false,
+  onDragOver,
+  onDrop,
+  onInit,
 }) => {
-  const { project } = useReactFlow();
   const [snapIndicators, setSnapIndicators] = useState<
     Array<{ id: string; x: number; y: number; active: boolean }>
   >([]);
@@ -88,13 +93,10 @@ const SnapCanvasCore: React.FC<SnapCanvasProps> = ({
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
 
   // Stubbed out guided adjacency functionality
-  const adjacencyRules: any[] = [];
   const canNodesBeAdjacent = () => true;
   const areNodesProhibited = () => false;
-  const edgeHighlights: any[] = [];
 
   const {
-    getSnappedPosition,
     handleNodeDragStart: snapHandleNodeDragStart,
     handleNodeDrag,
     handleNodeDragStop: snapHandleNodeDragStop,
@@ -219,8 +221,27 @@ const SnapCanvasCore: React.FC<SnapCanvasProps> = ({
     : edges;
   const allEdges = previewEdge ? [...baseEdges, previewEdge] : baseEdges;
 
+  // Wrap the handlers to add logging
+  const handleDragOverWrapper = useCallback((event: React.DragEvent) => {
+    console.log('🎯 SnapCanvas: Drag over wrapper');
+    if (onDragOver) {
+      onDragOver(event);
+    }
+  }, [onDragOver]);
+
+  const handleDropWrapper = useCallback((event: React.DragEvent) => {
+    console.log('🎯 SnapCanvas: Drop on wrapper');
+    if (onDrop) {
+      onDrop(event);
+    }
+  }, [onDrop]);
+
   return (
-    <>
+    <div
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+      onDragOver={handleDragOverWrapper}
+      onDrop={handleDropWrapper}
+    >
       <ReactFlow
         nodes={nodes}
         edges={allEdges}
@@ -232,6 +253,9 @@ const SnapCanvasCore: React.FC<SnapCanvasProps> = ({
         isValidConnection={isValidConnection}
         onConnectStart={onConnectStart}
         onConnectEnd={onConnectEnd}
+        onDragOver={handleDragOverWrapper}
+        onDrop={handleDropWrapper}
+        onInit={onInit}
         connectionMode={ConnectionMode.Loose}
         connectionLineType={ConnectionLineType.Straight}
         snapToGrid
@@ -333,11 +357,11 @@ const SnapCanvasCore: React.FC<SnapCanvasProps> = ({
           />
         </Paper>
       )}
-    </>
+    </div>
   );
 };
 
-// Wrapper component with ReactFlowProvider and ErrorBoundary
+// Wrapper component with ErrorBoundary (no ReactFlowProvider - handled by parent)
 const SnapCanvas: React.FC<SnapCanvasProps> = (props) => {
   return (
     <ErrorBoundary
@@ -346,11 +370,11 @@ const SnapCanvas: React.FC<SnapCanvasProps> = (props) => {
         // Could send to error tracking service here
       }}
     >
-      <ReactFlowProvider>
-        <Box sx={{ width: '100%', height: '100%', position: 'relative' }}>
-          <SnapCanvasCore {...props} />
-        </Box>
-      </ReactFlowProvider>
+      <Box
+        sx={{ width: '100%', height: '100%', position: 'relative' }}
+      >
+        <SnapCanvasCore {...props} />
+      </Box>
     </ErrorBoundary>
   );
 };

@@ -79,6 +79,7 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
     // Allow dragging in guided mode since we're dragging KG nodes for exploration
     const templateData = JSON.stringify(template);
     event.dataTransfer.setData('application/reactflow', templateData);
+    event.dataTransfer.setData('text/plain', templateData);
     event.dataTransfer.effectAllowed = 'move';
     
     console.log('🎯 Set drag data:', {
@@ -313,13 +314,23 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                       </Avatar>
                     </ListItemAvatar>
                     <ListItemText
-                      primary={
-                        <Typography variant="body2" fontWeight="medium">
-                          {template.name}
-                        </Typography>
-                      }
+                      primary={template.name}
+                      primaryTypographyProps={{
+                        variant: 'body2',
+                        fontWeight: 'medium',
+                        component: 'div',
+                      }}
+                      secondaryTypographyProps={{ component: 'div' }}
                       secondary={
-                        <span style={{ display: 'flex', gap: '4px', marginTop: '4px', alignItems: 'center' }}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: 0.5,
+                            mt: 0.5,
+                            alignItems: 'center',
+                          }}
+                        >
                           {template.cleanroomClass && (
                             <Chip
                               label={`Class ${template.cleanroomClass}`}
@@ -342,7 +353,7 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                               color: '#7b1fa2',
                             }}
                           />
-                        </span>
+                        </Box>
                       }
                     />
                   </ListItem>
