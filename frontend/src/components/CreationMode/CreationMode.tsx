@@ -29,6 +29,7 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [templates, setTemplates] = useState<NodeTemplate[]>([]);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
 
   // Load templates on mount
   React.useEffect(() => {
@@ -111,6 +112,8 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
         templates={templates}
         mode={mode}
         isVisible={true}
+        isCollapsed={paletteCollapsed}
+        onToggle={() => setPaletteCollapsed(!paletteCollapsed)}
       />
 
       {/* ReactFlow Canvas */}

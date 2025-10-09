@@ -15,8 +15,10 @@ import {
   Chip,
   InputAdornment,
   Button,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
-import { ExpandMore, Search, Edit, Visibility, Add } from '@mui/icons-material';
+import { ExpandMore, Search, Edit, Visibility, Add, ChevronLeft, ChevronRight } from '@mui/icons-material';
 import { NodeTemplate, NodeCategory, AppMode } from '../types';
 import CustomNodeCreationModal from './CustomNodeCreationModal';
 import { apiService } from '../services/api';
@@ -27,9 +29,11 @@ interface NodePaletteProps {
   onCreateCustomNode?: (nodeTemplate: Omit<NodeTemplate, 'id'>) => void;
   onGuidedNodeSelect?: (nodeId: string) => void;
   isVisible?: boolean;
+  isCollapsed?: boolean;
+  onToggle?: () => void;
 }
 
-const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCustomNode, onGuidedNodeSelect, isVisible = true }) => {
+const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCustomNode, onGuidedNodeSelect, isVisible = true, isCollapsed = false, onToggle }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<string[]>([
     'Production',
@@ -37,12 +41,64 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
   ]);
   const [showCustomNodeModal, setShowCustomNodeModal] = useState(false);
   const [guidedNodes, setGuidedNodes] = useState<NodeTemplate[]>([]);
+  const [internalCollapsed, setInternalCollapsed] = useState(isCollapsed);
+
+  // Resizable width state
+  const [width, setWidth] = useState(() => {
+    const savedWidth = localStorage.getItem('nodePalette_width');
+    return savedWidth ? parseInt(savedWidth, 10) : 280;
+  });
+  const [isResizing, setIsResizing] = useState(false);
 
   useEffect(() => {
     if (mode === 'exploration') {
       apiService.getExistingGraphNodes().then(setGuidedNodes).catch(() => setGuidedNodes([]));
     }
   }, [mode]);
+
+  useEffect(() => {
+    setInternalCollapsed(isCollapsed);
+  }, [isCollapsed]);
+
+  const handleToggleCollapse = () => {
+    setInternalCollapsed(!internalCollapsed);
+    onToggle?.();
+  };
+
+  // Resize handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      const newWidth = e.clientX;
+      const minWidth = 80;
+      const maxWidth = 400;
+
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        setWidth(newWidth);
+        localStorage.setItem('nodePalette_width', newWidth.toString());
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   const filteredTemplates = useMemo(() => {
     const source = mode === 'exploration' ? guidedNodes : templates;
@@ -148,95 +204,177 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
     }
   };
 
+  // Collapsed view - icon-only sidebar
+  if (internalCollapsed) {
+    return (
+      <Paper
+        elevation={2}
+        sx={{
+          width: 48,
+          height: '100%',
+          display: isVisible ? 'flex' : 'none',
+          flexDirection: 'column',
+          borderRadius: 0,
+          borderRight: '1px solid #e0e0e0',
+          position: 'relative',
+          transition: 'width 0.3s ease',
+        }}
+      >
+        {/* Toggle button */}
+        <Box sx={{ p: 1, borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'center' }}>
+          <IconButton onClick={handleToggleCollapse} size="small">
+            <ChevronRight />
+          </IconButton>
+        </Box>
+
+        {/* Category icons */}
+        <Box sx={{ flex: 1, overflow: 'auto', py: 1 }}>
+          {Object.entries(templatesByCategory).map(([category, categoryTemplates]) => (
+            <Tooltip key={category} title={`${category} (${categoryTemplates.length})`} placement="right">
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  p: 1.5,
+                  cursor: 'pointer',
+                  backgroundColor: getCategoryColor(category as NodeCategory),
+                  borderRadius: 1,
+                  mx: 1,
+                  my: 0.5,
+                  '&:hover': {
+                    opacity: 0.8,
+                  },
+                }}
+                onClick={handleToggleCollapse}
+              >
+                <Typography variant="h6">
+                  {getCategoryIcon(category as NodeCategory)}
+                </Typography>
+              </Box>
+            </Tooltip>
+          ))}
+        </Box>
+      </Paper>
+    );
+  }
+
+  // Expanded view - full sidebar
   return (
     <Paper
       elevation={2}
       sx={{
-        width: 280,
+        width: width,
         height: '100%',
         display: isVisible ? 'flex' : 'none',
         flexDirection: 'column',
         borderRadius: 0,
         borderRight: '1px solid #e0e0e0',
-        flex: 1,
+        flexShrink: 0,
         minHeight: 0,
+        position: 'relative',
+        transition: isResizing ? 'none' : 'width 0.3s ease',
+        userSelect: isResizing ? 'none' : 'auto',
       }}
     >
-      <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          {mode === 'creation' ? <Edit color="secondary" /> : <Visibility color="primary" />}
-          <Typography variant="h6">
-            {mode === 'creation' ? 'Template Library' : 'Knowledge Graph'}
+      <Box sx={{ p: 0.5, borderBottom: '1px solid #e0e0e0' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3, mb: 0.5 }}>
+          {mode === 'creation' ? <Edit color="secondary" sx={{ fontSize: 16 }} /> : <Visibility color="primary" sx={{ fontSize: 16 }} />}
+          <Typography variant="body2" sx={{ fontWeight: 600, flex: 1, fontSize: '0.75rem' }}>
+            {mode === 'creation' ? 'Templates' : 'Graph'}
           </Typography>
+          <IconButton
+            onClick={handleToggleCollapse}
+            size="small"
+            sx={{
+              color: 'text.secondary',
+              padding: 0.25,
+              '&:hover': {
+                color: 'primary.main',
+              },
+            }}
+          >
+            <ChevronLeft sx={{ fontSize: 16 }} />
+          </IconButton>
         </Box>
-        
+
         {mode === 'exploration' && (
-          <Box sx={{ 
-            mb: 2, 
-            p: 1.5, 
-            backgroundColor: '#e3f2fd', 
-            borderRadius: 1,
+          <Box sx={{
+            mb: 0.5,
+            p: 0.5,
+            backgroundColor: '#e3f2fd',
+            borderRadius: 0.5,
             border: '1px solid #bbdefb'
           }}>
-            <Typography variant="body2" color="primary" sx={{ fontWeight: 500 }}>
-              <Visibility sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
-              Explore Knowledge Graph
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Click on any node to load it with all its relationships on the canvas.
+            <Typography variant="caption" color="primary" sx={{ fontWeight: 500, fontSize: '0.65rem' }}>
+              <Visibility sx={{ fontSize: 10, mr: 0.3, verticalAlign: 'middle' }} />
+              Explore
             </Typography>
           </Box>
         )}
-        
+
         <TextField
           fullWidth
           size="small"
-          placeholder={mode === 'creation' ? 'Search templates...' : 'Search existing nodes...'}
+          placeholder="Search..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          sx={{
+            '& .MuiInputBase-root': {
+              fontSize: '0.7rem',
+            },
+            '& .MuiInputBase-input': {
+              padding: '4px 6px',
+            }
+          }}
           slotProps={{
             input: {
               startAdornment: (
-                <InputAdornment position="start">
-                  <Search />
+                <InputAdornment position="start" sx={{ marginRight: 0.5 }}>
+                  <Search sx={{ fontSize: 14 }} />
                 </InputAdornment>
               ),
             },
           }}
         />
-        
+
         {mode === 'creation' && (
           <Button
             fullWidth
             variant="outlined"
-            startIcon={<Add />}
-            sx={{ mt: 1 }}
+            startIcon={<Add sx={{ fontSize: 12 }} />}
+            sx={{
+              mt: 0.5,
+              fontSize: '0.65rem',
+              padding: '2px 6px',
+              minHeight: 0
+            }}
             size="small"
             onClick={() => setShowCustomNodeModal(true)}
           >
-            Create Custom Node
+            Add
           </Button>
         )}
       </Box>
 
       <Box sx={{ flex: 1, overflow: 'auto' }}>
         {Object.keys(templatesByCategory).length === 0 ? (
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            height: '100%', 
-            p: 3,
+          <Box sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            p: 2,
             textAlign: 'center'
           }}>
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              {mode === 'creation' ? 'No Templates Available' : 'No Nodes in Knowledge Graph'}
+            <Typography variant="body2" color="text.secondary" gutterBottom sx={{ fontWeight: 600, fontSize: '0.8rem' }}>
+              {mode === 'creation' ? 'No Templates' : 'No Nodes'}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {mode === 'creation' 
-                ? 'Unable to load node templates. Check your connection and try again.'
-                : 'The knowledge graph is empty. Use Creation Mode to create and persist nodes first.'
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+              {mode === 'creation'
+                ? 'Unable to load templates'
+                : 'Graph is empty'
               }
             </Typography>
           </Box>
@@ -253,21 +391,25 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
               }}
             >
             <AccordionSummary
-              expandIcon={<ExpandMore />}
+              expandIcon={<ExpandMore sx={{ fontSize: 16 }} />}
               sx={{
                 backgroundColor: getCategoryColor(category as NodeCategory),
                 color: '#333',
-                minHeight: 48,
+                minHeight: 28,
+                padding: '0 6px',
                 '&.Mui-expanded': {
-                  minHeight: 48,
+                  minHeight: 28,
+                },
+                '& .MuiAccordionSummary-content': {
+                  margin: '6px 0',
                 },
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body1">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3 }}>
+                <Typography sx={{ fontSize: '0.85rem' }}>
                   {getCategoryIcon(category as NodeCategory)}
                 </Typography>
-                <Typography variant="subtitle1" fontWeight="bold">
+                <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '0.7rem' }}>
                   {category}
                 </Typography>
                 <Chip
@@ -277,6 +419,11 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                     backgroundColor: 'rgba(255,255,255,0.8)',
                     color: '#333',
                     fontWeight: 'bold',
+                    height: 14,
+                    fontSize: '0.6rem',
+                    '& .MuiChip-label': {
+                      padding: '0 4px',
+                    }
                   }}
                 />
               </Box>
@@ -292,6 +439,7 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                     sx={{
                       cursor: mode === 'exploration' ? 'pointer' : 'grab',
                       borderBottom: '1px solid #f0f0f0',
+                      padding: '2px 6px',
                       '&:hover': {
                         backgroundColor: '#f5f5f5',
                       },
@@ -300,14 +448,14 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                       },
                     }}
                   >
-                    <ListItemAvatar>
+                    <ListItemAvatar sx={{ minWidth: 28 }}>
                       <Avatar
                         sx={{
                           backgroundColor: template.color,
                           color: '#333',
-                          width: 32,
-                          height: 32,
-                          fontSize: '0.8rem',
+                          width: 24,
+                          height: 24,
+                          fontSize: '0.7rem',
                         }}
                       >
                         {template.icon || getCategoryIcon(template.category)}
@@ -319,6 +467,7 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                         variant: 'body2',
                         fontWeight: 'medium',
                         component: 'div',
+                        fontSize: '0.7rem',
                       }}
                       secondaryTypographyProps={{ component: 'div' }}
                       secondary={
@@ -326,20 +475,23 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                           sx={{
                             display: 'flex',
                             flexWrap: 'wrap',
-                            gap: 0.5,
-                            mt: 0.5,
+                            gap: 0.2,
+                            mt: 0.2,
                             alignItems: 'center',
                           }}
                         >
                           {template.cleanroomClass && (
                             <Chip
-                              label={`Class ${template.cleanroomClass}`}
+                              label={`${template.cleanroomClass}`}
                               size="small"
                               sx={{
-                                fontSize: '0.65rem',
-                                height: 18,
+                                fontSize: '0.55rem',
+                                height: 14,
                                 backgroundColor: '#e3f2fd',
                                 color: '#1976d2',
+                                '& .MuiChip-label': {
+                                  padding: '0 3px',
+                                }
                               }}
                             />
                           )}
@@ -347,10 +499,13 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                             label={`${template.defaultSize.width}×${template.defaultSize.height}`}
                             size="small"
                             sx={{
-                              fontSize: '0.65rem',
-                              height: 18,
+                              fontSize: '0.55rem',
+                              height: 14,
                               backgroundColor: '#f3e5f5',
                               color: '#7b1fa2',
+                              '& .MuiChip-label': {
+                                padding: '0 3px',
+                              }
                             }}
                           />
                         </Box>
@@ -365,14 +520,34 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
         )}
       </Box>
 
-      <Box sx={{ p: 2, borderTop: '1px solid #e0e0e0', backgroundColor: '#f9f9f9' }}>
-        <Typography variant="caption" color="text.secondary">
-          {mode === 'creation' 
-            ? 'Drag templates to create new nodes. Results will expand the knowledge graph.'
-            : 'Click nodes to load with relationships. Drag to add individual nodes to canvas.'
-          }
+      <Box sx={{ p: 0.5, borderTop: '1px solid #e0e0e0', backgroundColor: '#f9f9f9' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem', lineHeight: 1.2 }}>
+          {mode === 'creation' ? 'Drag to add' : 'Click to load'}
         </Typography>
       </Box>
+
+      {/* Resize Handle */}
+      <Box
+        onMouseDown={handleMouseDown}
+        sx={{
+          position: 'absolute',
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: 4,
+          cursor: 'col-resize',
+          backgroundColor: 'transparent',
+          '&:hover': {
+            backgroundColor: 'primary.main',
+            opacity: 0.5,
+          },
+          '&:active': {
+            backgroundColor: 'primary.main',
+            opacity: 0.8,
+          },
+          zIndex: 10,
+        }}
+      />
 
       {/* Custom Node Creation Modal */}
       {mode === 'creation' && (
@@ -385,7 +560,7 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
             }
             setShowCustomNodeModal(false);
           }}
-          existingCategories={Array.from(new Set(templates.map(t => t.category).filter(cat => 
+          existingCategories={Array.from(new Set(templates.map(t => t.category).filter(cat =>
             cat && typeof cat === 'string' && !['Production', 'Quality Control', 'Warehouse', 'Utilities', 'Personnel', 'Support', 'None'].includes(cat)
           )))}
         />
