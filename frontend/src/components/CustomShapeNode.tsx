@@ -53,7 +53,7 @@ const CustomShapeNode: React.FC<CustomShapeNodeProps> = ({
     assignedNodeName,
     assignedNodeCategory,
     hasInheritedProperties,
-    inheritedRelationships,
+    inheritedRelationships = [],
     showAssignmentDialog
   } = data;
 
@@ -612,27 +612,52 @@ const CustomShapeNode: React.FC<CustomShapeNodeProps> = ({
 
       {/* Connection Handles - only show when not resizing and not editing */}
       {!inResizeMode && !isEditing && calculateHandlePositions.map((handle) => (
-        <Handle
-          key={handle.id}
-          type="source"
-          position={handle.position}
-          id={handle.id}
-          isConnectable={true}
-          style={{
-            background: '#555',
-            width: 14,
-            height: 14,
-            border: '2px solid #fff',
-            borderRadius: '50%',
-            pointerEvents: 'all',
-            cursor: 'crosshair',
-            left: handle.x - 7, // Center the handle
-            top: handle.y - 7,
-            position: 'absolute',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-          }}
-          className="custom-handle"
-        />
+        <React.Fragment key={handle.id}>
+          {/* Source handle - for dragging connections FROM this node */}
+          <Handle
+            key={`${handle.id}-source`}
+            type="source"
+            position={handle.position}
+            id={`${handle.id}-source`}
+            isConnectable={true}
+            style={{
+              background: '#555',
+              width: 14,
+              height: 14,
+              border: '2px solid #fff',
+              borderRadius: '50%',
+              pointerEvents: 'all',
+              cursor: 'crosshair',
+              left: handle.x - 7, // Center the handle
+              top: handle.y - 7,
+              position: 'absolute',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            }}
+            className="custom-handle"
+          />
+          {/* Target handle - for accepting connections TO this node */}
+          <Handle
+            key={`${handle.id}-target`}
+            type="target"
+            position={handle.position}
+            id={`${handle.id}-target`}
+            isConnectable={true}
+            style={{
+              background: '#555',
+              width: 14,
+              height: 14,
+              border: '2px solid #fff',
+              borderRadius: '50%',
+              pointerEvents: 'all',
+              cursor: 'crosshair',
+              left: handle.x - 7, // Center the handle
+              top: handle.y - 7,
+              position: 'absolute',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+            }}
+            className="custom-handle"
+          />
+        </React.Fragment>
       ))}
 
       {/* Resize Handles - only show when resizing */}
@@ -774,10 +799,13 @@ const CustomShapeNode: React.FC<CustomShapeNodeProps> = ({
           justifyContent: 'center',
           pointerEvents: 'none',
           zIndex: 1,
+          width: '95%', // Use more of the available width
+          maxWidth: width ? width - 10 : 110,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-          <Typography variant="body2" sx={{ mr: 0.5 }}>
+        {/* Title Row: Icon + Name + Neo4j Indicator */}
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5, width: '100%', justifyContent: 'center' }}>
+          <Typography variant="body2" sx={{ mr: 0.5, fontSize: '1rem' }}>
             {icon || getCategoryIcon(displayCategory)}
           </Typography>
           <Typography
@@ -788,6 +816,10 @@ const CustomShapeNode: React.FC<CustomShapeNodeProps> = ({
               color: hasInheritedProperties && assignedNodeId ? '#2e7d32' : '#333',
               textShadow: '1px 1px 2px rgba(255,255,255,0.8)',
               fontSize: hasInheritedProperties && assignedNodeId ? '0.85rem' : '0.75rem',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: '75%',
             }}
           >
             {displayName}
@@ -804,7 +836,8 @@ const CustomShapeNode: React.FC<CustomShapeNodeProps> = ({
           )}
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {/* Primary Info Row: Category + Cleanroom Class */}
+        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'center', mb: 0.5, width: '100%' }}>
           <Chip
             label={displayCategory}
             size="small"
@@ -843,6 +876,48 @@ const CustomShapeNode: React.FC<CustomShapeNodeProps> = ({
                 height: 18,
                 backgroundColor: '#f3e5f5',
                 color: '#7b1fa2',
+              }}
+            />
+          )}
+        </Box>
+
+        {/* Secondary Info Row: Dimensions & Relationships */}
+        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
+          {/* Current Dimensions */}
+          {width && height && (
+            <Chip
+              label={`${Math.round(width)}×${Math.round(height)}`}
+              size="small"
+              icon={<span style={{ fontSize: '0.7rem' }}>📐</span>}
+              sx={{
+                fontSize: '0.55rem',
+                height: 18,
+                backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                color: '#666',
+                '& .MuiChip-icon': {
+                  marginLeft: '2px',
+                  marginRight: '-4px',
+                }
+              }}
+            />
+          )}
+
+          {/* Inherited Relationships Count */}
+          {hasInheritedProperties && inheritedRelationships && inheritedRelationships.length > 0 && (
+            <Chip
+              label={`${inheritedRelationships.length} rel.`}
+              size="small"
+              icon={<span style={{ fontSize: '0.7rem' }}>🔗</span>}
+              sx={{
+                fontSize: '0.55rem',
+                height: 18,
+                backgroundColor: 'rgba(46, 125, 50, 0.1)',
+                color: '#2e7d32',
+                fontWeight: 'bold',
+                '& .MuiChip-icon': {
+                  marginLeft: '2px',
+                  marginRight: '-4px',
+                }
               }}
             />
           )}

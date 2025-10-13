@@ -4,6 +4,7 @@ import {
   EdgeLabelRenderer,
   BaseEdge,
   getStraightPath,
+  getBezierPath,
   useStore,
   Node,
   Edge
@@ -34,6 +35,8 @@ interface MultiRelationshipEdgeData {
   renderAsIcon?: boolean;
   // Mode information passed through edge data
   mode?: 'creation' | 'guided';
+  // Edge style: straight or curved
+  edgeStyle?: 'straight' | 'curved';
 }
 
 
@@ -154,51 +157,53 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   const perpUy = ux;
   
   // Validate nodes exist before proceeding
-  
+
   if (!sourceNode || !targetNode) return null;
-  
-  // Get actual node positions and dimensions
-  const sourceNodeX = sourceNode.position.x;
-  const sourceNodeY = sourceNode.position.y;
-  const targetNodeX = targetNode.position.x;
-  const targetNodeY = targetNode.position.y;
-  
-  // Calculate intersection points on node boundaries
-  const sourceIntersection = getNodeIntersectionPoint(
-    sourceNodeX, 
-    sourceNodeY, 
-    sourceDimensions.width, 
-    sourceDimensions.height, 
-    targetX, 
-    targetY
-  );
-  
-  const targetIntersection = getNodeIntersectionPoint(
-    targetNodeX, 
-    targetNodeY, 
-    targetDimensions.width, 
-    targetDimensions.height, 
-    sourceX, 
-    sourceY
-  );
-  
-  // Apply offset to intersection points
-  const offsetSourceX = sourceIntersection.x + perpUx * offset;
-  const offsetSourceY = sourceIntersection.y + perpUy * offset;
-  const offsetTargetX = targetIntersection.x + perpUx * offset;
-  const offsetTargetY = targetIntersection.y + perpUy * offset;
-  
-  // Create straight line path using ReactFlow's getStraightPath
-  const [edgePath] = getStraightPath({
-    sourceX: offsetSourceX,
-    sourceY: offsetSourceY,
-    targetX: offsetTargetX,
-    targetY: offsetTargetY,
-  });
-  
-  // Label position at center of line
-  const labelX = offsetSourceX + (offsetTargetX - offsetSourceX) * 0.5;
-  const labelY = offsetSourceY + (offsetTargetY - offsetSourceY) * 0.5;
+
+  // ReactFlow already provides sourceX, sourceY, targetX, targetY as the handle positions
+  // So we can use them directly instead of recalculating intersection points
+  // This fixes the issue where edges don't connect to handle points
+
+  // Apply offset to handle positions for multiple parallel edges
+  const offsetSourceX = sourceX + perpUx * offset;
+  const offsetSourceY = sourceY + perpUy * offset;
+  const offsetTargetX = targetX + perpUx * offset;
+  const offsetTargetY = targetY + perpUy * offset;
+
+  // Determine edge style (default to straight if not specified)
+  const currentEdgeStyle = data.edgeStyle || 'straight';
+
+  // Create edge path based on style
+  let edgePath: string;
+  let labelX: number;
+  let labelY: number;
+
+  if (currentEdgeStyle === 'curved') {
+    // Use Bezier curve for curved edges
+    const [bezierPath, labelXPos, labelYPos] = getBezierPath({
+      sourceX: offsetSourceX,
+      sourceY: offsetSourceY,
+      sourcePosition,
+      targetX: offsetTargetX,
+      targetY: offsetTargetY,
+      targetPosition,
+    });
+    edgePath = bezierPath;
+    labelX = labelXPos;
+    labelY = labelYPos;
+  } else {
+    // Use straight line for straight edges
+    const [straightPath] = getStraightPath({
+      sourceX: offsetSourceX,
+      sourceY: offsetSourceY,
+      targetX: offsetTargetX,
+      targetY: offsetTargetY,
+    });
+    edgePath = straightPath;
+    // Label position at center of line
+    labelX = offsetSourceX + (offsetTargetX - offsetSourceX) * 0.5;
+    labelY = offsetSourceY + (offsetTargetY - offsetSourceY) * 0.5;
+  }
   
   // Helper function to determine if arrows should be shown
   const shouldShowArrows = () => {

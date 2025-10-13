@@ -56,15 +56,27 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
   useEffect(() => {
     if (edge && edge.data) {
       const edgeData = edge.data as any;
+      const relType = edgeData.relationshipType || 'ADJACENT_TO';
+
+      // Set default flowType based on relationship type if not already set
+      let defaultFlowType = edgeData.flowType;
+      if (!defaultFlowType) {
+        if (relType === 'MATERIAL_FLOW') {
+          defaultFlowType = 'raw_material';
+        } else if (relType === 'PERSONNEL_FLOW') {
+          defaultFlowType = 'personnel';
+        }
+      }
+
       setFormData({
-        type: edgeData.relationshipType || 'ADJACENT_TO',
+        type: relType,
         priority: edgeData.priority || 5,
         reason: edgeData.reason || '',
         doorType: edgeData.doorType,
         minDistance: edgeData.minDistance,
         maxDistance: edgeData.maxDistance,
-        flowDirection: edgeData.flowDirection,
-        flowType: edgeData.flowType,
+        flowDirection: edgeData.flowDirection || 'bidirectional',
+        flowType: defaultFlowType,
       });
     }
     setEditMode(false);
@@ -128,15 +140,27 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
   const handleCancel = () => {
     if (edge && edge.data) {
       const edgeData = edge.data as any;
+      const relType = edgeData.relationshipType || 'ADJACENT_TO';
+
+      // Set default flowType based on relationship type if not already set
+      let defaultFlowType = edgeData.flowType;
+      if (!defaultFlowType) {
+        if (relType === 'MATERIAL_FLOW') {
+          defaultFlowType = 'raw_material';
+        } else if (relType === 'PERSONNEL_FLOW') {
+          defaultFlowType = 'personnel';
+        }
+      }
+
       setFormData({
-        type: edgeData.relationshipType || 'ADJACENT_TO',
+        type: relType,
         priority: edgeData.priority || 5,
         reason: edgeData.reason || '',
         doorType: edgeData.doorType,
         minDistance: edgeData.minDistance,
         maxDistance: edgeData.maxDistance,
-        flowDirection: edgeData.flowDirection,
-        flowType: edgeData.flowType,
+        flowDirection: edgeData.flowDirection || 'bidirectional',
+        flowType: defaultFlowType,
       });
     }
     setEditMode(false);
@@ -159,8 +183,10 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
       onClose={onClose}
       maxWidth="sm"
       fullWidth
+      disableEscapeKeyDown={false}
       slotProps={{
-        paper: { sx: { borderRadius: 2 } }
+        paper: { sx: { borderRadius: 2, zIndex: 1300 } },
+        backdrop: { sx: { pointerEvents: 'none' } }
       }}
     >
       <DialogTitle>
@@ -192,6 +218,13 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
                 <Select
                   value={formData.type || 'ADJACENT_TO'}
                   onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as any }))}
+                  MenuProps={{
+                    disablePortal: false,
+                    disableScrollLock: true,
+                    PaperProps: {
+                      sx: { zIndex: 9999 }
+                    }
+                  }}
                 >
                   {relationshipTypes.map(type => (
                     <MenuItem key={type} value={type}>
@@ -275,6 +308,13 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
                     value={formData.doorType || ''}
                     onChange={(e) => setFormData(prev => ({ ...prev, doorType: e.target.value as string }))}
                     displayEmpty
+                    MenuProps={{
+                      disablePortal: false,
+                      disableScrollLock: true,
+                      PaperProps: {
+                        sx: { zIndex: 9999 }
+                      }
+                    }}
                   >
                     <MenuItem value="">
                       <em>No door specified</em>
@@ -349,6 +389,13 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
                     <Select
                       value={formData.flowDirection || 'bidirectional'}
                       onChange={(e) => setFormData(prev => ({ ...prev, flowDirection: e.target.value as any }))}
+                      MenuProps={{
+                        disablePortal: false,
+                        disableScrollLock: true,
+                        PaperProps: {
+                          sx: { zIndex: 9999 }
+                        }
+                      }}
                     >
                       <MenuItem value="bidirectional">Bidirectional</MenuItem>
                       <MenuItem value="unidirectional">Unidirectional</MenuItem>
@@ -370,9 +417,31 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
                 {editMode ? (
                   <FormControl fullWidth size="small">
                     <Select
-                      value={formData.flowType || 'raw_material'}
-                      onChange={(e) => setFormData(prev => ({ ...prev, flowType: e.target.value as any }))}
+                      value={formData.flowType || ''}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        console.log('Flow Type dropdown onChange:', newValue);
+                        if (newValue) {
+                          setFormData((prev) => {
+                            const updated = { ...prev, flowType: newValue as 'raw_material' | 'finished_product' | 'waste' | 'personnel' | 'equipment' };
+                            console.log('Updated formData:', updated);
+                            return updated;
+                          });
+                        }
+                      }}
+                      displayEmpty
+                      MenuProps={{
+                        disablePortal: false,
+                        disableScrollLock: true,
+                        container: undefined,
+                        PaperProps: {
+                          sx: { zIndex: 10000 }
+                        }
+                      }}
                     >
+                      <MenuItem value="" disabled>
+                        <em>Select flow type</em>
+                      </MenuItem>
                       {formData.type === 'MATERIAL_FLOW' ? (
                         <>
                           <MenuItem value="raw_material">Raw Material</MenuItem>
@@ -390,7 +459,7 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
                   </FormControl>
                 ) : (
                   <Chip
-                    label={formData.flowType?.replace('_', ' ') || 'Raw Material'}
+                    label={formData.flowType?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Not set'}
                     variant="outlined"
                     size="small"
                   />
