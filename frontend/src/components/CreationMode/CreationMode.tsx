@@ -67,6 +67,22 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
       });
   }, []);
 
+  // Handle custom node creation
+  const handleCreateCustomNode = useCallback((nodeTemplate: Omit<NodeTemplate, 'id'>) => {
+    // Generate a unique ID for the new template
+    const timestamp = Date.now();
+    const randomSuffix = Math.random().toString(36).substring(2, 7);
+    const newTemplate: NodeTemplate = {
+      ...nodeTemplate,
+      id: `custom-${nodeTemplate.name.toLowerCase().replace(/\s+/g, '-')}-${timestamp}-${randomSuffix}`,
+    };
+
+    // Add to local templates list
+    setTemplates(prev => [...prev, newTemplate]);
+
+    console.log('Custom node template created:', newTemplate);
+  }, []);
+
   // Handle node changes
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -266,6 +282,7 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
         isVisible={true}
         isCollapsed={paletteCollapsed}
         onToggle={() => setPaletteCollapsed(!paletteCollapsed)}
+        onCreateCustomNode={handleCreateCustomNode}
       />
 
       {/* ReactFlow Canvas */}
