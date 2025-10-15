@@ -25,6 +25,7 @@ import MultiRelationshipEdge from '../MultiRelationshipEdge';
 import InlineRelationshipEditDialog from '../InlineRelationshipEditDialog';
 import { NodeTemplate, AppMode, SpatialRelationship, DiagramEdge } from '../../types';
 import { apiService } from '../../services/api';
+import { formatRelationshipLabel } from '../../utils/edgeUtils';
 
 const nodeTypes = {
   functionalArea: CustomNode,
@@ -155,6 +156,7 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
 
       const relationshipIndex = existingEdgesBetweenNodes.length;
 
+      const defaultRelationshipType = 'ADJACENT_TO';
       const newEdge: Edge = {
         id: `edge-${connection.source}-${connection.target}-${Date.now()}`,
         source: connection.source,
@@ -162,8 +164,12 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
         sourceHandle: connection.sourceHandle,
         targetHandle: connection.targetHandle,
         type: 'default',
+        label: formatRelationshipLabel(defaultRelationshipType),
+        labelShowBg: true,
+        labelBgStyle: { fill: '#ffffff' },
+        labelBgPadding: [8, 4],
         data: {
-          relationshipType: 'ADJACENT_TO', // Default type
+          relationshipType: defaultRelationshipType,
           priority: 5,
           reason: 'Physical adjacency for material/personnel exchange',
           relationshipIndex,
@@ -198,11 +204,13 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
       setEdges((eds) =>
         eds.map((edge) => {
           if (edge.id === edgeId) {
+            const newRelationshipType = updates.type || edge.data?.relationshipType;
             return {
               ...edge,
+              label: formatRelationshipLabel(newRelationshipType),
               data: {
                 ...edge.data,
-                relationshipType: updates.type || edge.data?.relationshipType,
+                relationshipType: newRelationshipType,
                 priority: updates.priority ?? edge.data?.priority,
                 reason: updates.reason || edge.data?.reason,
                 doorType: updates.doorType || edge.data?.doorType,
