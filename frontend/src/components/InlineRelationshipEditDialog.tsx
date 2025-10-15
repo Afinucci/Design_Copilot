@@ -412,49 +412,38 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
 
               <Box sx={{ mb: 2 }}>
                 <Typography variant="subtitle2" gutterBottom>
-                  Flow Type
+                  Flow Type (Current: {formData.flowType || 'none'})
                 </Typography>
                 {editMode ? (
                   <FormControl fullWidth size="small">
                     <Select
-                      value={formData.flowType || ''}
+                      value={formData.flowType || (formData.type === 'MATERIAL_FLOW' ? 'raw_material' : 'personnel')}
                       onChange={(e) => {
+                        console.log('🔄 Flow Type onChange triggered, value:', e.target.value);
                         const newValue = e.target.value;
-                        console.log('Flow Type dropdown onChange:', newValue);
-                        if (newValue) {
-                          setFormData((prev) => {
-                            const updated = { ...prev, flowType: newValue as 'raw_material' | 'finished_product' | 'waste' | 'personnel' | 'equipment' };
-                            console.log('Updated formData:', updated);
-                            return updated;
-                          });
-                        }
+                        setFormData(prev => {
+                          const updated = { ...prev, flowType: newValue as any };
+                          console.log('✅ Updated formData:', updated);
+                          return updated;
+                        });
                       }}
-                      displayEmpty
                       MenuProps={{
                         disablePortal: false,
                         disableScrollLock: true,
-                        container: undefined,
                         PaperProps: {
-                          sx: { zIndex: 10000 }
+                          sx: { zIndex: 9999 }
                         }
                       }}
                     >
-                      <MenuItem value="" disabled>
-                        <em>Select flow type</em>
-                      </MenuItem>
-                      {formData.type === 'MATERIAL_FLOW' ? (
-                        <>
-                          <MenuItem value="raw_material">Raw Material</MenuItem>
-                          <MenuItem value="finished_product">Finished Product</MenuItem>
-                          <MenuItem value="waste">Waste</MenuItem>
-                          <MenuItem value="equipment">Equipment</MenuItem>
-                        </>
-                      ) : (
-                        <>
-                          <MenuItem value="personnel">Personnel</MenuItem>
-                          <MenuItem value="equipment">Equipment Movement</MenuItem>
-                        </>
-                      )}
+                      {formData.type === 'MATERIAL_FLOW' ? [
+                        <MenuItem key="raw_material" value="raw_material">Raw Material</MenuItem>,
+                        <MenuItem key="finished_product" value="finished_product">Finished Product</MenuItem>,
+                        <MenuItem key="waste" value="waste">Waste</MenuItem>,
+                        <MenuItem key="equipment" value="equipment">Equipment</MenuItem>
+                      ] : [
+                        <MenuItem key="personnel" value="personnel">Personnel</MenuItem>,
+                        <MenuItem key="equipment_movement" value="equipment">Equipment Movement</MenuItem>
+                      ]}
                     </Select>
                   </FormControl>
                 ) : (
