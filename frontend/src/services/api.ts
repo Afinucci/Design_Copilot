@@ -353,10 +353,25 @@ class ApiService {
 
   // Creation Mode: Enhanced persistence with knowledge graph integration
   async persistToKnowledgeGraphEnhanced(diagramData: any): Promise<{ message: string; nodesAdded: number; relationshipsAdded: number }> {
-    return this.request<{ message: string; nodesAdded: number; relationshipsAdded: number }>('/nodes/kg/persist', {
-      method: 'POST',
-      body: JSON.stringify(diagramData),
+    console.log('🌐 API Service: persistToKnowledgeGraphEnhanced called');
+    console.log('🌐 API Service: Diagram data to persist:', {
+      nodeCount: diagramData.nodes?.length,
+      relationshipCount: diagramData.relationships?.length,
+      hasMetadata: !!diagramData.metadata
     });
+    console.log('🌐 API Service: Full request body:', JSON.stringify(diagramData, null, 2));
+
+    try {
+      const result = await this.request<{ message: string; nodesAdded: number; relationshipsAdded: number }>('/nodes/kg/persist', {
+        method: 'POST',
+        body: JSON.stringify(diagramData),
+      });
+      console.log('🌐 API Service: ✅ Persist successful:', result);
+      return result;
+    } catch (error) {
+      console.error('🌐 API Service: ❌ Persist failed:', error);
+      throw error;
+    }
   }
 
   // Groups

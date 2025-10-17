@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { Box, IconButton, Tooltip, ToggleButtonGroup, ToggleButton } from '@mui/material';
-import { Timeline, ShowChart } from '@mui/icons-material';
+import { Box, Tooltip, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
+import { Timeline, ShowChart, CloudUpload } from '@mui/icons-material';
 import ReactFlow, {
   Node,
   Edge,
@@ -273,6 +273,51 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
     setPendingConnection(null);
   }, [pendingConnection, selectedEdge, edges]);
 
+  // Save diagram to Neo4j
+  const handleSaveDiagram = useCallback(() => {
+    console.log('💾 Saving diagram to Neo4j...');
+
+    // Prepare diagram data in the format expected by the backend
+    const diagramData = {
+      nodes: nodes.map((node) => ({
+        id: node.id,
+        name: node.data.label || node.data.name,
+        category: node.data.category,
+        cleanroomClass: node.data.cleanroomClass,
+        // Backend expects flat x, y, width, height properties
+        x: node.position.x,
+        y: node.position.y,
+        width: node.data.width || node.width || 120,
+        height: node.data.height || node.height || 80,
+        equipment: node.data.equipment || [],
+        color: node.data.color,
+      })),
+      relationships: edges.map((edge) => ({
+        id: edge.id,
+        // Backend expects fromId and toId (not sourceId/targetId)
+        fromId: edge.source,
+        toId: edge.target,
+        type: edge.data?.relationshipType || 'ADJACENT_TO',
+        priority: edge.data?.priority || 5,
+        reason: edge.data?.reason || 'User-defined relationship',
+        flowDirection: edge.data?.flowDirection,
+        doorType: edge.data?.doorType,
+        flowType: edge.data?.flowType,
+        minDistance: edge.data?.minDistance || null,
+        maxDistance: edge.data?.maxDistance || null,
+      })),
+      metadata: {
+        mode,
+        timestamp: new Date().toISOString(),
+        nodeCount: nodes.length,
+        relationshipCount: edges.length,
+      },
+    };
+
+    console.log('📦 Diagram data prepared:', diagramData);
+    onSave(diagramData);
+  }, [nodes, edges, mode, onSave]);
+
   return (
     <Box sx={{ display: 'flex', height: '100%', width: '100%' }}>
       {/* Node Palette */}
@@ -287,6 +332,29 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
 
       {/* ReactFlow Canvas */}
       <Box sx={{ flexGrow: 1, position: 'relative' }}>
+        {/* Save to Neo4j Button */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 16,
+            left: 16,
+            zIndex: 10,
+          }}
+        >
+          <Tooltip title="Upload diagram to Neo4j Knowledge Graph">
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<CloudUpload />}
+              onClick={handleSaveDiagram}
+              disabled={nodes.length === 0}
+              sx={{ boxShadow: 2 }}
+            >
+              Upload to Neo4j
+            </Button>
+          </Tooltip>
+        </Box>
+
         {/* Edge Style Toggle */}
         <Box
           sx={{

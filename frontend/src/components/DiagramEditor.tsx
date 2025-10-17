@@ -18,6 +18,7 @@ import {
 import { AppMode } from '../types';
 import LayoutDesigner from './LayoutDesigner/LayoutDesigner';
 import CreationMode from './CreationMode/CreationMode';
+import { apiService } from '../services/api';
 
 const DiagramEditor: React.FC = () => {
   const [mode, setMode] = useState<AppMode>('layoutDesigner');
@@ -34,6 +35,36 @@ const DiagramEditor: React.FC = () => {
   const handleModeChange = (newMode: AppMode) => {
     setMode(newMode);
     showSnackbar(`Switched to ${newMode} mode`, 'info');
+  };
+
+  const handleSaveDiagram = async (diagramData: any) => {
+    try {
+      console.log('💾 DiagramEditor: Saving diagram to Neo4j...');
+      console.log('📊 Diagram structure:', {
+        nodeCount: diagramData.nodes?.length || 0,
+        relationshipCount: diagramData.relationships?.length || 0,
+        hasMetadata: !!diagramData.metadata,
+        sampleNode: diagramData.nodes?.[0],
+        sampleRelationship: diagramData.relationships?.[0]
+      });
+      console.log('📦 Full diagram data:', JSON.stringify(diagramData, null, 2));
+
+      // Call the enhanced persist API endpoint
+      const response = await apiService.persistToKnowledgeGraphEnhanced(diagramData);
+
+      console.log('✅ Diagram saved successfully:', response);
+      showSnackbar(
+        `Diagram uploaded to Neo4j: ${response.nodesAdded} nodes, ${response.relationshipsAdded} relationships`,
+        'success'
+      );
+    } catch (error) {
+      console.error('❌ DiagramEditor: Failed to save diagram:', error);
+      console.error('Error details:', error);
+      showSnackbar(
+        `Failed to upload diagram to Neo4j: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error'
+      );
+    }
   };
 
   return (
@@ -75,10 +106,7 @@ const DiagramEditor: React.FC = () => {
         {(mode === 'creation' || mode === 'exploration') && (
           <CreationMode
             mode={mode}
-            onSave={(data) => {
-              console.log('Saving diagram:', data);
-              showSnackbar('Diagram saved successfully', 'success');
-            }}
+            onSave={handleSaveDiagram}
             onLoad={() => {
               console.log('Loading diagram');
             }}

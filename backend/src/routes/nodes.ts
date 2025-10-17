@@ -2033,18 +2033,51 @@ router.post('/kg/ghost-suggestions', async (req, res) => {
 // Enhanced persist to knowledge graph with metrics
 router.post('/kg/persist', async (req, res) => {
   try {
+    console.log('📥 Received persist request');
     const diagramData = req.body;
+
+    // Log what we received for debugging
+    console.log('📦 Diagram data received:', {
+      nodeCount: diagramData.nodes?.length || 0,
+      relationshipCount: diagramData.relationships?.length || 0,
+      hasNodes: !!diagramData.nodes,
+      hasRelationships: !!diagramData.relationships,
+      sampleNode: diagramData.nodes?.[0],
+      sampleRelationship: diagramData.relationships?.[0]
+    });
+
+    // Validate input
+    if (!diagramData.nodes || !Array.isArray(diagramData.nodes)) {
+      console.error('❌ Invalid data: nodes is missing or not an array');
+      return res.status(400).json({ error: 'Invalid data: nodes must be an array' });
+    }
+
+    if (!diagramData.relationships || !Array.isArray(diagramData.relationships)) {
+      console.error('❌ Invalid data: relationships is missing or not an array');
+      return res.status(400).json({ error: 'Invalid data: relationships must be an array' });
+    }
+
     await functionalAreaModel.persistToKnowledgeGraph(diagramData);
     const nodesAdded = diagramData.nodes.length;
     const relationshipsAdded = diagramData.relationships.length;
+
+    console.log(`✅ Successfully persisted: ${nodesAdded} nodes, ${relationshipsAdded} relationships`);
+
     res.json({
       message: 'Diagram data persisted to knowledge graph successfully',
       nodesAdded,
       relationshipsAdded
     });
   } catch (error) {
-    console.error('Error persisting to knowledge graph:', error);
-    res.status(500).json({ error: 'Failed to persist to knowledge graph' });
+    console.error('❌ Error persisting to knowledge graph:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    res.status(500).json({
+      error: 'Failed to persist to knowledge graph',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
