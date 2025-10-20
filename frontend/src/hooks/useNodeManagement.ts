@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { Node, Edge } from 'reactflow';
-import { DiagramEdge, NodeData, GhostState, GhostSuggestion } from '../types';
+import { DiagramEdge, NodeData } from '../types';
 
 interface UseNodeManagementProps {
   nodes: Node[];

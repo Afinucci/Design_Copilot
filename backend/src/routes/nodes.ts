@@ -2,9 +2,22 @@ import { Router } from 'express';
 import { FunctionalAreaModel } from '../models/FunctionalArea';
 import { SpatialRelationshipModel } from '../models/SpatialRelationship';
 import Neo4jService from '../config/database';
-import { GhostSuggestion, GhostRelationship, NodeCategory } from '../types';
+import { NodeCategory } from '../types';
 import { StaticNodeTemplatesService } from '../services/staticNodeTemplatesService';
-import { GhostSuggestionsService } from '../services/ghostSuggestions';
+
+// Temporary placeholder types for legacy ghost code (to be removed)
+interface GhostRelationship {
+  type: string;
+  flowType?: string;
+}
+interface GhostSuggestion {
+  id: string;
+  name: string;
+  [key: string]: any;
+}
+class GhostSuggestionsService {
+  async getGhostSuggestions(...args: any[]): Promise<GhostSuggestion[]> { return []; }
+}
 
 const router = Router();
 const functionalAreaModel = new FunctionalAreaModel();

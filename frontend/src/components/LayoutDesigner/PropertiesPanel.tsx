@@ -17,6 +17,7 @@ import {
   AccordionDetails,
   Alert,
   Tooltip,
+  Autocomplete,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -24,9 +25,11 @@ import {
   ContentCopy as CopyIcon,
   Delete as DeleteIcon,
   Colorize as ColorIcon,
+  AccountTree as GraphIcon,
 } from '@mui/icons-material';
 import { ShapeType, NodeCategory } from '../../types';
 import { Connection } from './types';
+import apiService from '../../services/api';
 
 export interface ShapeProperties {
   id: string;
@@ -66,6 +69,10 @@ export interface ShapeProperties {
   // Compliance
   isCompliant: boolean;
   complianceIssues: string[];
+
+  // Neo4j Knowledge Graph Integration
+  assignedNodeName?: string; // Name of the assigned Neo4j functional area
+  assignedNodeId?: string; // ID of the assigned Neo4j node
 
   // Custom Properties
   customProperties: Record<string, any>;
@@ -123,6 +130,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   // Local state for form inputs
   const [localProperties, setLocalProperties] = useState<ShapeProperties | null>(null);
 
+  // State for Neo4j functional areas
+  const [functionalAreas, setFunctionalAreas] = useState<Array<{ name: string; id: string; category: string }>>([]);
+
   // Update local state when selected shape changes
   useEffect(() => {
     if (selectedShape) {
@@ -131,6 +141,24 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       setLocalProperties(null);
     }
   }, [selectedShape]);
+
+  // Fetch Neo4j functional areas on component mount
+  useEffect(() => {
+    const fetchFunctionalAreas = async () => {
+      try {
+        const templates = await apiService.getNodeTemplates();
+        const areas = templates.map(t => ({
+          name: t.name,
+          id: t.id,
+          category: t.category
+        }));
+        setFunctionalAreas(areas);
+      } catch (error) {
+        console.error('Failed to fetch functional areas:', error);
+      }
+    };
+    fetchFunctionalAreas();
+  }, []);
 
   // Handle property updates
   const handlePropertyUpdate = (property: keyof ShapeProperties, value: any) => {
@@ -648,6 +676,68 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   />
                 </Box>
               </Box>
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+
+        {/* Knowledge Graph Integration */}
+        <Accordion
+          expanded={expandedSections.includes('knowledgeGraph')}
+          onChange={() => toggleSection('knowledgeGraph')}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="subtitle1" fontWeight="medium" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <GraphIcon /> Knowledge Graph
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
+                Assign a Neo4j functional area to enable intelligent suggestions for compatible adjacent rooms
+              </Alert>
+
+              <Autocomplete
+                size="small"
+                options={functionalAreas}
+                getOptionLabel={(option) => option.name}
+                groupBy={(option) => option.category}
+                value={functionalAreas.find(a => a.name === localProperties?.assignedNodeName) || null}
+                onChange={(_, newValue) => {
+                  handlePropertyUpdate('assignedNodeName', newValue?.name || undefined);
+                  handlePropertyUpdate('assignedNodeId', newValue?.id || undefined);
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Assigned Functional Area"
+                    placeholder="Search functional areas..."
+                    helperText="Select a Neo4j node to enable relationship-based suggestions"
+                  />
+                )}
+                renderOption={(props, option) => (
+                  <li {...props}>
+                    <Box>
+                      <Typography variant="body2">{option.name}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {option.category}
+                      </Typography>
+                    </Box>
+                  </li>
+                )}
+              />
+
+              {localProperties?.assignedNodeName && (
+                <Chip
+                  icon={<GraphIcon />}
+                  label={`Assigned: ${localProperties.assignedNodeName}`}
+                  onDelete={() => {
+                    handlePropertyUpdate('assignedNodeName', undefined);
+                    handlePropertyUpdate('assignedNodeId', undefined);
+                  }}
+                  color="primary"
+                  variant="outlined"
+                />
+              )}
             </Box>
           </AccordionDetails>
         </Accordion>

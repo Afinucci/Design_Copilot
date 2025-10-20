@@ -1,5 +1,5 @@
 import { SpatialRelationship, NodeCategory } from '../types';
-import { getNodeNameVariations } from './ghostSuggestions';
+import { getNodeNameVariations } from '../utils/nodeNameUtils';
 import { StaticNodeTemplatesService } from './staticNodeTemplatesService';
 import { 
   getTemplateById,

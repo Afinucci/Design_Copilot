@@ -1,5 +1,5 @@
 import Neo4jService from '../config/database';
-import { getNodeNameVariations } from './ghostSuggestions';
+import { getNodeNameVariations } from '../utils/nodeNameUtils';
 
 export interface Neo4jDebugInfo {
   connectionStatus: 'connected' | 'disconnected' | 'error';

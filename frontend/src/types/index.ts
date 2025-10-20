@@ -317,48 +317,6 @@ export interface GroupingState {
   groups: NodeGroup[];
 }
 
-export interface GhostRelationship {
-  id: string;
-  type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW' | 'WORKFLOW_SUGGESTION';
-  fromNodeId: string;
-  toNodeId: string;
-  confidence: number;
-  reason: string;
-  priority: number;
-  flowDirection?: 'bidirectional' | 'unidirectional';
-  flowType?: 'raw_material' | 'finished_product' | 'waste' | 'personnel' | 'equipment';
-  doorType?: string;
-  minDistance?: number;
-  maxDistance?: number;
-}
-
-export interface GhostSuggestion {
-  id: string;
-  sourceNodeId: string;
-  sourceNodeName: string;
-  sourceNodeCategory: string;
-  sourceNodeCleanroomClass?: string;
-  category: string;
-  name: string;
-  cleanroomClass?: string;
-  suggestedPosition: { x: number; y: number };
-  confidence: number;
-  reason: string;
-  priority: number;
-  relationships: GhostRelationship[];
-}
-
-export interface GhostState {
-  suggestions: GhostSuggestion[];
-  isLoading: boolean;
-  showGhosts: boolean;
-  triggerNode: any | null;
-  isVisible?: boolean;
-  confidenceThreshold?: number;
-  lastUpdated?: Date | null;
-  triggerNodeId?: string | null;
-}
-
 // Utility functions for node ID management
 export const NodeIdUtils = {
   /**

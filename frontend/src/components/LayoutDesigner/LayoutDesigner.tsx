@@ -6,6 +6,7 @@ import DrawingTools from './DrawingTools';
 import PropertiesPanel, { ShapeProperties } from './PropertiesPanel';
 import ValidationOverlay, { ValidationResult } from './ValidationOverlay';
 import ConnectionRenderer from './ConnectionRenderer';
+import SuggestionSidebar from './SuggestionSidebar';
 import { ShapeType, NodeCategory } from '../../types';
 import {
   DrawingMode,
@@ -18,6 +19,7 @@ import { DoorConnection, DoorFlowType, DoorFlowDirection } from '../../types';
 import DoorConnectionRenderer from '../DoorConnectionRenderer';
 import DoorConnectionDialog from '../DoorConnectionDialog';
 import DoorConnectionEditDialog from '../DoorConnectionEditDialog';
+import { useSuggestions } from '../../hooks/useSuggestions';
 
 export interface LayoutDesignerProps {
   onClose?: () => void;
@@ -864,6 +866,19 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     ? shapes.find(shape => shape.id === drawingState.selectedShapeId)
     : null;
 
+  // Initialize suggestions hook
+  const { handleSuggestionClick } = useSuggestions({
+    selectedShapeId: drawingState.selectedShapeId,
+    selectedShapeNeo4jNode: (selectedShape as any)?.assignedNodeName || null,
+    shapes,
+    onShapeCreate: useCallback((newShape: ShapeProperties) => {
+      setShapes(prev => [...prev, newShape]);
+      addToHistory([...shapes, newShape]);
+      runValidation([...shapes, newShape]);
+    }, [shapes, addToHistory, runValidation]),
+    enabled: true
+  });
+
   // Drag state for moving shapes
   const draggingRef = useRef<{
     id: string;
@@ -1485,6 +1500,47 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
           isVisible={showPropertiesPanel}
         />
       )}
+
+      {/* Suggestion Sidebar - Shows Neo4j relationship-based suggestions */}
+      {(() => {
+        const assignedNodeName = (selectedShape as any)?.assignedNodeName || null;
+        console.log('🎯 LayoutDesigner: Passing to SuggestionSidebar', {
+          selectedShape: selectedShape?.id,
+          assignedNodeName,
+          isVisible: !!selectedShape,
+          fullShape: selectedShape
+        });
+        return (
+          <SuggestionSidebar
+            selectedShapeId={drawingState.selectedShapeId}
+            selectedShapeNeo4jNode={assignedNodeName}
+            onSuggestionClick={handleSuggestionClick}
+            onAssignNode={(shapeId, nodeName, nodeId) => {
+              console.log('🎯 LayoutDesigner: Assigning node to shape', {
+                shapeId,
+                nodeName,
+                nodeId,
+                updates: {
+                  assignedNodeName: nodeName,
+                  assignedNodeId: nodeId,
+                  name: nodeName
+                }
+              });
+
+              handleShapeUpdate(shapeId, {
+                assignedNodeName: nodeName,
+                assignedNodeId: nodeId,
+                name: nodeName // Also update the shape's display name
+              });
+
+              console.log('🎯 LayoutDesigner: Shape updated, new shapes:',
+                shapes.find(s => s.id === shapeId)
+              );
+            }}
+            isVisible={!!selectedShape}
+          />
+        );
+      })()}
 
       {/* Door Connection Dialog */}
       <DoorConnectionDialog

@@ -12,6 +12,7 @@ import groupRoutes from './routes/groups';
 import relationshipRoutes from './routes/relationships';
 import knowledgeGraphRoutes from './routes/knowledgeGraph';
 import shapesRoutes from './routes/shapes';
+import suggestionsRoutes from './routes/suggestions';
 
 config();
 
@@ -61,6 +62,7 @@ app.use('/api/groups', groupRoutes);
 app.use('/api/relationships', relationshipRoutes);
 app.use('/api/knowledge-graph', knowledgeGraphRoutes);
 app.use('/api/shapes', shapesRoutes);
+app.use('/api/suggestions', suggestionsRoutes);
 
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');

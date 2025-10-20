@@ -15,29 +15,8 @@ class ApiService {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
-    
-    // Log all API requests for debugging
-    console.log('🌐 Base Request: DEBUG - Endpoint check:', {
-      endpoint,
-      includesGhostSuggestions: endpoint.includes('ghost-suggestions'),
-      url,
-      timestamp: new Date().toISOString()
-    });
 
-    if (endpoint.includes('ghost-suggestions')) {
-      console.log('🌐 Base Request: Starting fetch request:', {
-        url,
-        method: options.method || 'GET',
-        headers: options.headers,
-        hasBody: !!options.body,
-        bodyLength: options.body ? (options.body as string).length : 0,
-        timestamp: new Date().toISOString()
-      });
-    }
-    
     try {
-      console.log('🌐 Base Request: ABOUT TO EXECUTE FETCH for:', endpoint);
-      
       const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
@@ -46,54 +25,15 @@ class ApiService {
         ...options,
       });
 
-      console.log('🌐 Base Request: FETCH COMPLETED for:', endpoint, 'Status:', response.status);
-
-      if (endpoint.includes('ghost-suggestions')) {
-        console.log('🌐 Base Request: Fetch response received:', {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          ok: response.ok,
-          timestamp: new Date().toISOString()
-        });
-      }
-
       if (!response.ok) {
         const errorMsg = `API request failed: ${response.status} ${response.statusText}`;
-        if (endpoint.includes('ghost-suggestions')) {
-          console.error('🌐 Base Request: ❌ Response not ok:', errorMsg);
-        }
         throw new Error(errorMsg);
       }
 
       const data = await response.json();
-      
-      if (endpoint.includes('ghost-suggestions')) {
-        console.log('🌐 Base Request: ✅ JSON parsed successfully:', {
-          url,
-          dataKeys: Object.keys(data),
-          suggestionsLength: data.suggestions?.length,
-          timestamp: new Date().toISOString()
-        });
-      }
-
       return data;
     } catch (error) {
-      console.error('🌐 Base Request: ❌ FETCH ERROR for:', endpoint, {
-        url,
-        error: error instanceof Error ? error.message : error,
-        errorType: typeof error,
-        errorConstructor: error?.constructor?.name,
-        timestamp: new Date().toISOString()
-      });
-
-      if (endpoint.includes('ghost-suggestions')) {
-        console.error('🌐 Base Request: ❌ Ghost suggestions request failed with error:', {
-          url,
-          error: error instanceof Error ? error.message : error,
-          timestamp: new Date().toISOString()
-        });
-      }
+      console.error('🌐 API Request Error:', endpoint, error instanceof Error ? error.message : error);
       throw error;
     }
   }
@@ -293,62 +233,13 @@ class ApiService {
     return this.request('/nodes/neo4j/overview');
   }
 
-  // Guided Mode: Get suggestions based on current diagram state
-  async getGuidedSuggestions(currentNodes: any[], targetCategory: string): Promise<{ suggestions: any[] }> {
-    console.log('🌐 API Service: ❌ WRONG METHOD CALLED - getGuidedSuggestions (should be getGhostSuggestions)!');
-    return this.request<{ suggestions: any[] }>('/nodes/kg/suggestions', {
-      method: 'POST',
-      body: JSON.stringify({ currentNodes, targetCategory }),
-    });
-  }
-
-  // Enhanced Ghost Suggestions for real-time guided mode
-  async getGhostSuggestions(
-    triggerNodeId: string, 
-    triggerNodePosition: { x: number; y: number },
-    existingNodePositions: Array<{ id: string; x: number; y: number; width?: number; height?: number }>,
-    confidenceThreshold: number = 0.3,
-    triggerNodeName?: string,
-    triggerNodeCategory?: string
-  ): Promise<{ suggestions: any[] }> {
-    console.log('🌐 API Service: ✅ CORRECT METHOD CALLED - getGhostSuggestions!');
-    const requestBody = { 
-      triggerNodeId, 
-      triggerNodePosition, 
-      existingNodePositions, 
-      confidenceThreshold,
-      triggerNodeName,
-      triggerNodeCategory
-    };
-
-    console.log('🌐 API Service: Making ghost suggestions request:', {
-      url: `${this.baseURL}/nodes/kg/ghost-suggestions`,
-      method: 'POST',
-      requestBody,
-      timestamp: new Date().toISOString()
-    });
-
-    try {
-      const response = await this.request<{ suggestions: any[] }>('/nodes/kg/ghost-suggestions', {
-        method: 'POST',
-        body: JSON.stringify(requestBody),
-      });
-
-      console.log('🌐 API Service: ✅ Ghost suggestions response received:', {
-        suggestionsCount: response.suggestions?.length || 0,
-        response,
-        timestamp: new Date().toISOString()
-      });
-
-      return response;
-    } catch (error) {
-      console.error('🌐 API Service: ❌ Ghost suggestions request failed:', {
-        error,
-        requestBody,
-        timestamp: new Date().toISOString()
-      });
-      throw error;
-    }
+  // Relationship Suggestions for Layout Designer mode
+  async getRelationshipSuggestions(functionalAreaName: string): Promise<{
+    functionalArea: string;
+    suggestions: any[];
+    count: number;
+  }> {
+    return this.request(`/suggestions/relationships/${encodeURIComponent(functionalAreaName)}`);
   }
 
   // Creation Mode: Enhanced persistence with knowledge graph integration

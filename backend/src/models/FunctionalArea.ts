@@ -356,12 +356,18 @@ export class FunctionalAreaModel {
         }
         
         // MERGE relationships instead of creating duplicates
+        // Note: Cypher MERGE cannot match on relationship properties directly
+        // We need to match by type and then use WHERE clause for the id
         for (const rel of diagramData.relationships) {
+          // Sanitize relationship type (Neo4j relationship types cannot have spaces or special chars)
+          const sanitizedType = (rel.type || 'ADJACENT_TO').replace(/[^A-Z_]/g, '_');
+
           await tx.run(
             `MATCH (from:FunctionalArea {id: $fromId})
              MATCH (to:FunctionalArea {id: $toId})
-             MERGE (from)-[r:${rel.type} {id: $relId}]->(to)
+             MERGE (from)-[r:${sanitizedType}]->(to)
              ON CREATE SET
+               r.id = $relId,
                r.priority = $priority,
                r.reason = $reason,
                r.doorType = $doorType,
@@ -370,6 +376,7 @@ export class FunctionalAreaModel {
                r.createdAt = datetime(),
                r.updatedAt = datetime()
              ON MATCH SET
+               r.id = $relId,
                r.priority = $priority,
                r.reason = $reason,
                r.doorType = $doorType,
