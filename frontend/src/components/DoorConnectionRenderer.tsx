@@ -153,18 +153,24 @@ export const DoorConnectionRenderer: React.FC<DoorConnectionRendererProps> = ({
         const from = connection.fromShape;
         const to = connection.toShape;
 
-        // Use the actual midpoint between the two edge points (which are on the shared edge)
-        const edgeMidX = (from.x + to.x) / 2;
-        const edgeMidY = (from.y + to.y) / 2;
-
-        // Calculate the angle of the shared edge itself using the edge endpoints
-        let edgeAngle = 0;
+        // CRITICAL: Use the actual edge points to determine the correct position
+        // edgeStartPoint and edgeEndPoint define the shared edge between shapes
+        let edgeMidX, edgeMidY, edgeAngle;
+        
         if (connection.edgeStartPoint && connection.edgeEndPoint) {
+          // Calculate midpoint of the actual shared edge
+          edgeMidX = (connection.edgeStartPoint.x + connection.edgeEndPoint.x) / 2;
+          edgeMidY = (connection.edgeStartPoint.y + connection.edgeEndPoint.y) / 2;
+          
+          // Calculate angle of the shared edge
           const dx = connection.edgeEndPoint.x - connection.edgeStartPoint.x;
           const dy = connection.edgeEndPoint.y - connection.edgeStartPoint.y;
           edgeAngle = Math.atan2(dy, dx);
         } else {
-          // Fallback: calculate from from/to points
+          // Fallback: use stored connection points (old behavior)
+          edgeMidX = (from.x + to.x) / 2;
+          edgeMidY = (from.y + to.y) / 2;
+          
           const dx = to.x - from.x;
           const dy = to.y - from.y;
           edgeAngle = Math.atan2(dy, dx);
