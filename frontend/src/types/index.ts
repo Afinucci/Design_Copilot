@@ -4,6 +4,7 @@ import type { KnowledgeGraphNode, KnowledgeGraphRelationship } from '../../../sh
 // Door connection types (defined locally for frontend build compatibility)
 export type DoorFlowType = 'material' | 'personnel' | 'waste';
 export type DoorFlowDirection = 'unidirectional' | 'bidirectional';
+export type UnidirectionalFlowDirection = 'fromFirstToSecond' | 'fromSecondToFirst';
 
 export interface DoorConnectionPoint {
   shapeId: string;
@@ -19,6 +20,7 @@ export interface DoorConnection {
   toShape: DoorConnectionPoint;
   flowType: DoorFlowType;
   flowDirection: DoorFlowDirection;
+  unidirectionalDirection?: UnidirectionalFlowDirection; // Only used when flowDirection is 'unidirectional'
   edgeStartPoint?: { x: number; y: number }; // Start of shared edge
   edgeEndPoint?: { x: number; y: number }; // End of shared edge
   createdAt?: Date;

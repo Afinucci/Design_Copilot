@@ -29,7 +29,8 @@ export const DoorConnectionRenderer: React.FC<DoorConnectionRendererProps> = ({
     edgePoint: { x: number; y: number },
     edgeAngle: number,
     color: string,
-    isBidirectional: boolean
+    isBidirectional: boolean,
+    reverseDirection: boolean = false
   ) => {
     // Arrow should point PERPENDICULAR to the edge (through the doorway)
     // edgeAngle is the angle of the edge itself
@@ -104,7 +105,8 @@ export const DoorConnectionRenderer: React.FC<DoorConnectionRendererProps> = ({
       );
     } else {
       // Single arrow perpendicular to edge
-      const arrowAngle = perpendicularAngle;
+      // If reverseDirection is true, flip the arrow 180 degrees
+      const arrowAngle = reverseDirection ? perpendicularAngle + Math.PI : perpendicularAngle;
       const arrowStartX = edgePoint.x - (arrowLength / 2) * Math.cos(arrowAngle);
       const arrowStartY = edgePoint.y - (arrowLength / 2) * Math.sin(arrowAngle);
       const arrowEndX = edgePoint.x + (arrowLength / 2) * Math.cos(arrowAngle);
@@ -196,7 +198,8 @@ export const DoorConnectionRenderer: React.FC<DoorConnectionRendererProps> = ({
               { x: edgeMidX, y: edgeMidY },
               edgeAngle,
               color,
-              connection.flowDirection === 'bidirectional'
+              connection.flowDirection === 'bidirectional',
+              connection.flowDirection === 'unidirectional' && connection.unidirectionalDirection === 'fromSecondToFirst'
             )}
           </g>
         );

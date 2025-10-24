@@ -315,7 +315,8 @@ const DoorPlacementOverlay: React.FC<DoorPlacementOverlayProps> = ({
               position,
               sharedWall.normalVector,
               door.flowDirection,
-              flowColor
+              flowColor,
+              door.flowDirection === 'unidirectional' && door.unidirectionalDirection === 'fromSecondToFirst'
             )}
 
             {/* Selection indicator */}
@@ -377,7 +378,8 @@ function renderFlowArrow(
   position: { x: number; y: number },
   normalVector: { x: number; y: number },
   flowDirection: 'unidirectional' | 'bidirectional',
-  color: string
+  color: string,
+  reverseDirection: boolean = false
 ): React.ReactElement {
   const arrowLength = 25;
   const arrowHeadSize = 8;
@@ -407,14 +409,14 @@ function renderFlowArrow(
       </g>
     );
   } else {
-    // Single arrow
+    // Single arrow - direction controlled by reverseDirection
     return renderSingleArrow(
       position,
       normalVector,
       arrowLength,
       arrowHeadSize,
       color,
-      1
+      reverseDirection ? -1 : 1
     );
   }
 }

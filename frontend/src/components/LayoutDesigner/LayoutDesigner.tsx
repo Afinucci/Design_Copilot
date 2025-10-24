@@ -557,9 +557,9 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   }, []);
 
   // Door connection update/delete handlers
-  const handleDoorConnectionUpdate = useCallback((id: string, flowType: DoorFlowType, flowDirection: DoorFlowDirection) => {
+  const handleDoorConnectionUpdate = useCallback((id: string, flowType: DoorFlowType, flowDirection: DoorFlowDirection, unidirectionalDirection?: 'fromFirstToSecond' | 'fromSecondToFirst') => {
     setDoorConnections(prev => prev.map(conn =>
-      conn.id === id ? { ...conn, flowType, flowDirection, updatedAt: new Date() } : conn
+      conn.id === id ? { ...conn, flowType, flowDirection, unidirectionalDirection, updatedAt: new Date() } : conn
     ));
     setSelectedDoorConnectionId(null);
   }, []);
@@ -576,7 +576,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     setShowDoorConfigDialog(true);
   }, []);
 
-  const handleDoorConfigConfirm = useCallback((flowType: DoorFlowType, flowDirection: DoorFlowDirection) => {
+  const handleDoorConfigConfirm = useCallback((flowType: DoorFlowType, flowDirection: DoorFlowDirection, unidirectionalDirection?: 'fromFirstToSecond' | 'fromSecondToFirst') => {
     if (!pendingDoorPlacement) return;
 
     const sharedWall = sharedWalls.find(w => w.id === pendingDoorPlacement.wallId);
@@ -587,7 +587,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       // Update existing door
       setDoorPlacements(prev => prev.map(door =>
         door.id === selectedDoorPlacementId
-          ? { ...door, flowType, flowDirection }
+          ? { ...door, flowType, flowDirection, unidirectionalDirection }
           : door
       ));
       setSelectedDoorPlacementId(null);
@@ -603,6 +603,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         width: 40, // Default door width in pixels
         flowType,
         flowDirection,
+        unidirectionalDirection,
       };
 
       setDoorPlacements(prev => [...prev, newDoor]);
@@ -693,7 +694,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     }
   }, [drawingMode, doorConnectionDrawing, canvasSettings.zoom]);
 
-  const handleDoorDialogConfirm = useCallback((flowType: DoorFlowType, flowDirection: DoorFlowDirection) => {
+  const handleDoorDialogConfirm = useCallback((flowType: DoorFlowType, flowDirection: DoorFlowDirection, unidirectionalDirection?: 'fromFirstToSecond' | 'fromSecondToFirst') => {
     if (!doorConnectionDrawing.firstShapeId || !doorConnectionDrawing.secondShapeId || !doorConnectionDrawing.edgePoint) {
       return;
     }
@@ -819,6 +820,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       },
       flowType,
       flowDirection,
+      unidirectionalDirection,
       edgeStartPoint: sharedEdge.point1,
       edgeEndPoint: sharedEdge.point2,
       createdAt: new Date(),

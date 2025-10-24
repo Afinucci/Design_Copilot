@@ -41,6 +41,7 @@ export interface DoorPlacement {
   width: number; // Door width
   flowType: 'material' | 'personnel' | 'waste';
   flowDirection: 'unidirectional' | 'bidirectional';
+  unidirectionalDirection?: 'fromFirstToSecond' | 'fromSecondToFirst'; // Arrow direction for unidirectional
 }
 
 /**

@@ -20,16 +20,18 @@ import {
   Person as PersonnelIcon,
   Delete as WasteIcon,
   ArrowForward as UnidirectionalIcon,
+  ArrowForward as ArrowForwardIcon,
+  ArrowBack as ArrowBackIcon,
   SyncAlt as BidirectionalIcon,
   Close as CloseIcon
 } from '@mui/icons-material';
-import { DoorFlowType, DoorFlowDirection, DoorConnection } from '../types';
+import { DoorFlowType, DoorFlowDirection, DoorConnection, UnidirectionalFlowDirection } from '../types';
 
 interface DoorConnectionEditDialogProps {
   open: boolean;
   connection: DoorConnection | null;
   onClose: () => void;
-  onUpdate: (id: string, flowType: DoorFlowType, flowDirection: DoorFlowDirection) => void;
+  onUpdate: (id: string, flowType: DoorFlowType, flowDirection: DoorFlowDirection, unidirectionalDirection?: UnidirectionalFlowDirection) => void;
   onDelete: (id: string) => void;
 }
 
@@ -45,18 +47,20 @@ export const DoorConnectionEditDialog: React.FC<DoorConnectionEditDialogProps> =
 }) => {
   const [flowType, setFlowType] = useState<DoorFlowType>('material');
   const [flowDirection, setFlowDirection] = useState<DoorFlowDirection>('unidirectional');
+  const [unidirectionalDirection, setUnidirectionalDirection] = useState<UnidirectionalFlowDirection>('fromFirstToSecond');
 
   // Update state when connection changes
   useEffect(() => {
     if (connection) {
       setFlowType(connection.flowType);
       setFlowDirection(connection.flowDirection);
+      setUnidirectionalDirection(connection.unidirectionalDirection || 'fromFirstToSecond');
     }
   }, [connection]);
 
   const handleUpdate = () => {
     if (connection) {
-      onUpdate(connection.id, flowType, flowDirection);
+      onUpdate(connection.id, flowType, flowDirection, flowDirection === 'unidirectional' ? unidirectionalDirection : undefined);
     }
     onClose();
   };
@@ -190,6 +194,48 @@ export const DoorConnectionEditDialog: React.FC<DoorConnectionEditDialogProps> =
               />
             </RadioGroup>
           </FormControl>
+
+          {/* Arrow Direction Selection (only for unidirectional) */}
+          {flowDirection === 'unidirectional' && connection && (
+            <FormControl component="fieldset">
+              <FormLabel component="legend">
+                <Typography variant="subtitle2" gutterBottom>
+                  Arrow Direction
+                </Typography>
+              </FormLabel>
+              <RadioGroup
+                value={unidirectionalDirection}
+                onChange={(e) => setUnidirectionalDirection(e.target.value as UnidirectionalFlowDirection)}
+              >
+                <FormControlLabel
+                  value="fromFirstToSecond"
+                  control={<Radio />}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <ArrowForwardIcon color="primary" />
+                      <Typography>From</Typography>
+                      <Chip label={connection.fromShape.shapeId} size="small" color="primary" variant="outlined" />
+                      <Typography>to</Typography>
+                      <Chip label={connection.toShape.shapeId} size="small" color="secondary" variant="outlined" />
+                    </Box>
+                  }
+                />
+                <FormControlLabel
+                  value="fromSecondToFirst"
+                  control={<Radio />}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <ArrowBackIcon color="secondary" />
+                      <Typography>From</Typography>
+                      <Chip label={connection.toShape.shapeId} size="small" color="secondary" variant="outlined" />
+                      <Typography>to</Typography>
+                      <Chip label={connection.fromShape.shapeId} size="small" color="primary" variant="outlined" />
+                    </Box>
+                  }
+                />
+              </RadioGroup>
+            </FormControl>
+          )}
         </Box>
       </DialogContent>
       <DialogActions>

@@ -20,14 +20,15 @@ import {
   Delete as WasteIcon,
   ArrowForward as UnidirectionalIcon,
   ArrowForward as ArrowForwardIcon,
+  ArrowBack as ArrowBackIcon,
   SyncAlt as BidirectionalIcon
 } from '@mui/icons-material';
-import { DoorFlowType, DoorFlowDirection } from '../types';
+import { DoorFlowType, DoorFlowDirection, UnidirectionalFlowDirection } from '../types';
 
 interface DoorConnectionDialogProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: (flowType: DoorFlowType, flowDirection: DoorFlowDirection) => void;
+  onConfirm: (flowType: DoorFlowType, flowDirection: DoorFlowDirection, unidirectionalDirection?: UnidirectionalFlowDirection) => void;
   fromShapeId?: string;
   toShapeId?: string;
 }
@@ -44,12 +45,14 @@ export const DoorConnectionDialog: React.FC<DoorConnectionDialogProps> = ({
 }) => {
   const [flowType, setFlowType] = useState<DoorFlowType>('material');
   const [flowDirection, setFlowDirection] = useState<DoorFlowDirection>('unidirectional');
+  const [unidirectionalDirection, setUnidirectionalDirection] = useState<UnidirectionalFlowDirection>('fromFirstToSecond');
 
   const handleConfirm = () => {
-    onConfirm(flowType, flowDirection);
+    onConfirm(flowType, flowDirection, flowDirection === 'unidirectional' ? unidirectionalDirection : undefined);
     // Reset to defaults
     setFlowType('material');
     setFlowDirection('unidirectional');
+    setUnidirectionalDirection('fromFirstToSecond');
   };
 
   const handleCancel = () => {
@@ -57,6 +60,7 @@ export const DoorConnectionDialog: React.FC<DoorConnectionDialogProps> = ({
     // Reset to defaults
     setFlowType('material');
     setFlowDirection('unidirectional');
+    setUnidirectionalDirection('fromFirstToSecond');
   };
 
   const getFlowTypeColor = (type: DoorFlowType): string => {
@@ -160,7 +164,7 @@ export const DoorConnectionDialog: React.FC<DoorConnectionDialogProps> = ({
                     <UnidirectionalIcon />
                     <Typography>Unidirectional</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      (From first shape to second shape)
+                      (One-way flow)
                     </Typography>
                   </Box>
                 }
@@ -180,6 +184,48 @@ export const DoorConnectionDialog: React.FC<DoorConnectionDialogProps> = ({
               />
             </RadioGroup>
           </FormControl>
+
+          {/* Arrow Direction Selection (only for unidirectional) */}
+          {flowDirection === 'unidirectional' && fromShapeId && toShapeId && (
+            <FormControl component="fieldset">
+              <FormLabel component="legend">
+                <Typography variant="subtitle2" gutterBottom>
+                  Arrow Direction
+                </Typography>
+              </FormLabel>
+              <RadioGroup
+                value={unidirectionalDirection}
+                onChange={(e) => setUnidirectionalDirection(e.target.value as UnidirectionalFlowDirection)}
+              >
+                <FormControlLabel
+                  value="fromFirstToSecond"
+                  control={<Radio />}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <ArrowForwardIcon color="primary" />
+                      <Typography>From</Typography>
+                      <Chip label={fromShapeId} size="small" color="primary" variant="outlined" />
+                      <Typography>to</Typography>
+                      <Chip label={toShapeId} size="small" color="secondary" variant="outlined" />
+                    </Box>
+                  }
+                />
+                <FormControlLabel
+                  value="fromSecondToFirst"
+                  control={<Radio />}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <ArrowBackIcon color="secondary" />
+                      <Typography>From</Typography>
+                      <Chip label={toShapeId} size="small" color="secondary" variant="outlined" />
+                      <Typography>to</Typography>
+                      <Chip label={fromShapeId} size="small" color="primary" variant="outlined" />
+                    </Box>
+                  }
+                />
+              </RadioGroup>
+            </FormControl>
+          )}
         </Box>
       </DialogContent>
       <DialogActions>
