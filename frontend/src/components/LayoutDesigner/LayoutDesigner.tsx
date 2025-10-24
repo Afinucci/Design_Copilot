@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Box, Paper, Typography, Button } from '@mui/material';
 import DrawingCanvas from './DrawingCanvas';
 import ShapeLibrary, { PharmaceuticalShapeTemplate } from './ShapeLibrary';
@@ -11,7 +11,6 @@ import { ShapeType, NodeCategory } from '../../types';
 import {
   DrawingMode,
   Connection,
-  ConnectionDrawingState,
   DoorConnectionDrawingState,
   areShapesAdjacent
 } from './types';
@@ -20,6 +19,8 @@ import DoorConnectionRenderer from '../DoorConnectionRenderer';
 import DoorConnectionDialog from '../DoorConnectionDialog';
 import DoorConnectionEditDialog from '../DoorConnectionEditDialog';
 import { useSuggestions } from '../../hooks/useSuggestions';
+import DoorPlacementOverlay from './DoorPlacementOverlay';
+import { findAllSharedWalls, DoorPlacement } from '../../utils/wallDetection';
 
 export interface LayoutDesignerProps {
   onClose?: () => void;
@@ -204,17 +205,23 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     hoveredShapeId: null,
   });
   const [drawingMode, setDrawingMode] = useState<DrawingMode>('select');
-  const [connectionDrawing, setConnectionDrawing] = useState<ConnectionDrawingState>({
-    isDrawing: false,
-    fromShapeId: null,
-    hoveredShapeId: null,
-  });
   const [doorConnectionDrawing, setDoorConnectionDrawing] = useState<DoorConnectionDrawingState>({
     step: 'idle',
     firstShapeId: null,
     secondShapeId: null,
     edgePoint: null,
   });
+  
+  // New door placement state (Hypar-style)
+  const [doorPlacements, setDoorPlacements] = useState<DoorPlacement[]>([]);
+  const [selectedDoorPlacementId, setSelectedDoorPlacementId] = useState<string | null>(null);
+  const [showDoorConfigDialog, setShowDoorConfigDialog] = useState(false);
+  const [pendingDoorPlacement, setPendingDoorPlacement] = useState<{
+    wallId: string;
+    position: { x: number; y: number };
+    normalizedPosition: number;
+  } | null>(null);
+  
   const [showDoorDialog, setShowDoorDialog] = useState(false);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [selectedDoorConnectionId, setSelectedDoorConnectionId] = useState<string | null>(null);
@@ -292,6 +299,11 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     issues: [],
     summary: { errors: 0, warnings: 0, infos: 0 },
   });
+
+  // Compute shared walls between shapes (for door placement)
+  const sharedWalls = useMemo(() => {
+    return findAllSharedWalls(shapes);
+  }, [shapes]);
 
   // Generate unique ID for new shapes
   const generateShapeId = useCallback(() => {
@@ -533,57 +545,6 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   }, [drawingState.selectedShapeId, shapes, handleShapeUpdate]);
 
   // Connection handlers
-  const handleShapeClickForConnection = useCallback((shapeId: string) => {
-    if (drawingMode !== 'connection') return;
-
-    const clickedShape = shapes.find(s => s.id === shapeId);
-    if (!clickedShape) return;
-
-    if (!connectionDrawing.isDrawing) {
-      // Start connection from this shape
-      setConnectionDrawing({
-        isDrawing: true,
-        fromShapeId: shapeId,
-        hoveredShapeId: null,
-      });
-    } else if (connectionDrawing.fromShapeId === shapeId) {
-      // Clicked same shape - cancel
-      setConnectionDrawing({
-        isDrawing: false,
-        fromShapeId: null,
-        hoveredShapeId: null,
-      });
-    } else {
-      // Clicked different shape - check if adjacent and create connection
-      const fromShape = shapes.find(s => s.id === connectionDrawing.fromShapeId);
-      if (!fromShape) return;
-
-      if (areShapesAdjacent(fromShape, clickedShape)) {
-        // Create connection with default values
-        // fromShapeId is guaranteed to be non-null here because we checked fromShape exists above
-        const fromId = connectionDrawing.fromShapeId!;
-        const newConnection: Connection = {
-          id: `connection-${Date.now()}`,
-          fromShapeId: fromId,
-          toShapeId: shapeId,
-          type: 'personnel', // Default to personnel
-          direction: 'bidirectional', // Default to bidirectional
-          createdAt: new Date(),
-        };
-        setConnections(prev => [...prev, newConnection]);
-      } else {
-        alert('Shapes must share a common edge to create a connection!');
-      }
-
-      // Reset connection drawing state
-      setConnectionDrawing({
-        isDrawing: false,
-        fromShapeId: null,
-        hoveredShapeId: null,
-      });
-    }
-  }, [drawingMode, connectionDrawing, shapes]);
-
   const handleConnectionUpdate = useCallback((id: string, updates: Partial<Connection>) => {
     setConnections(prev => prev.map(conn =>
       conn.id === id ? { ...conn, ...updates } : conn
@@ -607,6 +568,71 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     setDoorConnections(prev => prev.filter(conn => conn.id !== id));
     setSelectedDoorConnectionId(null);
   }, []);
+
+  // New door placement handlers (Hypar-style)
+  const handleDoorPlace = useCallback((wallId: string, position: { x: number; y: number }, normalizedPosition: number) => {
+    // Store pending placement and show config dialog
+    setPendingDoorPlacement({ wallId, position, normalizedPosition });
+    setShowDoorConfigDialog(true);
+  }, []);
+
+  const handleDoorConfigConfirm = useCallback((flowType: DoorFlowType, flowDirection: DoorFlowDirection) => {
+    if (!pendingDoorPlacement) return;
+
+    const sharedWall = sharedWalls.find(w => w.id === pendingDoorPlacement.wallId);
+    if (!sharedWall) return;
+
+    // Check if we're editing an existing door
+    if (selectedDoorPlacementId) {
+      // Update existing door
+      setDoorPlacements(prev => prev.map(door =>
+        door.id === selectedDoorPlacementId
+          ? { ...door, flowType, flowDirection }
+          : door
+      ));
+      setSelectedDoorPlacementId(null);
+    } else {
+      // Create new door
+      const newDoor: DoorPlacement = {
+        id: `door-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        sharedWallId: pendingDoorPlacement.wallId,
+        shape1Id: sharedWall.shape1Id,
+        shape2Id: sharedWall.shape2Id,
+        position: pendingDoorPlacement.position,
+        normalizedPosition: pendingDoorPlacement.normalizedPosition,
+        width: 40, // Default door width in pixels
+        flowType,
+        flowDirection,
+      };
+
+      setDoorPlacements(prev => [...prev, newDoor]);
+    }
+
+    setPendingDoorPlacement(null);
+    setShowDoorConfigDialog(false);
+  }, [pendingDoorPlacement, sharedWalls, selectedDoorPlacementId]);
+
+  const handleDoorMove = useCallback((doorId: string, position: { x: number; y: number }, normalizedPosition: number) => {
+    setDoorPlacements(prev => prev.map(door =>
+      door.id === doorId
+        ? { ...door, position, normalizedPosition }
+        : door
+    ));
+  }, []);
+
+  const handleDoorClick = useCallback((doorId: string) => {
+    console.log('🚪 Door clicked:', doorId);
+    setSelectedDoorPlacementId(doorId);
+    // Also deselect any selected shape to avoid conflicting panels
+    setDrawingState(prev => ({ ...prev, selectedShapeId: null }));
+    setShowPropertiesPanel(false);
+  }, []);
+
+  const handleDoorPlacementDelete = useCallback(() => {
+    if (!selectedDoorPlacementId) return;
+    setDoorPlacements(prev => prev.filter(d => d.id !== selectedDoorPlacementId));
+    setSelectedDoorPlacementId(null);
+  }, [selectedDoorPlacementId]);
 
   // Door connection handlers (3-step process)
   const handleDoorConnectionClick = useCallback((event: React.MouseEvent, shapeId?: string) => {
@@ -1285,6 +1311,30 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
               onConnectionClick={(id) => setSelectedDoorConnectionId(id)}
             />
 
+            {/* Door Placement Overlay (Hypar-style) */}
+            <svg
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: canvasSettings.width,
+                height: canvasSettings.height,
+                pointerEvents: 'none', // Individual elements control their own pointer events
+                zIndex: 10,
+              }}
+            >
+              <DoorPlacementOverlay
+                sharedWalls={sharedWalls}
+                shapes={shapes}
+                doorPlacements={doorPlacements}
+                isDoorMode={drawingMode === 'door'}
+                onDoorPlace={handleDoorPlace}
+                onDoorMove={handleDoorMove}
+                onDoorClick={handleDoorClick}
+                selectedDoorId={selectedDoorPlacementId}
+              />
+            </svg>
+
             {/* Shape Overlays */}
             <Box
               sx={{
@@ -1341,9 +1391,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                         }),
                   }}
                   onClick={(e) => {
-                    if (drawingMode === 'connection') {
-                      handleShapeClickForConnection(shape.id);
-                    } else if (drawingMode === 'door') {
+                    if (drawingMode === 'door') {
                       handleDoorConnectionClick(e, shape.id);
                     } else {
                       setDrawingState(prev => ({
@@ -1354,9 +1402,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                     }
                   }}
                   onMouseDown={(e) => {
-                    if (drawingMode !== 'connection') {
-                      startShapeDrag(e, shape);
-                    }
+                    startShapeDrag(e, shape);
                   }}
                 >
                   {/* SVG for polygonal shapes */}
@@ -1501,6 +1547,122 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         />
       )}
 
+      {/* Door Properties Panel - Shows when a door is selected */}
+      {selectedDoorPlacementId && (
+        <Paper
+          elevation={8}
+          sx={{
+            position: 'fixed',
+            right: 20,
+            top: 100,
+            width: 340,
+            maxHeight: '70vh',
+            overflow: 'auto',
+            p: 3,
+            zIndex: 1200,
+            border: '2px solid',
+            borderColor: 'primary.main',
+            backgroundColor: 'background.paper',
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6" color="primary">
+              🚪 Door Properties
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setSelectedDoorPlacementId(null)}
+            >
+              Close
+            </Button>
+          </Box>
+          
+          {(() => {
+            const selectedDoor = doorPlacements.find(d => d.id === selectedDoorPlacementId);
+            if (!selectedDoor) return null;
+
+            const flowTypeColor = selectedDoor.flowType === 'material' 
+              ? '#2196F3' 
+              : selectedDoor.flowType === 'personnel' 
+              ? '#4CAF50' 
+              : '#F44336';
+
+            return (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+                <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
+                  <Typography variant="subtitle2" gutterBottom color="text.secondary">
+                    Flow Type
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 1,
+                        bgcolor: flowTypeColor,
+                      }}
+                    />
+                    <Typography variant="body1" fontWeight="bold" sx={{ textTransform: 'capitalize' }}>
+                      {selectedDoor.flowType}
+                    </Typography>
+                  </Box>
+                </Paper>
+
+                <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
+                  <Typography variant="subtitle2" gutterBottom color="text.secondary">
+                    Flow Direction
+                  </Typography>
+                  <Typography variant="body1" fontWeight="bold" sx={{ textTransform: 'capitalize' }}>
+                    {selectedDoor.flowDirection}
+                  </Typography>
+                </Paper>
+
+                <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
+                  <Typography variant="subtitle2" gutterBottom color="text.secondary">
+                    Door Width
+                  </Typography>
+                  <Typography variant="body1" fontWeight="bold">
+                    {selectedDoor.width}px
+                  </Typography>
+                </Paper>
+                
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    onClick={() => {
+                      // Open edit dialog
+                      const sharedWall = sharedWalls.find(w => w.id === selectedDoor.sharedWallId);
+                      if (sharedWall) {
+                        setPendingDoorPlacement({
+                          wallId: sharedWall.id,
+                          position: selectedDoor.position,
+                          normalizedPosition: selectedDoor.normalizedPosition,
+                        });
+                        setShowDoorConfigDialog(true);
+                      }
+                    }}
+                  >
+                    Edit Properties
+                  </Button>
+                  
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    fullWidth
+                    onClick={handleDoorPlacementDelete}
+                  >
+                    Delete Door
+                  </Button>
+                </Box>
+              </Box>
+            );
+          })()}
+        </Paper>
+      )}
+
       {/* Suggestion Sidebar - Shows Neo4j relationship-based suggestions */}
       {(() => {
         const assignedNodeName = (selectedShape as any)?.assignedNodeName || null;
@@ -1542,13 +1704,23 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         );
       })()}
 
-      {/* Door Connection Dialog */}
+      {/* Door Connection Dialog (old 3-step system) */}
       <DoorConnectionDialog
         open={showDoorDialog}
         onClose={handleDoorDialogCancel}
         onConfirm={handleDoorDialogConfirm}
         fromShapeId={doorConnectionDrawing.firstShapeId || undefined}
         toShapeId={doorConnectionDrawing.secondShapeId || undefined}
+      />
+
+      {/* Door Placement Config Dialog (new Hypar-style) */}
+      <DoorConnectionDialog
+        open={showDoorConfigDialog}
+        onClose={() => {
+          setShowDoorConfigDialog(false);
+          setPendingDoorPlacement(null);
+        }}
+        onConfirm={handleDoorConfigConfirm}
       />
 
       {/* Door Connection Edit Dialog */}

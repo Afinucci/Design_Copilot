@@ -142,7 +142,7 @@ export const DoorConnectionRenderer: React.FC<DoorConnectionRendererProps> = ({
         left: 0,
         width: '100%',
         height: '100%',
-        pointerEvents: 'none',
+        pointerEvents: 'none', // Parent doesn't intercept
         zIndex: 100
       }}
     >
@@ -171,9 +171,26 @@ export const DoorConnectionRenderer: React.FC<DoorConnectionRendererProps> = ({
         return (
           <g
             key={connection.id}
-            style={{ cursor: onConnectionClick ? 'pointer' : 'default' }}
-            onClick={() => onConnectionClick?.(connection.id)}
+            style={{ 
+              cursor: onConnectionClick ? 'pointer' : 'default',
+              pointerEvents: 'all' // Allow clicks on this group
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              console.log('🚪 Old-style door clicked:', connection.id);
+              onConnectionClick?.(connection.id);
+            }}
           >
+            {/* Invisible larger hit area for easier clicking */}
+            <circle
+              cx={edgeMidX}
+              cy={edgeMidY}
+              r={25}
+              fill="transparent"
+              stroke="transparent"
+              style={{ cursor: 'pointer' }}
+            />
+            
             {/* Flow arrow perpendicular to the shared edge, at the edge midpoint */}
             {renderArrow(
               { x: edgeMidX, y: edgeMidY },

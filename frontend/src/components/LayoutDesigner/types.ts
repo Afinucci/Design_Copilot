@@ -6,7 +6,6 @@ import { ShapeProperties } from './PropertiesPanel';
 export type DrawingMode =
   | 'select'       // Select and move shapes
   | 'shape'        // Drawing shapes
-  | 'connection'   // Drawing connections between shapes
   | 'door'         // Drawing door connections (3-step: shape1 → shape2 → edge point)
   | 'pan';         // Pan canvas
 

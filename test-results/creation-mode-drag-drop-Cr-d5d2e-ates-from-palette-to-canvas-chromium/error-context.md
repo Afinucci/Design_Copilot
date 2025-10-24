@@ -7,7 +7,7 @@
       - img [ref=e7]
       - heading "Pharmaceutical Facility Design Copilot" [level=6] [ref=e9]
       - group [ref=e10]:
-        - button "creation mode" [pressed] [ref=e11] [cursor=pointer]:
+        - button "creation mode" [active] [pressed] [ref=e11] [cursor=pointer]:
           - img [ref=e12] [cursor=pointer]
           - text: Creation
         - button "exploration mode" [ref=e14] [cursor=pointer]:
@@ -143,43 +143,31 @@
             - img [ref=e221] [cursor=pointer]
       - generic [ref=e224]: Drag to add
     - generic [ref=e226]:
-      - group "Edge Style" [ref=e228]:
-        - button "straight lines" [pressed] [ref=e229] [cursor=pointer]:
-          - img [ref=e230] [cursor=pointer]
-        - button "curved lines" [ref=e232] [cursor=pointer]:
-          - img [ref=e233] [cursor=pointer]
-      - generic [ref=e235]:
-        - generic [ref=e237]:
+      - generic [ref=e227]:
+        - button "Upload diagram to Neo4j Knowledge Graph" [disabled]:
           - generic:
             - img
-            - generic:
-              - button "🏭 Compression Production Class D" [ref=e238]:
-                - generic [ref=e239] [cursor=pointer]:
-                  - generic [ref=e248] [cursor=pointer]:
-                    - paragraph [ref=e249] [cursor=pointer]: 🏭
-                    - paragraph [ref=e250] [cursor=pointer]: Compression
-                  - generic [ref=e251] [cursor=pointer]:
-                    - generic [ref=e253] [cursor=pointer]: Production
-                    - generic [ref=e255] [cursor=pointer]: Class D
-              - button "🏭 Granulation Production Class D" [ref=e256]:
-                - generic [ref=e257] [cursor=pointer]:
-                  - generic [ref=e266] [cursor=pointer]:
-                    - paragraph [ref=e267] [cursor=pointer]: 🏭
-                    - paragraph [ref=e268] [cursor=pointer]: Granulation
-                  - generic [ref=e269] [cursor=pointer]:
-                    - generic [ref=e271] [cursor=pointer]: Production
-                    - generic [ref=e273] [cursor=pointer]: Class D
-        - generic [ref=e274]:
-          - button "zoom in" [disabled]:
+          - text: Upload to Neo4j
+      - group "Edge Style" [ref=e229]:
+        - button "straight lines" [pressed] [ref=e230] [cursor=pointer]:
+          - img [ref=e231] [cursor=pointer]
+        - button "curved lines" [ref=e233] [cursor=pointer]:
+          - img [ref=e234] [cursor=pointer]
+      - generic [ref=e236]:
+        - generic [ref=e238]:
+          - generic:
             - img
-          - button "zoom out" [ref=e275] [cursor=pointer]:
-            - img [ref=e276] [cursor=pointer]
-          - button "fit view" [ref=e278] [cursor=pointer]:
-            - img [ref=e279] [cursor=pointer]
-          - button "toggle interactivity" [ref=e281] [cursor=pointer]:
-            - img [ref=e282] [cursor=pointer]
-        - img [ref=e284]
-        - link "React Flow attribution" [ref=e287] [cursor=pointer]:
+        - generic [ref=e239]:
+          - button "zoom in" [ref=e240] [cursor=pointer]:
+            - img [ref=e241] [cursor=pointer]
+          - button "zoom out" [ref=e243] [cursor=pointer]:
+            - img [ref=e244] [cursor=pointer]
+          - button "fit view" [ref=e246] [cursor=pointer]:
+            - img [ref=e247] [cursor=pointer]
+          - button "toggle interactivity" [ref=e249] [cursor=pointer]:
+            - img [ref=e250] [cursor=pointer]
+        - img [ref=e252]
+        - link "React Flow attribution" [ref=e255] [cursor=pointer]:
           - /url: https://reactflow.dev
           - text: React Flow
 ```

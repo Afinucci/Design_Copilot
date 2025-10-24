@@ -26,7 +26,6 @@ import {
   ZoomIn as ZoomInIcon,
   ZoomOut as ZoomOutIcon,
   Settings as SettingsIcon,
-  Link as LinkIcon,
   RotateLeft as RotateLeftIcon,
   RotateRight as RotateRightIcon,
   MeetingRoom as DoorIcon,
@@ -205,42 +204,23 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
           </>
         )}
 
-        {/* Connection Mode Button */}
-        <Box display="flex" gap={0.5} flexDirection={orientation === 'vertical' ? 'column' : 'row'}>
-          <Tooltip title="Connection Mode - Create connections between adjacent shapes" arrow>
-            <IconButton
-              size="medium"
-              color={drawingMode === 'connection' ? 'primary' : 'default'}
-              onClick={() => onDrawingModeChange(drawingMode === 'connection' ? 'select' : 'connection')}
-              sx={{
-                backgroundColor: drawingMode === 'connection' ? 'primary.light' : 'transparent',
-                '&:hover': {
-                  backgroundColor: drawingMode === 'connection' ? 'primary.main' : 'action.hover',
-                },
-              }}
-              aria-label="Connection Mode"
-            >
-              <LinkIcon />
-            </IconButton>
-          </Tooltip>
-
-          <Tooltip title="Door Connection Mode - Create door connections with flow type and direction" arrow>
-            <IconButton
-              size="medium"
-              color={drawingMode === 'door' ? 'primary' : 'default'}
-              onClick={() => onDrawingModeChange(drawingMode === 'door' ? 'select' : 'door')}
-              sx={{
-                backgroundColor: drawingMode === 'door' ? 'primary.light' : 'transparent',
-                '&:hover': {
-                  backgroundColor: drawingMode === 'door' ? 'primary.main' : 'action.hover',
-                },
-              }}
-              aria-label="Door Connection Mode"
-            >
-              <DoorIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
+        {/* Door Connection Mode Button */}
+        <Tooltip title="Door Connection Mode - Create door connections with flow type and direction" arrow>
+          <IconButton
+            size="medium"
+            color={drawingMode === 'door' ? 'primary' : 'default'}
+            onClick={() => onDrawingModeChange(drawingMode === 'door' ? 'select' : 'door')}
+            sx={{
+              backgroundColor: drawingMode === 'door' ? 'primary.light' : 'transparent',
+              '&:hover': {
+                backgroundColor: drawingMode === 'door' ? 'primary.main' : 'action.hover',
+              },
+            }}
+            aria-label="Door Connection Mode"
+          >
+            <DoorIcon />
+          </IconButton>
+        </Tooltip>
 
         <Divider orientation={orientation === 'vertical' ? 'horizontal' : 'vertical'} flexItem />
 
