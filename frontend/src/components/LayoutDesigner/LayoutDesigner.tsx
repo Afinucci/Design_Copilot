@@ -19,9 +19,11 @@ import DoorConnectionRenderer from '../DoorConnectionRenderer';
 import DoorConnectionDialog from '../DoorConnectionDialog';
 import DoorConnectionEditDialog from '../DoorConnectionEditDialog';
 import { useSuggestions } from '../../hooks/useSuggestions';
+import { useDoorConnectionValidation } from '../../hooks/useDoorConnectionValidation';
 import DoorPlacementOverlay from './DoorPlacementOverlay';
 import { findAllSharedWalls, DoorPlacement } from '../../utils/wallDetection';
 import { updateDoorConnectionsEdgePoints } from '../../utils/doorConnectionUtils';
+import { Snackbar, Alert } from '@mui/material';
 
 export interface LayoutDesignerProps {
   onClose?: () => void;
@@ -226,6 +228,11 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   const [showDoorDialog, setShowDoorDialog] = useState(false);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [selectedDoorConnectionId, setSelectedDoorConnectionId] = useState<string | null>(null);
+
+  // Snackbar state for validation messages
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'warning' | 'info'>('info');
 
   // Derived state: get selected connection object from ID
   const selectedConnection = selectedConnectionId
@@ -642,6 +649,19 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     setSelectedDoorPlacementId(null);
   }, [selectedDoorPlacementId]);
 
+  // Initialize door connection validation hook
+  const {
+    shapeValidationStates,
+    validateConnection,
+    clearValidation,
+    validationMessage
+  } = useDoorConnectionValidation({
+    shapes,
+    drawingMode,
+    firstSelectedShapeId: doorConnectionDrawing.firstShapeId,
+    hoveredShapeId: drawingState.hoveredShapeId,
+  });
+
   // Door connection handlers (3-step process)
   const handleDoorConnectionClick = useCallback((event: React.MouseEvent, shapeId?: string) => {
     if (drawingMode !== 'door') return;
@@ -701,7 +721,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     }
   }, [drawingMode, doorConnectionDrawing, canvasSettings.zoom]);
 
-  const handleDoorDialogConfirm = useCallback((flowType: DoorFlowType, flowDirection: DoorFlowDirection, unidirectionalDirection?: 'fromFirstToSecond' | 'fromSecondToFirst') => {
+  const handleDoorDialogConfirm = useCallback(async (flowType: DoorFlowType, flowDirection: DoorFlowDirection, unidirectionalDirection?: 'fromFirstToSecond' | 'fromSecondToFirst') => {
     if (!doorConnectionDrawing.firstShapeId || !doorConnectionDrawing.secondShapeId || !doorConnectionDrawing.edgePoint) {
       return;
     }
@@ -713,6 +733,39 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       setShowDoorDialog(false);
       setDoorConnectionDrawing({ step: 'idle', firstShapeId: null, secondShapeId: null, edgePoint: null });
       return;
+    }
+
+    // Validate the door connection before creating it
+    const validationResult = await validateConnection(doorConnectionDrawing.firstShapeId, doorConnectionDrawing.secondShapeId);
+
+    if (validationResult) {
+      // Check if connection is allowed
+      if (!validationResult.canConnect) {
+        // Show error in snackbar
+        setSnackbarMessage(validationResult.message + (validationResult.details ? ': ' + validationResult.details : ''));
+        setSnackbarSeverity(validationResult.status === 'no-neo4j-assignment' ? 'warning' : 'error');
+        setSnackbarOpen(true);
+
+        setShowDoorDialog(false);
+        setDoorConnectionDrawing({ step: 'idle', firstShapeId: null, secondShapeId: null, edgePoint: null });
+        return;
+      }
+
+      // Check if the requested flow type is allowed
+      if (!validationResult.allowedFlowTypes.includes(flowType)) {
+        setSnackbarMessage(`${flowType} flow not allowed. Allowed: ${validationResult.allowedFlowTypes.join(', ')}`);
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+
+        setShowDoorDialog(false);
+        setDoorConnectionDrawing({ step: 'idle', firstShapeId: null, secondShapeId: null, edgePoint: null });
+        return;
+      }
+
+      // Connection is valid - show success message
+      setSnackbarMessage('Door connection created successfully!');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
     }
 
     // Find the shared edge between the two shapes
@@ -836,7 +889,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     setDoorConnections(prev => [...prev, newDoorConnection]);
     setShowDoorDialog(false);
     setDoorConnectionDrawing({ step: 'idle', firstShapeId: null, secondShapeId: null, edgePoint: null });
-  }, [doorConnectionDrawing, shapes]);
+  }, [doorConnectionDrawing, shapes, validateConnection]);
 
   const handleDoorDialogCancel = useCallback(() => {
     setShowDoorDialog(false);
@@ -1433,7 +1486,14 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                 zIndex: 2,
               }}
             >
-              {shapes.map((shape) => (
+              {shapes.map((shape) => {
+                // Get validation state for this shape (if in door mode and validating)
+                const validationState = shapeValidationStates[shape.id];
+                const isValidating = drawingMode === 'door' && doorConnectionDrawing.firstShapeId && validationState;
+                const validationColor = validationState?.color;
+                const validationBorderWidth = isValidating ? 4 : shape.borderWidth;
+
+                return (
                 <Box
                   key={shape.id}
                   data-shape-overlay="true"
@@ -1444,12 +1504,14 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                     width: shape.width,
                     height: shape.height,
                     backgroundColor:
-                      polygonRenderTypes.has(shape.shapeType)
+                      isValidating
+                        ? validationColor + '40'
+                        : polygonRenderTypes.has(shape.shapeType)
                         ? 'transparent'
                         : shape.fillColor + '40',
                     border: polygonRenderTypes.has(shape.shapeType)
-                      ? 'none'
-                      : `${shape.borderWidth}px solid ${shape.borderColor}`,
+                      ? (isValidating ? `${validationBorderWidth}px solid ${validationColor}` : 'none')
+                      : `${isValidating ? validationBorderWidth : shape.borderWidth}px solid ${isValidating ? validationColor : shape.borderColor}`,
                     borderRadius: shape.shapeType === 'circle' ? '50%' : 1,
                     opacity: shape.opacity,
                     cursor: 'grab',
@@ -1487,6 +1549,12 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                       setShowPropertiesPanel(true);
                     }
                   }}
+                  onMouseEnter={() => {
+                    setDrawingState(prev => ({ ...prev, hoveredShapeId: shape.id }));
+                  }}
+                  onMouseLeave={() => {
+                    setDrawingState(prev => ({ ...prev, hoveredShapeId: null }));
+                  }}
                   onMouseDown={(e) => {
                     startShapeDrag(e, shape);
                   }}
@@ -1500,20 +1568,20 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                       data-testid={`polygon-path-${shape.id}`}
                     >
                       <g transform={`rotate(${shape.rotation || 0} ${shape.width / 2} ${shape.height / 2})`}>
-                        {drawingState.selectedShapeId === shape.id && (
+                        {(drawingState.selectedShapeId === shape.id || isValidating) && (
                           <path
                             d={`M ${computePointsRelative(shape).map((p, i) => `${i === 0 ? '' : 'L '}${p.x} ${p.y}`).join(' ')} Z`}
                             fill="none"
-                            stroke={shape.fillColor}
+                            stroke={isValidating ? validationColor : shape.fillColor}
                             strokeOpacity={0.5}
-                            strokeWidth={4}
+                            strokeWidth={isValidating ? validationBorderWidth : 4}
                           />
                         )}
                         <path
                           d={`M ${computePointsRelative(shape).map((p, i) => `${i === 0 ? '' : 'L '}${p.x} ${p.y}`).join(' ')} Z`}
-                          fill={shape.fillColor + '40'}
-                          stroke={shape.borderColor}
-                          strokeWidth={shape.borderWidth}
+                          fill={isValidating ? validationColor + '40' : shape.fillColor + '40'}
+                          stroke={isValidating ? validationColor : shape.borderColor}
+                          strokeWidth={isValidating ? validationBorderWidth : shape.borderWidth}
                         />
                       </g>
                     </svg>
@@ -1545,7 +1613,8 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                     </>
                   )}
                 </Box>
-              ))}
+              );
+              })}
             </Box>
           </Box>
         </Box>
@@ -1818,6 +1887,23 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         onUpdate={handleDoorConnectionUpdate}
         onDelete={handleDoorConnectionDelete}
       />
+
+      {/* Validation Snackbar */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbarOpen(false)}
+          severity={snackbarSeverity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

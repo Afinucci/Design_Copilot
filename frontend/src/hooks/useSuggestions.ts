@@ -190,13 +190,19 @@ export function useSuggestions(options: UseSuggestionsOptions): UseSuggestionsRe
       isCompliant: true,
       complianceIssues: [],
 
+      // Neo4j Knowledge Graph Integration - AUTOMATICALLY ASSIGN THE NODE
+      assignedNodeName: suggestion.name,
+      assignedNodeId: suggestion.id,
+
       // Custom properties
       customProperties: {}
     };
 
-    console.log('🎯 useSuggestions: New shape created:', {
+    console.log('🎯 useSuggestions: New shape created with Neo4j assignment:', {
       id: newShape.id,
       name: newShape.name,
+      assignedNodeName: newShape.assignedNodeName,
+      assignedNodeId: newShape.assignedNodeId,
       position: { x: newShape.x, y: newShape.y },
       relationshipType
     });

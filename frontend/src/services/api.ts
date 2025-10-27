@@ -118,16 +118,18 @@ class ApiService {
 
   // Get node with its relationships and related nodes (for guided mode)
   async getNodeWithRelationships(nodeId: string): Promise<{
-    mainNode: any;
+    node: any;
     relatedNodes: any[];
     relationships: any[];
-    metadata: any;
+    totalRelationships: number;
+    totalRelatedNodes: number;
   }> {
     return this.request<{
-      mainNode: any;
+      node: any;
       relatedNodes: any[];
       relationships: any[];
-      metadata: any;
+      totalRelationships: number;
+      totalRelatedNodes: number;
     }>(`/nodes/${nodeId}/with-relationships`);
   }
 

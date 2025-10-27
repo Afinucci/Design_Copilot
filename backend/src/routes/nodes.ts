@@ -1660,26 +1660,38 @@ router.get('/:nodeId/with-relationships', async (req, res) => {
     const session = Neo4jService.getInstance().getDriver().session();
     
     console.log('🔍 Fetching node with relationships for:', nodeId);
-    
+
     try {
-      // First, get the main node data
+      // Try to find the node by name (case-insensitive) or id
+      // Prioritize name matching since Neo4j nodes might not have an 'id' property
       const nodeQuery = `
-        MATCH (fa:FunctionalArea {id: $nodeId})
+        MATCH (fa:FunctionalArea)
+        WHERE toLower(fa.name) = toLower($nodeId)
+           OR fa.id = $nodeId
+           OR toLower(COALESCE(fa.id, '')) = toLower($nodeId)
         RETURN fa.id as id, fa.name as name, fa.category as category,
                fa.cleanroomClass as cleanroomClass, fa.x as x, fa.y as y,
                fa.width as width, fa.height as height
+        LIMIT 1
       `;
-      
+
       const nodeResult = await session.run(nodeQuery, { nodeId });
-      
+
       if (nodeResult.records.length === 0) {
+        console.log('❌ Node not found with identifier:', nodeId);
+        console.log('❌ Tried matching: toLower(fa.name), fa.id, and toLower(fa.id)');
         await session.close();
-        return res.status(404).json({ error: 'Node not found' });
+        return res.status(404).json({
+          error: 'Node not found',
+          searchedFor: nodeId,
+          message: `No FunctionalArea node found matching '${nodeId}'`
+        });
       }
-      
+
       const nodeRecord = nodeResult.records[0];
+      const foundNodeId = nodeRecord.get('id');
       const mainNode = {
-        id: nodeRecord.get('id'),
+        id: foundNodeId,
         name: nodeRecord.get('name'),
         category: nodeRecord.get('category'),
         cleanroomClass: nodeRecord.get('cleanroomClass'),
@@ -1688,10 +1700,14 @@ router.get('/:nodeId/with-relationships', async (req, res) => {
         width: nodeRecord.get('width'),
         height: nodeRecord.get('height')
       };
-      
-      // Get all related nodes and relationships
+
+      console.log('✅ Node found:', mainNode);
+
+      // Get all related nodes and relationships using the found node id
       const relationshipsQuery = `
-        MATCH (mainNode:FunctionalArea {id: $nodeId})-[r]-(relatedNode:FunctionalArea)
+        MATCH (mainNode:FunctionalArea)
+        WHERE mainNode.id = $foundNodeId
+        MATCH (mainNode)-[r]-(relatedNode:FunctionalArea)
         RETURN 
           r.id as relationshipId,
           type(r) as relationshipType,
@@ -1716,21 +1732,22 @@ router.get('/:nodeId/with-relationships', async (req, res) => {
           relatedNode.height as relatedNodeHeight
         ORDER BY r.priority DESC
       `;
-      
-      const relationshipsResult = await session.run(relationshipsQuery, { nodeId });
+
+      const relationshipsResult = await session.run(relationshipsQuery, { foundNodeId });
       
       const relatedNodes = [];
       const relationships = [];
-      const processedNodeIds = new Set([nodeId]);
+      const processedNodeIds = new Set([foundNodeId]);
       
       for (const record of relationshipsResult.records) {
         const relatedNodeId = record.get('relatedNodeId');
-        
+        const relatedNodeName = record.get('relatedNodeName');
+
         // Add related node if not already processed
         if (!processedNodeIds.has(relatedNodeId)) {
           relatedNodes.push({
             id: relatedNodeId,
-            name: record.get('relatedNodeName'),
+            name: relatedNodeName,
             category: record.get('relatedNodeCategory'),
             cleanroomClass: record.get('relatedNodeCleanroomClass'),
             x: record.get('relatedNodeX'),
@@ -1740,37 +1757,40 @@ router.get('/:nodeId/with-relationships', async (req, res) => {
           });
           processedNodeIds.add(relatedNodeId);
         }
-        
+
         // Add relationship
         const direction = record.get('direction');
         relationships.push({
           id: record.get('relationshipId'),
           type: record.get('relationshipType'),
-          fromId: direction === 'outgoing' ? nodeId : relatedNodeId,
-          toId: direction === 'outgoing' ? relatedNodeId : nodeId,
+          fromId: direction === 'outgoing' ? foundNodeId : relatedNodeId,
+          toId: direction === 'outgoing' ? relatedNodeId : foundNodeId,
+          fromName: direction === 'outgoing' ? mainNode.name : relatedNodeName,
+          toName: direction === 'outgoing' ? relatedNodeName : mainNode.name,
           priority: record.get('priority'),
           reason: record.get('reason'),
           doorType: record.get('doorType'),
           minDistance: record.get('minDistance'),
           maxDistance: record.get('maxDistance'),
           flowDirection: record.get('flowDirection'),
-          flowType: record.get('flowType')
+          flowType: record.get('flowType'),
+          direction
         });
       }
-      
-      console.log(`🔍 Found node with ${relatedNodes.length} related nodes and ${relationships.length} relationships`);
-      
+
+      console.log(`✅ Found ${relationships.length} relationships for node ${mainNode.name}`);
+
       res.json({
-        mainNode,
+        node: mainNode,
         relatedNodes,
         relationships,
-        metadata: {
-          totalRelatedNodes: relatedNodes.length,
-          totalRelationships: relationships.length,
-          timestamp: new Date().toISOString()
-        }
+        totalRelationships: relationships.length,
+        totalRelatedNodes: relatedNodes.length
       });
-      
+
+    } catch (error) {
+      await session.close();
+      throw error;
     } finally {
       await session.close();
     }
