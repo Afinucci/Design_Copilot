@@ -31,6 +31,7 @@ import {
   MeetingRoom as DoorIcon,
   Menu as MenuIcon,
   MenuOpen as MenuOpenIcon,
+  FitScreen as FitScreenIcon,
 } from '@mui/icons-material';
 import { ShapeType } from '../../types';
 import { DrawingMode } from './types';
@@ -60,6 +61,7 @@ export interface DrawingToolsProps {
   // Zoom
   zoom: number;
   onZoomChange: (zoom: number) => void;
+  onFitToWindow?: () => void;
 
   // Actions
   onUndo: () => void;
@@ -99,6 +101,7 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
   onCanvasSizeChange,
   zoom,
   onZoomChange,
+  onFitToWindow,
   onUndo,
   onRedo,
   onClear,
@@ -380,6 +383,17 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
               <ZoomInIcon />
             </IconButton>
           </Tooltip>
+
+          {onFitToWindow && (
+            <Tooltip title="Fit to Window" arrow>
+              <IconButton
+                size="medium"
+                onClick={onFitToWindow}
+              >
+                <FitScreenIcon />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
 
         <Divider orientation={orientation === 'vertical' ? 'horizontal' : 'vertical'} flexItem />

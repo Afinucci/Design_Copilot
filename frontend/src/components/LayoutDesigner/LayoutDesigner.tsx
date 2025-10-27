@@ -21,6 +21,7 @@ import DoorConnectionEditDialog from '../DoorConnectionEditDialog';
 import { useSuggestions } from '../../hooks/useSuggestions';
 import DoorPlacementOverlay from './DoorPlacementOverlay';
 import { findAllSharedWalls, DoorPlacement } from '../../utils/wallDetection';
+import { updateDoorConnectionsEdgePoints } from '../../utils/doorConnectionUtils';
 
 export interface LayoutDesignerProps {
   onClose?: () => void;
@@ -479,6 +480,12 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       );
       addToHistory(newShapes);
       runValidation(newShapes);
+
+      // Update door connections edge points when shapes move
+      setDoorConnections(prevConnections =>
+        updateDoorConnectionsEdgePoints(prevConnections, newShapes)
+      );
+
       return newShapes;
     });
   }, [addToHistory, runValidation]);
@@ -877,6 +884,66 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     setCanvasSettings(prev => ({ ...prev, zoom }));
   }, []);
 
+  const handleFitToWindow = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container || shapes.length === 0) return;
+
+    // Calculate bounding box of all shapes
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    shapes.forEach(shape => {
+      // For polygon shapes, calculate actual bounds from points
+      if (polygonRenderTypes.has(shape.shapeType)) {
+        const points = computePointsRelative(shape);
+        points.forEach(point => {
+          const absX = shape.x + point.x;
+          const absY = shape.y + point.y;
+          minX = Math.min(minX, absX);
+          minY = Math.min(minY, absY);
+          maxX = Math.max(maxX, absX);
+          maxY = Math.max(maxY, absY);
+        });
+      } else {
+        // For simple rectangular shapes
+        minX = Math.min(minX, shape.x);
+        minY = Math.min(minY, shape.y);
+        maxX = Math.max(maxX, shape.x + shape.width);
+        maxY = Math.max(maxY, shape.y + shape.height);
+      }
+    });
+
+    // Add padding around the content
+    const padding = 50;
+    const contentWidth = maxX - minX + padding * 2;
+    const contentHeight = maxY - minY + padding * 2;
+
+    // Get viewport dimensions
+    const viewportWidth = container.clientWidth;
+    const viewportHeight = container.clientHeight;
+
+    // Calculate zoom to fit content in viewport
+    const zoomX = viewportWidth / contentWidth;
+    const zoomY = viewportHeight / contentHeight;
+    const newZoom = clampZoom(Math.min(zoomX, zoomY));
+
+    // Calculate scroll position to center content
+    const centerX = (minX + maxX) / 2 - padding;
+    const centerY = (minY + maxY) / 2 - padding;
+
+    setCanvasSettings(prev => ({ ...prev, zoom: newZoom }));
+
+    // Apply scroll position after zoom is applied
+    requestAnimationFrame(() => {
+      const scaledCenterX = centerX * newZoom;
+      const scaledCenterY = centerY * newZoom;
+      container.scrollLeft = scaledCenterX - viewportWidth / 2;
+      container.scrollTop = scaledCenterY - viewportHeight / 2;
+    });
+  }, [shapes, polygonRenderTypes, computePointsRelative]);
+
   const handleToggleGrid = useCallback(() => {
     setCanvasSettings(prev => ({ ...prev, showGrid: !prev.showGrid }));
   }, []);
@@ -989,6 +1056,11 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       // Push final position to history and re-run validation
       addToHistory(shapesRef.current);
       runValidation(shapesRef.current);
+
+      // Update door connections edge points after shape drag ends
+      setDoorConnections(prevConnections =>
+        updateDoorConnectionsEdgePoints(prevConnections, shapesRef.current)
+      );
 
       draggingRef.current = null;
     };
@@ -1185,6 +1257,12 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       document.removeEventListener('mouseup', handleMouseUp);
       addToHistory(shapesRef.current);
       runValidation(shapesRef.current);
+
+      // Update door connections edge points after shape resize ends
+      setDoorConnections(prevConnections =>
+        updateDoorConnectionsEdgePoints(prevConnections, shapesRef.current)
+      );
+
       resizingRef.current = null;
     };
 
@@ -1227,6 +1305,12 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         });
         addToHistory(newShapes);
         runValidation(newShapes);
+
+        // Update door connections edge points after keyboard nudge
+        setDoorConnections(prevConnections =>
+          updateDoorConnectionsEdgePoints(prevConnections, newShapes)
+        );
+
         return newShapes;
       });
     };
@@ -1516,6 +1600,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         onCanvasSizeChange={handleCanvasSizeChange}
         zoom={canvasSettings.zoom}
         onZoomChange={handleZoomChange}
+        onFitToWindow={handleFitToWindow}
         onUndo={handleUndo}
         onRedo={handleRedo}
         onClear={handleClear}

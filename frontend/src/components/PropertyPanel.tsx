@@ -23,7 +23,7 @@ import {
   DialogActions,
   IconButton,
 } from '@mui/material';
-import { Settings, Room, Speed, Warning, CheckCircle, Edit, Visibility, Lock, Delete, GroupWork, Build, Add, Remove, SwapHoriz, Person, Link } from '@mui/icons-material';
+import { Settings, Room, Speed, Warning, CheckCircle, Edit, Visibility, Lock, Delete, GroupWork, Build, Add, Remove, SwapHoriz, Person, Link, Close } from '@mui/icons-material';
 import { SpatialRelationship, NodeData, AppMode, GuidedSuggestion, NodeGroup, Equipment, CustomShapeData } from '../types';
 import { apiService } from '../services/api';
 import { Node } from 'reactflow';
@@ -69,6 +69,7 @@ interface PropertyPanelProps {
   selectedNode: Node | null;
   onUpdateNode: (node: Node) => void;
   onDeleteNode?: (nodeId: string) => void;
+  onClose?: () => void;
   mode?: AppMode;
   guidedSuggestions?: GuidedSuggestion[];
   groups?: NodeGroup[];
@@ -76,7 +77,7 @@ interface PropertyPanelProps {
   connectionStatus?: 'connected' | 'disconnected' | 'checking';
 }
 
-const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNode, onDeleteNode, mode = 'creation', guidedSuggestions = [], groups = [], isVisible = true, connectionStatus = 'disconnected' }) => {
+const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNode, onDeleteNode, onClose, mode = 'creation', guidedSuggestions = [], groups = [], isVisible = true, connectionStatus = 'disconnected' }) => {
   const [editedNode, setEditedNode] = useState<Node | null>(null);
   const [relationships, setRelationships] = useState<SpatialRelationship[]>([]);
   const [requirements, setRequirements] = useState<{
@@ -421,7 +422,9 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
     <Paper
       elevation={2}
       sx={{
-        width: '100%',
+        width: 350,
+        minWidth: 350,
+        maxWidth: 350,
         height: 'calc(100vh - 64px)',
         borderRadius: 0,
         borderLeft: '1px solid #e0e0e0',
@@ -433,9 +436,19 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
       <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           {mode === 'creation' ? <Edit color="secondary" /> : <Visibility color="primary" />}
-          <Typography variant="h6">
+          <Typography variant="h6" sx={{ flex: 1 }}>
             {mode === 'creation' ? 'Node Properties' : 'Node Details'}
           </Typography>
+          {onClose && (
+            <IconButton
+              size="small"
+              onClick={onClose}
+              aria-label="close property panel"
+              sx={{ ml: 'auto' }}
+            >
+              <Close />
+            </IconButton>
+          )}
         </Box>
         
         {mode === 'exploration' && (

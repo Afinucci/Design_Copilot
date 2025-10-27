@@ -19,6 +19,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import NodePalette from '../NodePalette';
+import PropertyPanel from '../PropertyPanel';
 import CustomNode from '../CustomNode';
 import CustomShapeNode from '../CustomShapeNode';
 import MultiRelationshipEdge from '../MultiRelationshipEdge';
@@ -56,6 +57,10 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
 
   // State for edge style (straight or curved)
   const [edgeStyle, setEdgeStyle] = useState<'straight' | 'curved'>('straight');
+
+  // State for selected node (for PropertyPanel)
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [propertyPanelVisible, setPropertyPanelVisible] = useState(false);
 
   // Load templates on mount
   React.useEffect(() => {
@@ -273,6 +278,61 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
     setPendingConnection(null);
   }, [pendingConnection, selectedEdge, edges]);
 
+  // Handle node click to show property panel
+  const onNodeClick = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      console.log('🖱️ Node clicked:', node);
+      setSelectedNode(node);
+      setPropertyPanelVisible(true);
+    },
+    []
+  );
+
+  // Handle node update from PropertyPanel
+  const handleUpdateNode = useCallback(
+    (updatedNode: Node) => {
+      console.log('📝 Updating node:', updatedNode.id, updatedNode);
+
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === updatedNode.id) {
+            return updatedNode;
+          }
+          return node;
+        })
+      );
+
+      // Update selected node to reflect changes
+      setSelectedNode(updatedNode);
+    },
+    []
+  );
+
+  // Handle node deletion from PropertyPanel
+  const handleDeleteNode = useCallback(
+    (nodeId: string) => {
+      console.log('🗑️ Deleting node:', nodeId);
+
+      // Remove node
+      setNodes((nds) => nds.filter((node) => node.id !== nodeId));
+
+      // Remove edges connected to this node
+      setEdges((eds) =>
+        eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+      );
+
+      // Clear selection and hide panel
+      setSelectedNode(null);
+      setPropertyPanelVisible(false);
+    },
+    []
+  );
+
+  // Handle closing property panel
+  const handleClosePropertyPanel = useCallback(() => {
+    setPropertyPanelVisible(false);
+  }, []);
+
   // Save diagram to Neo4j
   const handleSaveDiagram = useCallback(() => {
     console.log('💾 Saving diagram to Neo4j...');
@@ -409,6 +469,7 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onEdgeClick={onEdgeClick}
+          onNodeClick={onNodeClick}
           onDrop={onDrop}
           onDragOver={onDragOver}
           connectionMode={ConnectionMode.Loose}
@@ -428,6 +489,21 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
           onDelete={handleRelationshipDelete}
         />
       </Box>
+
+      {/* Property Panel */}
+      {selectedNode && (
+        <PropertyPanel
+          selectedNode={selectedNode}
+          onUpdateNode={handleUpdateNode}
+          onDeleteNode={handleDeleteNode}
+          onClose={handleClosePropertyPanel}
+          mode={mode}
+          connectionStatus="disconnected"
+          guidedSuggestions={[]}
+          groups={[]}
+          isVisible={propertyPanelVisible}
+        />
+      )}
     </Box>
   );
 };
