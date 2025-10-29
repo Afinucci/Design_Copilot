@@ -68,12 +68,19 @@ router.get('/:nodeId', async (req, res) => {
         // Get real relationships if center node exists
         OPTIONAL MATCH (centerNode)-[r]-(connected:FunctionalArea)
         WHERE centerNode IS NOT NULL
-        WITH centerNode, finalSearchName, useSample, 
+        WITH centerNode, finalSearchName, useSample,
              collect({
-               node: connected,
-               relationship: r,
+               node: {
+                 id: connected.id,
+                 name: connected.name,
+                 category: connected.category,
+                 cleanroomClass: connected.cleanroomClass,
+                 description: connected.description
+               },
+               relationship: properties(r),
                relType: type(r),
-               confidence: COALESCE(r.priority / 10.0, 0.5)
+               confidence: COALESCE(r.priority / 10.0, 0.5),
+               isOutgoing: startNode(r) = centerNode
              }) as realRelationships
         
         // Sample pharmaceutical relationships for when no center node exists
@@ -123,25 +130,31 @@ router.get('/:nodeId', async (req, res) => {
              [rel IN allRelationships WHERE rel.confidence >= $confidence] as filteredRelationships
         
         // Create center node if using samples
-        WITH CASE WHEN useSample 
+        WITH CASE WHEN useSample
              THEN {
                id: $nodeId,
                name: finalSearchName,
-               category: CASE 
+               category: CASE
                  WHEN finalSearchName CONTAINS 'Lab' THEN 'Quality Control'
-                 WHEN finalSearchName CONTAINS 'Quality' THEN 'Quality Control'  
+                 WHEN finalSearchName CONTAINS 'Quality' THEN 'Quality Control'
                  WHEN finalSearchName CONTAINS 'Storage' THEN 'Storage'
                  WHEN finalSearchName CONTAINS 'Warehouse' THEN 'Storage'
                  WHEN finalSearchName CONTAINS 'Packaging' THEN 'Production'
                  ELSE 'Production'
                END,
-               cleanroomClass: CASE 
+               cleanroomClass: CASE
                  WHEN finalSearchName CONTAINS 'Lab' THEN 'Class B'
                  WHEN finalSearchName CONTAINS 'Quality' THEN 'Class B'
                  ELSE 'Class C'
                END
              }
-             ELSE centerNode
+             ELSE {
+               id: centerNode.id,
+               name: centerNode.name,
+               category: centerNode.category,
+               cleanroomClass: centerNode.cleanroomClass,
+               description: centerNode.description
+             }
              END as finalCenterNode,
              filteredRelationships, useSample
         
@@ -149,22 +162,21 @@ router.get('/:nodeId', async (req, res) => {
         UNWIND [finalCenterNode] + [rel IN filteredRelationships | rel.node] as node
         WITH finalCenterNode, filteredRelationships, useSample, collect(DISTINCT node) as allNodes
         
-        RETURN 
+        RETURN
           allNodes,
           [rel IN filteredRelationships | {
-            source: CASE 
-              WHEN rel.relType = 'MATERIAL_FLOW' AND rel.relationship.isOutgoing = false 
-              THEN rel.node.id
-              ELSE finalCenterNode.id
-            END,
-            target: CASE 
-              WHEN rel.relType = 'MATERIAL_FLOW' AND rel.relationship.isOutgoing = false 
-              THEN finalCenterNode.id
+            source: CASE
+              WHEN rel.isOutgoing THEN finalCenterNode.id
               ELSE rel.node.id
+            END,
+            target: CASE
+              WHEN rel.isOutgoing THEN rel.node.id
+              ELSE finalCenterNode.id
             END,
             type: rel.relType,
             confidence: rel.confidence,
-            reason: COALESCE(rel.relationship.reason, 'Pharmaceutical facility relationship')
+            reason: COALESCE(rel.relationship.reason, 'Pharmaceutical facility relationship'),
+            priority: COALESCE(rel.relationship.priority, 5)
           }] as allLinks,
           useSample
       `;
@@ -187,14 +199,20 @@ router.get('/:nodeId', async (req, res) => {
       console.log(`🔍 KnowledgeGraph: Found ${nodes.length} nodes and ${links.length} links (sample: ${usedSample})`);
 
       // Process nodes for React Force Graph
-      const processedNodes = nodes.map((node: any) => ({
-        id: node.id || `unknown-${Date.now()}`,
-        name: node.name || 'Unknown',
-        category: node.category || 'Unknown',
-        cleanroomGrade: node.cleanroomClass,
-        description: node.description || `${node.category || 'Unknown'} facility in pharmaceutical manufacturing`,
-        val: node.id === nodeId ? 20 : 10, // Make center node larger
-      }));
+      const processedNodes = nodes.map((node: any) => {
+        // Handle both Neo4j node objects and plain objects
+        const nodeData = node.properties || node;
+        const nodeId_extracted = nodeData.id || `unknown-${Date.now()}`;
+
+        return {
+          id: nodeId_extracted,
+          name: nodeData.name || 'Unknown',
+          category: nodeData.category || 'Unknown',
+          cleanroomGrade: nodeData.cleanroomClass,
+          description: nodeData.description || `${nodeData.category || 'Unknown'} facility in pharmaceutical manufacturing`,
+          val: nodeId_extracted === nodeId ? 20 : 10, // Make center node larger
+        };
+      });
 
       // Process links for React Force Graph  
       const processedLinks = links.map((link: any) => ({

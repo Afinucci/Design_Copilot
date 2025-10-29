@@ -1070,6 +1070,52 @@ router.get('/templates', async (req, res) => {
   }
 });
 
+// Get all FunctionalArea nodes from Neo4j knowledge graph
+router.get('/neo4j/functional-areas', async (req, res) => {
+  try {
+    console.log('🔍 Fetching all FunctionalArea nodes from Neo4j');
+
+    const neo4jService = Neo4jService.getInstance();
+    const session = neo4jService.getSession();
+
+    try {
+      const query = `
+        MATCH (n:FunctionalArea)
+        RETURN n
+        ORDER BY n.category, n.name
+      `;
+
+      const result = await session.run(query);
+
+      const functionalAreas = result.records.map(record => {
+        const node = record.get('n');
+        return {
+          id: node.properties.id,
+          name: node.properties.name,
+          category: node.properties.category,
+          cleanroomClass: node.properties.cleanroomClass,
+          color: node.properties.color,
+          description: node.properties.description,
+          defaultSize: node.properties.defaultSize || { width: 150, height: 100 }
+        };
+      });
+
+      console.log(`🔍 Found ${functionalAreas.length} FunctionalArea nodes in Neo4j`);
+      res.json(functionalAreas);
+
+    } finally {
+      await session.close();
+    }
+
+  } catch (error) {
+    console.error('❌ Error fetching FunctionalArea nodes from Neo4j:', error);
+    res.status(500).json({
+      error: 'Failed to fetch functional areas from Neo4j',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Get templates by category (using static configuration)
 router.get('/templates/category/:category', async (req, res) => {
   try {

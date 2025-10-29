@@ -43,6 +43,11 @@ class ApiService {
     return this.request<NodeTemplate[]>('/nodes/templates');
   }
 
+  // Get FunctionalArea nodes from Neo4j knowledge graph
+  async getNeo4jFunctionalAreas(): Promise<NodeTemplate[]> {
+    return this.request<NodeTemplate[]>('/nodes/neo4j/functional-areas');
+  }
+
   async getNodesByCategory(category: string): Promise<FunctionalArea[]> {
     return this.request<FunctionalArea[]>(`/nodes/category/${category}`);
   }

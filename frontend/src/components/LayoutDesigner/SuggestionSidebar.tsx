@@ -102,17 +102,17 @@ const SuggestionSidebar: React.FC<SuggestionSidebarProps> = ({
     setError(null);
 
     try {
-      console.log('🎯 SuggestionSidebar: Fetching available Neo4j nodes for assignment');
+      console.log('🎯 SuggestionSidebar: Fetching available Neo4j FunctionalArea nodes for assignment');
 
-      // Get all node templates from the backend
-      const templates = await apiService.getNodeTemplates();
+      // Get all FunctionalArea nodes from Neo4j knowledge graph
+      const functionalAreas = await apiService.getNeo4jFunctionalAreas();
 
-      setAvailableNodes(templates);
-      console.log('🎯 SuggestionSidebar: Found', templates.length, 'available nodes');
+      setAvailableNodes(functionalAreas);
+      console.log('🎯 SuggestionSidebar: Found', functionalAreas.length, 'FunctionalArea nodes from Neo4j');
 
     } catch (err) {
-      console.error('🎯 SuggestionSidebar: Error fetching available nodes:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load available nodes');
+      console.error('🎯 SuggestionSidebar: Error fetching Neo4j nodes:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load functional areas from Neo4j. Make sure the database is connected.');
     } finally {
       setIsLoading(false);
     }
@@ -191,7 +191,7 @@ const SuggestionSidebar: React.FC<SuggestionSidebarProps> = ({
         </Typography>
         <Typography variant="caption" color="text.secondary">
           {mode === 'assign'
-            ? 'Select a Neo4j functional area for this shape'
+            ? 'Select a functional area from Neo4j knowledge graph'
             : `For: ${selectedShapeNeo4jNode}`
           }
         </Typography>

@@ -79,12 +79,22 @@ export async function validateDoorConnection(
 
     // Find relationships to the target node
     // Check both toId/fromId and toName/fromName since we might be using names
+    // IMPORTANT: Match by name if available, as nodes with same name but different
+    // cleanroom classes should be able to connect based on their functional area type
     const relToTarget = relationships.filter(
-      (rel: any) =>
-        rel.toId === targetNodeIdentifier ||
-        rel.fromId === targetNodeIdentifier ||
-        rel.toName === targetShape.assignedNodeName ||
-        rel.fromName === targetShape.assignedNodeName
+      (rel: any) => {
+        // Primary match: by name (allows different instances of same functional area to connect)
+        const matchesByName =
+          (rel.toName === targetShape.assignedNodeName) ||
+          (rel.fromName === targetShape.assignedNodeName);
+
+        // Secondary match: by exact ID (for precise matching)
+        const matchesById =
+          (rel.toId === targetNodeIdentifier) ||
+          (rel.fromId === targetNodeIdentifier);
+
+        return matchesByName || matchesById;
+      }
     );
 
     console.log('🔗 Relationships to target:', relToTarget);
