@@ -241,12 +241,14 @@ class ApiService {
   }
 
   // Relationship Suggestions for Layout Designer mode
-  async getRelationshipSuggestions(functionalAreaName: string): Promise<{
+  async getRelationshipSuggestions(functionalAreaName: string, cleanroomClass?: string): Promise<{
     functionalArea: string;
     suggestions: any[];
     count: number;
   }> {
-    return this.request(`/suggestions/relationships/${encodeURIComponent(functionalAreaName)}`);
+    const url = `/suggestions/relationships/${encodeURIComponent(functionalAreaName)}`;
+    const queryParam = cleanroomClass ? `?cleanroomClass=${encodeURIComponent(cleanroomClass)}` : '';
+    return this.request(`${url}${queryParam}`);
   }
 
   // Creation Mode: Enhanced persistence with knowledge graph integration

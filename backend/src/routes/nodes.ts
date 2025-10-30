@@ -373,24 +373,33 @@ async function getGhostSuggestionsFromKnowledgeGraph(
   triggerNodeName?: string,
   triggerNodeCategory?: string
 ): Promise<GhostSuggestion[]> {
-  console.log('🔮 Route: Getting ghost suggestions using FunctionalArea-based service');
+  console.log('🔮 Getting ghost suggestions from Neo4j knowledge graph');
+  console.log('🔮 Trigger node:', { triggerNodeId, triggerNodeName, triggerNodeCategory });
   
-  // Use the updated GhostSuggestionsService that works with FunctionalArea nodes only
-  const ghostService = new GhostSuggestionsService();
+  const neo4jService = Neo4jService.getInstance();
+  const session = neo4jService.getSession();
   
   try {
-    const suggestions = await ghostService.getGhostSuggestions(
-      triggerNodeId,
-      triggerNodeCategory,
+    // Use the trigger node name (or extract from ID if not provided)
+    const nodeName = triggerNodeName || getTriggerNodeName(triggerNodeId);
+    
+    // Get direct relationship suggestions from Neo4j
+    // This will ONLY return nodes that are actually connected in the knowledge graph
+    const suggestions = await getDirectRelationshipSuggestions(
+      session,
+      nodeName,
       triggerNodePosition,
-      existingNodePositions
+      confidenceThreshold
     );
     
-    console.log('🔮 Route: GhostSuggestionsService returned', suggestions.length, 'suggestions from FunctionalArea patterns');
+    console.log('🔮 Neo4j returned', suggestions.length, 'suggestions');
+    
     return suggestions;
   } catch (error) {
-    console.error('🔮 Route: Error using GhostSuggestionsService:', error);
+    console.error('🔮 Error querying Neo4j for ghost suggestions:', error);
     return [];
+  } finally {
+    await session.close();
   }
 }
 

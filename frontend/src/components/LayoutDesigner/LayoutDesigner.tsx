@@ -1832,6 +1832,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
           <SuggestionSidebar
             selectedShapeId={drawingState.selectedShapeId}
             selectedShapeNeo4jNode={assignedNodeName}
+            selectedShapeCleanroomClass={selectedShape?.cleanroomClass}
             onSuggestionClick={handleSuggestionClick}
             onAssignNode={(shapeId, nodeName, nodeId) => {
               console.log('🎯 LayoutDesigner: Assigning node to shape', {

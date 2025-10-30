@@ -32,9 +32,10 @@ export class RelationshipSuggestionsService {
   /**
    * Get all relationship-based suggestions for a functional area
    * @param functionalAreaName - Name of the functional area assigned to the shape
+   * @param cleanroomClass - Optional cleanroom class to filter by (e.g., "A", "B", "C", "D")
    * @returns Array of suggestions with relationship metadata
    */
-  async getSuggestionsForArea(functionalAreaName: string): Promise<RelationshipSuggestion[]> {
+  async getSuggestionsForArea(functionalAreaName: string, cleanroomClass?: string): Promise<RelationshipSuggestion[]> {
     const neo4jService = Neo4jService.getInstance();
     const isConnected = await neo4jService.verifyConnection();
 
@@ -49,14 +50,19 @@ export class RelationshipSuggestionsService {
       // Get all name variations for fuzzy matching
       const nameVariations = getNodeNameVariations(functionalAreaName);
 
-      console.log('🔗 RelationshipSuggestions: Querying for area:', functionalAreaName, 'variations:', nameVariations);
+      console.log('🔗 RelationshipSuggestions: Querying for area:', {
+        functionalAreaName,
+        cleanroomClass: cleanroomClass || 'any',
+        variations: nameVariations
+      });
 
       // Query for all relationships (incoming and outgoing)
-      // Made flexible to work with any node structure (with or without labels)
+      // Filter by cleanroom class if provided to get exact node match
       const query = `
-        // Find the source node by name (case-insensitive, works with or without labels)
+        // Find the source node by name (case-insensitive) and optionally by cleanroom class
         MATCH (source)
         WHERE toLower(source.name) IN $nameVariations
+        ${cleanroomClass ? 'AND source.cleanroomClass = $cleanroomClass' : ''}
 
         // Get all outgoing relationships to any connected node
         OPTIONAL MATCH (source)-[outRel]->(target)
@@ -90,9 +96,14 @@ export class RelationshipSuggestionsService {
         ORDER BY COALESCE(suggestion.rel.priority, 5), name
       `;
 
-      const result = await session.run(query, {
+      const queryParams: any = {
         nameVariations: nameVariations.map(v => v.toLowerCase())
-      });
+      };
+      if (cleanroomClass) {
+        queryParams.cleanroomClass = cleanroomClass;
+      }
+
+      const result = await session.run(query, queryParams);
 
       console.log('🔗 RelationshipSuggestions: Query returned', result.records.length, 'records');
 

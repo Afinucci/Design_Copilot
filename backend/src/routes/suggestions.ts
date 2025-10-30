@@ -22,14 +22,21 @@ const suggestionsService = new RelationshipSuggestionsService();
 router.get('/relationships/:functionalAreaName', async (req, res) => {
   try {
     const { functionalAreaName } = req.params;
+    const { cleanroomClass } = req.query;
 
     if (!functionalAreaName) {
       return res.status(400).json({ error: 'functionalAreaName parameter is required' });
     }
 
-    console.log('🎯 Suggestions API: Getting relationship suggestions for:', functionalAreaName);
+    console.log('🎯 Suggestions API: Getting relationship suggestions for:', {
+      functionalAreaName,
+      cleanroomClass: cleanroomClass || 'not specified'
+    });
 
-    const suggestions = await suggestionsService.getSuggestionsForArea(functionalAreaName);
+    const suggestions = await suggestionsService.getSuggestionsForArea(
+      functionalAreaName,
+      cleanroomClass as string | undefined
+    );
 
     console.log('🎯 Suggestions API: Found', suggestions.length, 'suggestions');
 

@@ -52,6 +52,7 @@ interface SuggestionRelationship {
 interface SuggestionSidebarProps {
   selectedShapeId: string | null; // ID of the selected shape
   selectedShapeNeo4jNode: string | null; // Name of the assigned Neo4j functional area
+  selectedShapeCleanroomClass?: string; // Cleanroom class of the selected shape
   onSuggestionClick: (suggestion: RelationshipSuggestion) => void;
   onAssignNode: (shapeId: string, nodeName: string, nodeId: string) => void; // Callback to assign a node to the shape
   isVisible: boolean;
@@ -60,6 +61,7 @@ interface SuggestionSidebarProps {
 const SuggestionSidebar: React.FC<SuggestionSidebarProps> = ({
   selectedShapeId,
   selectedShapeNeo4jNode,
+  selectedShapeCleanroomClass,
   onSuggestionClick,
   onAssignNode,
   isVisible
@@ -125,9 +127,15 @@ const SuggestionSidebar: React.FC<SuggestionSidebarProps> = ({
     setError(null);
 
     try {
-      console.log('🎯 SuggestionSidebar: Fetching relationship suggestions for:', selectedShapeNeo4jNode);
+      console.log('🎯 SuggestionSidebar: Fetching relationship suggestions for:', {
+        node: selectedShapeNeo4jNode,
+        cleanroomClass: selectedShapeCleanroomClass
+      });
 
-      const response = await apiService.getRelationshipSuggestions(selectedShapeNeo4jNode);
+      const response = await apiService.getRelationshipSuggestions(
+        selectedShapeNeo4jNode,
+        selectedShapeCleanroomClass
+      );
 
       console.log('🎯 SuggestionSidebar: Received response:', response);
       console.log('🎯 SuggestionSidebar: Suggestions count:', response.count);
