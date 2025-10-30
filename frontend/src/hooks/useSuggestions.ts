@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import apiService from '../services/api';
 import { calculateOptimalPlacement } from '../utils/shapeAutoPlacement';
-import { NodeCategory, ShapeType } from '../types';
+import { NodeCategory, ShapeType, getCleanroomColor } from '../types';
 import { ShapeProperties } from '../components/LayoutDesigner/PropertiesPanel';
 
 interface RelationshipSuggestion {
@@ -180,8 +180,8 @@ export function useSuggestions(options: UseSuggestionsOptions): UseSuggestionsRe
       temperatureRange: { min: 20, max: 25, unit: 'C' },
       humidityRange: { min: 30, max: 70 },
 
-      // Visual properties
-      fillColor: suggestion.color || '#3498db',
+      // Visual properties - color based on cleanroom grade
+      fillColor: getCleanroomColor((suggestion.cleanroomClass as 'A' | 'B' | 'C' | 'D' | 'CNC') || 'CNC'),
       borderColor: '#2c3e50',
       borderWidth: 2,
       opacity: 1,

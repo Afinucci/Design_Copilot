@@ -20,7 +20,7 @@ import {
   ListItemIcon,
 } from '@mui/material';
 import { Close, Add } from '@mui/icons-material';
-import { NodeCategory, NodeTemplate } from '../types';
+import { NodeCategory, NodeTemplate, getCleanroomColor } from '../types';
 
 interface CustomNodeCreationModalProps {
   open: boolean;
@@ -178,7 +178,7 @@ const CustomNodeCreationModal: React.FC<CustomNodeCreationModalProps> = ({
       name: nodeName.trim(),
       category: selectedCategory,
       cleanroomClass: selectedCleanroomClass,
-      color: getCategoryColor(selectedCategory),
+      color: getCleanroomColor(selectedCleanroomClass),
       icon: selectedIcon,
       defaultSize: {
         width: nodeWidth,
@@ -413,7 +413,7 @@ const CustomNodeCreationModal: React.FC<CustomNodeCreationModalProps> = ({
                 sx={{
                   width: Math.min(nodeWidth / 2, 60),
                   height: Math.min(nodeHeight / 2, 40),
-                  backgroundColor: getCategoryColor(selectedCategory),
+                  backgroundColor: getCleanroomColor(selectedCleanroomClass),
                   borderRadius: 1,
                   display: 'flex',
                   alignItems: 'center',
@@ -432,7 +432,7 @@ const CustomNodeCreationModal: React.FC<CustomNodeCreationModalProps> = ({
                     label={selectedCategory}
                     size="small"
                     sx={{
-                      backgroundColor: getCategoryColor(selectedCategory),
+                      backgroundColor: getCleanroomColor(selectedCleanroomClass),
                       color: '#fff',
                       fontSize: '0.7rem',
                     }}

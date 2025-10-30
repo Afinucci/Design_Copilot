@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { apiService } from '../services/api';
+import { getCleanroomColor } from '../types';
 
 // Types for knowledge graph data (matches KnowledgeGraphPanel)
 interface KnowledgeGraphNode {
@@ -65,19 +66,7 @@ interface UseKnowledgeGraphResult {
   fetchKnowledgeGraphData: (nodeId: string) => Promise<void>;
 }
 
-// Category colors for pharmaceutical functional areas
-const getCategoryColor = (category: string): string => {
-  const colors: Record<string, string> = {
-    'Production': '#FF6B6B',
-    'Quality Control': '#4ECDC4',
-    'Support': '#45B7D1',
-    'Utilities': '#F7DC6F',
-    'Storage': '#BB8FCE',
-    'Administrative': '#85C1E9',
-    'Unknown': '#BDC3C7',
-  };
-  return colors[category] || colors['Unknown'];
-};
+// Colors are based on cleanroom grades (A, B, C, D, CNC), not categories
 
 // Relationship type colors
 const getRelationshipColor = (type: string): string => {
@@ -163,7 +152,7 @@ const useKnowledgeGraph = (): UseKnowledgeGraphResult => {
       const processedData: KnowledgeGraphData = {
         nodes: data.nodes.map((node: any) => ({
           ...node,
-          color: getCategoryColor(node.category),
+          color: getCleanroomColor(node.cleanroomGrade),
           val: node.id === nodeId ? 20 : 10, // Make selected node larger
         })),
         links: data.links.map((link: any) => ({
@@ -202,50 +191,57 @@ const useKnowledgeGraph = (): UseKnowledgeGraphResult => {
           id: centerNodeId,
           name: centerNodeName,
           category: 'Production',
+          cleanroomGrade: 'D',
           val: 20,
-          color: getCategoryColor('Production'),
+          color: getCleanroomColor('D'),
         },
         {
           id: 'coating-2',
           name: 'Coating Area 2',
           category: 'Production',
+          cleanroomGrade: 'D',
           val: 10,
-          color: getCategoryColor('Production'),
+          color: getCleanroomColor('D'),
         },
         {
           id: 'compression-1',
           name: 'Compression Room',
           category: 'Production',
+          cleanroomGrade: 'D',
           val: 10,
-          color: getCategoryColor('Production'),
+          color: getCleanroomColor('D'),
         },
         {
           id: 'qc-lab',
           name: 'QC Laboratory',
           category: 'Quality Control',
+          cleanroomGrade: 'C',
           val: 10,
-          color: getCategoryColor('Quality Control'),
+          color: getCleanroomColor('C'),
         },
         {
           id: 'packaging-1',
           name: 'Packaging Area',
           category: 'Production',
+          cleanroomGrade: 'D',
           val: 10,
-          color: getCategoryColor('Production'),
+          color: getCleanroomColor('D'),
         },
         {
           id: 'storage-rm',
           name: 'Raw Material Storage',
           category: 'Storage',
+          cleanroomGrade: 'CNC',
           val: 10,
-          color: getCategoryColor('Storage'),
+          color: getCleanroomColor('CNC'),
         },
         {
           id: 'hvac-utility',
           name: 'HVAC Control Room',
           category: 'Utilities',
+          cleanroomGrade: 'CNC',
           val: 8,
-          color: getCategoryColor('Utilities'),
+          color: getCleanroomColor('CNC'),
         },
       ],
       links: [

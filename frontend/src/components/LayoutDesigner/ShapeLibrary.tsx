@@ -19,7 +19,7 @@ import {
   ChangeHistory as TriangleIcon,
   Pentagon as PolygonIcon,
 } from '@mui/icons-material';
-import { ShapeType, NodeCategory } from '../../types';
+import { ShapeType, NodeCategory, getCleanroomColor } from '../../types';
 
 export interface PharmaceuticalShapeTemplate {
   id: string;
@@ -272,20 +272,7 @@ const ShapeLibrary: React.FC<ShapeLibraryProps> = ({
     return acc;
   }, {} as Record<string, PharmaceuticalShapeTemplate[]>);
 
-  const getCategoryColor = (category: NodeCategory): string => {
-    const colors: Record<NodeCategory, string> = {
-      'Production': '#3B82F6',
-      'Storage': '#10B981',
-      'Quality Control': '#F59E0B',
-      'Quality Assurance': '#EF4444',
-      'Utilities': '#6B7280',
-      'Support': '#8B5CF6',
-      'Logistics': '#14B8A6',
-      'Personnel': '#F97316',
-      'Waste Management': '#991B1B',
-    };
-    return colors[category] || '#94A3B8';
-  };
+  // Categories are just organizational, colors are based on cleanroom grades
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -361,8 +348,8 @@ const ShapeLibrary: React.FC<ShapeLibraryProps> = ({
                   label={templates.length}
                   size="small"
                   sx={{
-                    backgroundColor: getCategoryColor(category as NodeCategory),
-                    color: 'white',
+                    backgroundColor: '#e0e0e0',
+                    color: '#333',
                     fontSize: '0.7rem',
                     height: 18,
                   }}
@@ -404,8 +391,8 @@ const ShapeLibrary: React.FC<ShapeLibraryProps> = ({
                             <svg width="50" height="30" viewBox="0 0 80 60">
                               <path
                                 d={template.svgPreview}
-                                fill={`${getCategoryColor(template.category)}20`}
-                                stroke={getCategoryColor(template.category)}
+                                fill={`${getCleanroomColor(template.cleanroomClass)}30`}
+                                stroke={getCleanroomColor(template.cleanroomClass)}
                                 strokeWidth="2"
                               />
                             </svg>

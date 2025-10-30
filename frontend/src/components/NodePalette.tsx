@@ -174,35 +174,8 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
     }
   };
 
-  const getCategoryColor = (category: NodeCategory) => {
-    switch (category) {
-      case 'Production':
-        return '#FF6B6B';
-      case 'Quality Control':
-        return '#4ECDC4';
-      case 'Warehouse':
-        return '#45B7D1';
-      case 'Utilities':
-        return '#F7DC6F';
-      case 'Personnel':
-        return '#BB8FCE';
-      case 'Support':
-        return '#85C1E9';
-      case 'None':
-        return '#95A5A6';
-      default:
-        // Generate a color for custom categories based on hash of category name
-        if (!category || typeof category !== 'string') {
-          return '#95A5A6'; // Default fallback color
-        }
-        const hash = category.split('').reduce((a, b) => {
-          a = ((a << 5) - a) + b.charCodeAt(0);
-          return a & a;
-        }, 0);
-        const hue = Math.abs(hash % 360);
-        return `hsl(${hue}, 60%, 65%)`;
-    }
-  };
+  // Categories are just organizational, not color-coded
+  // Colors are based on cleanroom grades (A, B, C, D, CNC)
 
   // Collapsed view - icon-only sidebar
   if (internalCollapsed) {
@@ -238,12 +211,12 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                   justifyContent: 'center',
                   p: 1.5,
                   cursor: 'pointer',
-                  backgroundColor: getCategoryColor(category as NodeCategory),
+                  backgroundColor: '#e0e0e0',
                   borderRadius: 1,
                   mx: 1,
                   my: 0.5,
                   '&:hover': {
-                    opacity: 0.8,
+                    backgroundColor: '#d0d0d0',
                   },
                 }}
                 onClick={handleToggleCollapse}
@@ -393,7 +366,7 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
             <AccordionSummary
               expandIcon={<ExpandMore sx={{ fontSize: 16 }} />}
               sx={{
-                backgroundColor: getCategoryColor(category as NodeCategory),
+                backgroundColor: '#e0e0e0',
                 color: '#333',
                 minHeight: 28,
                 padding: '0 6px',
@@ -402,6 +375,9 @@ const NodePalette: React.FC<NodePaletteProps> = ({ templates, mode, onCreateCust
                 },
                 '& .MuiAccordionSummary-content': {
                   margin: '6px 0',
+                },
+                '&:hover': {
+                  backgroundColor: '#d0d0d0',
                 },
               }}
             >

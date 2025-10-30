@@ -7,7 +7,7 @@ import PropertiesPanel, { ShapeProperties } from './PropertiesPanel';
 import ValidationOverlay, { ValidationResult } from './ValidationOverlay';
 import ConnectionRenderer from './ConnectionRenderer';
 import SuggestionSidebar from './SuggestionSidebar';
-import { ShapeType, NodeCategory } from '../../types';
+import { ShapeType, NodeCategory, getCleanroomColor } from '../../types';
 import {
   DrawingMode,
   Connection,
@@ -384,7 +384,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       temperatureRange: { min: 18, max: 26, unit: 'C' },
       humidityRange: { min: 30, max: 60 },
 
-      fillColor: getCategoryColor(template.category),
+      fillColor: getCleanroomColor(template.cleanroomClass),
       borderColor: '#333333',
       borderWidth: 2,
       opacity: 0.8,
@@ -408,7 +408,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
 
     setDrawingState(prev => ({ ...prev, selectedShapeId: newShape.id }));
     setShowPropertiesPanel(true);
-  }, [canvasSettings, generateShapeId, addToHistory, runValidation, getCategoryColor]);
+  }, [canvasSettings, generateShapeId, addToHistory, runValidation]);
 
   // Handle free-form shape creation
   const handleShapeComplete = useCallback((shapeData: {
@@ -444,7 +444,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       humidityRange: { min: 30, max: 60 },
 
       // Visual properties
-      fillColor: getCategoryColor('Production'),
+      fillColor: getCleanroomColor('D'),
       borderColor: '#333333',
       borderWidth: 2,
       opacity: 0.8,
@@ -475,7 +475,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       isDrawing: false,
     }));
     setShowPropertiesPanel(true);
-  }, [generateShapeId, addToHistory, runValidation, getCategoryColor]);
+  }, [generateShapeId, addToHistory, runValidation]);
 
   
 

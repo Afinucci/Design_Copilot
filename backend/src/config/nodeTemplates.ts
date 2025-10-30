@@ -1,4 +1,4 @@
-import { NodeTemplate, NodeCategory, SpatialRelationship } from '../types/index';
+import { NodeTemplate, NodeCategory, SpatialRelationship, getCleanroomColor } from '../types/index';
 
 /**
  * Static configuration for pharmaceutical facility node templates
@@ -12,7 +12,7 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     name: 'Weighing Area',
     category: 'Production' as NodeCategory,
     cleanroomClass: 'D',
-    color: '#FF6B6B',
+    color: getCleanroomColor('D'),
     defaultSize: { width: 120, height: 80 }
   },
   {
@@ -20,7 +20,7 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     name: 'Granulation',
     category: 'Production' as NodeCategory,
     cleanroomClass: 'D',
-    color: '#FF6B6B',
+    color: getCleanroomColor('D'),
     defaultSize: { width: 150, height: 100 }
   },
   {
@@ -28,7 +28,7 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     name: 'Compression',
     category: 'Production' as NodeCategory,
     cleanroomClass: 'D',
-    color: '#FF6B6B',
+    color: getCleanroomColor('D'),
     defaultSize: { width: 140, height: 90 }
   },
   {
@@ -36,7 +36,7 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     name: 'Coating',
     category: 'Production' as NodeCategory,
     cleanroomClass: 'D',
-    color: '#FF6B6B',
+    color: getCleanroomColor('D'),
     defaultSize: { width: 130, height: 85 }
   },
   {
@@ -44,7 +44,7 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     name: 'Packaging',
     category: 'Production' as NodeCategory,
     cleanroomClass: 'D',
-    color: '#FF6B6B',
+    color: getCleanroomColor('D'),
     defaultSize: { width: 160, height: 100 }
   },
 
@@ -54,7 +54,7 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     name: 'Analytical Lab',
     category: 'Quality Control' as NodeCategory,
     cleanroomClass: 'C',
-    color: '#4ECDC4',
+    color: getCleanroomColor('C'),
     defaultSize: { width: 150, height: 120 }
   },
   {
@@ -62,14 +62,15 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     name: 'Microbiology Lab',
     category: 'Quality Control' as NodeCategory,
     cleanroomClass: 'B',
-    color: '#4ECDC4',
+    color: getCleanroomColor('B'),
     defaultSize: { width: 140, height: 110 }
   },
   {
     id: 'stability-chamber',
     name: 'Stability Chamber',
     category: 'Quality Control' as NodeCategory,
-    color: '#4ECDC4',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 100, height: 80 }
   },
   {
@@ -77,7 +78,7 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     name: 'Release Testing',
     category: 'Quality Control' as NodeCategory,
     cleanroomClass: 'C',
-    color: '#4ECDC4',
+    color: getCleanroomColor('C'),
     defaultSize: { width: 130, height: 90 }
   },
 
@@ -86,28 +87,32 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     id: 'raw-materials',
     name: 'Raw Materials Storage',
     category: 'Warehouse' as NodeCategory,
-    color: '#45B7D1',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 180, height: 120 }
   },
   {
     id: 'finished-goods',
     name: 'Finished Goods Storage',
     category: 'Warehouse' as NodeCategory,
-    color: '#45B7D1',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 180, height: 120 }
   },
   {
     id: 'quarantine',
     name: 'Quarantine Storage',
     category: 'Warehouse' as NodeCategory,
-    color: '#45B7D1',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 120, height: 80 }
   },
   {
     id: 'cold-storage',
     name: 'Cold Storage',
     category: 'Warehouse' as NodeCategory,
-    color: '#45B7D1',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 100, height: 90 }
   },
 
@@ -116,28 +121,32 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     id: 'hvac',
     name: 'HVAC Room',
     category: 'Utilities' as NodeCategory,
-    color: '#F7DC6F',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 120, height: 100 }
   },
   {
     id: 'purified-water',
     name: 'Purified Water System',
     category: 'Utilities' as NodeCategory,
-    color: '#F7DC6F',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 110, height: 90 }
   },
   {
     id: 'compressed-air',
     name: 'Compressed Air System',
     category: 'Utilities' as NodeCategory,
-    color: '#F7DC6F',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 100, height: 80 }
   },
   {
     id: 'electrical',
     name: 'Electrical Room',
     category: 'Utilities' as NodeCategory,
-    color: '#F7DC6F',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 100, height: 80 }
   },
 
@@ -147,28 +156,31 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     name: 'Gowning Area',
     category: 'Personnel' as NodeCategory,
     cleanroomClass: 'D',
-    color: '#BB8FCE',
+    color: getCleanroomColor('D'),
     defaultSize: { width: 120, height: 90 }
   },
   {
     id: 'break-room',
     name: 'Break Room',
     category: 'Personnel' as NodeCategory,
-    color: '#BB8FCE',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 150, height: 100 }
   },
   {
     id: 'offices',
     name: 'Offices',
     category: 'Personnel' as NodeCategory,
-    color: '#BB8FCE',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 200, height: 120 }
   },
   {
     id: 'training-room',
     name: 'Training Room',
     category: 'Personnel' as NodeCategory,
-    color: '#BB8FCE',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 180, height: 120 }
   },
 
@@ -177,28 +189,32 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     id: 'waste-disposal',
     name: 'Waste Disposal',
     category: 'Support' as NodeCategory,
-    color: '#85C1E9',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 100, height: 80 }
   },
   {
     id: 'maintenance',
     name: 'Maintenance Workshop',
     category: 'Support' as NodeCategory,
-    color: '#85C1E9',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 140, height: 100 }
   },
   {
     id: 'receiving',
     name: 'Receiving Area',
     category: 'Support' as NodeCategory,
-    color: '#85C1E9',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 150, height: 100 }
   },
   {
     id: 'shipping',
     name: 'Shipping Area',
     category: 'Support' as NodeCategory,
-    color: '#85C1E9',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 150, height: 100 }
   },
 
@@ -207,14 +223,16 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     id: 'hvac-room',
     name: 'HVAC Room',
     category: 'Utilities' as NodeCategory,
-    color: '#F39C12',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 120, height: 90 }
   },
   {
     id: 'electrical-room',
     name: 'Electrical Room',
     category: 'Utilities' as NodeCategory,
-    color: '#F39C12',
+    cleanroomClass: 'CNC',
+    color: getCleanroomColor('CNC'),
     defaultSize: { width: 110, height: 80 }
   },
   {
@@ -222,7 +240,7 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     name: 'Change Room',
     category: 'Personnel' as NodeCategory,
     cleanroomClass: 'D',
-    color: '#BB8FCE',
+    color: getCleanroomColor('D'),
     defaultSize: { width: 130, height: 90 }
   }
 ];

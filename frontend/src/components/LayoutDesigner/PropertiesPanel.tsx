@@ -27,7 +27,7 @@ import {
   Colorize as ColorIcon,
   AccountTree as GraphIcon,
 } from '@mui/icons-material';
-import { ShapeType, NodeCategory } from '../../types';
+import { ShapeType, NodeCategory, getCleanroomColor } from '../../types';
 import { Connection } from './types';
 import apiService from '../../services/api';
 
@@ -165,10 +165,24 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (!localProperties) return;
 
     const updatedProperties = { ...localProperties, [property]: value };
-    setLocalProperties(updatedProperties);
 
-    // Immediate update for some properties
-    onShapeUpdate(localProperties.id, { [property]: value });
+    // When cleanroom class changes, automatically update the fill color
+    if (property === 'cleanroomClass') {
+      const newColor = getCleanroomColor(value as 'A' | 'B' | 'C' | 'D' | 'CNC');
+      updatedProperties.fillColor = newColor;
+      setLocalProperties(updatedProperties);
+
+      // Update both cleanroom class and fill color
+      onShapeUpdate(localProperties.id, {
+        [property]: value,
+        fillColor: newColor
+      });
+    } else {
+      setLocalProperties(updatedProperties);
+
+      // Immediate update for other properties
+      onShapeUpdate(localProperties.id, { [property]: value });
+    }
   };
 
   // Handle nested property updates
