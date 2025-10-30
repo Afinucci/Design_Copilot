@@ -138,6 +138,34 @@ class ApiService {
     }>(`/nodes/${nodeId}/with-relationships`);
   }
 
+  // Check if nodes of a given type/name can connect (type-based validation)
+  async canNodesConnect(sourceName: string, targetName: string): Promise<{
+    canConnect: boolean;
+    sourceName: string;
+    targetName: string;
+    relationships: Array<{
+      type: string;
+      priority: number;
+      reason: string;
+      doorType: string;
+      flowType: string;
+      sourceName: string;
+      targetName: string;
+      count: number;
+    }>;
+    totalRelationshipTypes?: number;
+    message: string;
+  }> {
+    return this.request<{
+      canConnect: boolean;
+      sourceName: string;
+      targetName: string;
+      relationships: any[];
+      totalRelationshipTypes?: number;
+      message: string;
+    }>(`/nodes/${encodeURIComponent(sourceName)}/can-connect-to/${encodeURIComponent(targetName)}`);
+  }
+
   // Diagrams
   async getDiagrams(): Promise<Diagram[]> {
     return this.request<Diagram[]>('/diagrams');

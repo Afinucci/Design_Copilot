@@ -1855,6 +1855,94 @@ router.get('/:nodeId/with-relationships', async (req, res) => {
   }
 });
 
+// Check if nodes of a given name/type can connect (type-based validation)
+// This queries for ANY relationship between nodes with matching names,
+// not just relationships between specific instances
+router.get('/:sourceName/can-connect-to/:targetName', async (req, res) => {
+  try {
+    const { sourceName, targetName } = req.params;
+    const session = Neo4jService.getInstance().getDriver().session();
+
+    console.log('🔍 Checking if nodes can connect:', { sourceName, targetName });
+
+    try {
+      // Check if ANY nodes with sourceName have relationships to ANY nodes with targetName
+      const connectivityQuery = `
+        MATCH (source:FunctionalArea)
+        WHERE toLower(source.name) = toLower($sourceName)
+        MATCH (target:FunctionalArea)
+        WHERE toLower(target.name) = toLower($targetName)
+        MATCH (source)-[r]-(target)
+        RETURN
+          type(r) as relationshipType,
+          r.priority as priority,
+          r.reason as reason,
+          r.doorType as doorType,
+          r.flowType as flowType,
+          source.name as sourceName,
+          target.name as targetName
+        ORDER BY r.priority DESC
+      `;
+
+      const result = await session.run(connectivityQuery, { sourceName, targetName });
+
+      if (result.records.length === 0) {
+        console.log('❌ No relationships found between node types:', sourceName, 'and', targetName);
+        await session.close();
+        return res.json({
+          canConnect: false,
+          sourceName,
+          targetName,
+          relationships: [],
+          message: `No relationships found between ${sourceName} and ${targetName}`
+        });
+      }
+
+      // Group relationships by type and count them
+      const relationshipMap = new Map<string, any>();
+
+      result.records.forEach(record => {
+        const type = record.get('relationshipType');
+        if (!relationshipMap.has(type)) {
+          relationshipMap.set(type, {
+            type,
+            priority: record.get('priority'),
+            reason: record.get('reason'),
+            doorType: record.get('doorType'),
+            flowType: record.get('flowType'),
+            sourceName: record.get('sourceName'),
+            targetName: record.get('targetName'),
+            count: 0
+          });
+        }
+        relationshipMap.get(type)!.count++;
+      });
+
+      const relationships = Array.from(relationshipMap.values());
+
+      console.log(`✅ Found ${relationships.length} relationship type(s) between ${sourceName} and ${targetName}`);
+
+      await session.close();
+
+      res.json({
+        canConnect: true,
+        sourceName,
+        targetName,
+        relationships,
+        totalRelationshipTypes: relationships.length,
+        message: `Nodes of type '${sourceName}' can connect to nodes of type '${targetName}'`
+      });
+
+    } catch (error) {
+      await session.close();
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error checking node connectivity:', error);
+    res.status(500).json({ error: 'Failed to check node connectivity' });
+  }
+});
+
 // Initialize database with constraints only (templates now use static configuration)
 router.post('/initialize', async (req, res) => {
   try {

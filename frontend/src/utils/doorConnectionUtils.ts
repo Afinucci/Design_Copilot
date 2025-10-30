@@ -47,60 +47,43 @@ export async function validateDoorConnection(
   }
 
   try {
-    // Use assignedNodeName (preferred) because it matches Neo4j node names better than slugified IDs
-    // Fall back to assignedNodeId only if name is not available
-    const sourceNodeIdentifier = sourceShape.assignedNodeName || sourceShape.assignedNodeId!;
-    const targetNodeIdentifier = targetShape.assignedNodeName || targetShape.assignedNodeId!;
+    // Use assignedNodeName for type-based connectivity checking
+    const sourceNodeName = sourceShape.assignedNodeName!;
+    const targetNodeName = targetShape.assignedNodeName!;
 
-    console.log('🔍 Validation attempt:', {
+    console.log('🔍 Type-based validation attempt:', {
       source: {
         shapeName: sourceShape.name,
-        assignedNodeName: sourceShape.assignedNodeName,
-        assignedNodeId: sourceShape.assignedNodeId,
-        identifier: sourceNodeIdentifier
+        assignedNodeName: sourceNodeName
       },
       target: {
         shapeName: targetShape.name,
-        assignedNodeName: targetShape.assignedNodeName,
-        assignedNodeId: targetShape.assignedNodeId,
-        identifier: targetNodeIdentifier
+        assignedNodeName: targetNodeName
       }
     });
 
-    // Fetch relationships for the source node from Neo4j
-    const nodeData = await apiService.getNodeWithRelationships(sourceNodeIdentifier);
-    const relationships = nodeData.relationships;
+    // Check if nodes of these types can connect (type-based, not instance-based)
+    const connectivityData = await apiService.canNodesConnect(sourceNodeName, targetNodeName);
 
-    console.log('📊 Node data received:', {
-      node: nodeData.node,
-      relationshipsCount: relationships.length,
-      relationships
+    console.log('📊 Connectivity data received:', {
+      canConnect: connectivityData.canConnect,
+      relationshipsCount: connectivityData.relationships.length,
+      relationships: connectivityData.relationships
     });
 
-    // Find relationships to the target node
-    // Check both toId/fromId and toName/fromName since we might be using names
-    // IMPORTANT: Match by name if available, as nodes with same name but different
-    // cleanroom classes should be able to connect based on their functional area type
-    const relToTarget = relationships.filter(
-      (rel: any) => {
-        // Primary match: by name (allows different instances of same functional area to connect)
-        const matchesByName =
-          (rel.toName === targetShape.assignedNodeName) ||
-          (rel.fromName === targetShape.assignedNodeName);
-
-        // Secondary match: by exact ID (for precise matching)
-        const matchesById =
-          (rel.toId === targetNodeIdentifier) ||
-          (rel.fromId === targetNodeIdentifier);
-
-        return matchesByName || matchesById;
-      }
-    );
-
-    console.log('🔗 Relationships to target:', relToTarget);
+    // If nodes cannot connect
+    if (!connectivityData.canConnect || connectivityData.relationships.length === 0) {
+      return {
+        status: 'prohibited',
+        canConnect: false,
+        allowedFlowTypes: [],
+        message: `No adjacency relationship found between ${sourceNodeName} and ${targetNodeName}`,
+        details: 'These room types are not configured to be adjacent in the knowledge graph',
+      };
+    }
 
     // Check for prohibited relationships
-    const prohibitedRels = relToTarget.filter(
+    const prohibitedRels = connectivityData.relationships.filter(
       (rel: any) => rel.type === 'PROHIBITED_NEAR' || rel.type === 'CANNOT_CONNECT_TO'
     );
 
@@ -109,7 +92,7 @@ export async function validateDoorConnection(
         status: 'prohibited',
         canConnect: false,
         allowedFlowTypes: [],
-        message: `Connection prohibited: ${sourceShape.name} cannot be adjacent to ${targetShape.name}`,
+        message: `Connection prohibited: ${sourceNodeName} cannot be adjacent to ${targetNodeName}`,
         details: prohibitedRels[0]?.reason || 'GMP compliance violation',
       };
     }
@@ -117,7 +100,7 @@ export async function validateDoorConnection(
     // Determine allowed flow types based on relationships
     const allowedFlowTypes: Set<DoorFlowType> = new Set();
 
-    relToTarget.forEach((rel: any) => {
+    connectivityData.relationships.forEach((rel: any) => {
       if (rel.type === 'MATERIAL_FLOW') {
         allowedFlowTypes.add('material');
       }
@@ -132,9 +115,9 @@ export async function validateDoorConnection(
     });
 
     // If there are explicit relationships but no flow types, check for general adjacency
-    if (allowedFlowTypes.size === 0 && relToTarget.length > 0) {
+    if (allowedFlowTypes.size === 0 && connectivityData.relationships.length > 0) {
       // Check if rooms are generally compatible (not prohibited)
-      const hasAdjacencyRel = relToTarget.some(
+      const hasAdjacencyRel = connectivityData.relationships.some(
         (rel: any) => rel.type === 'ADJACENT_TO' || rel.type === 'REQUIRES_ACCESS'
       );
 
@@ -144,32 +127,21 @@ export async function validateDoorConnection(
       }
     }
 
-    // If no relationships found at all, rooms are not explicitly allowed to connect
-    if (relToTarget.length === 0) {
-      return {
-        status: 'prohibited',
-        canConnect: false,
-        allowedFlowTypes: [],
-        message: `No adjacency relationship found between ${sourceShape.name} and ${targetShape.name}`,
-        details: 'These rooms are not configured to be adjacent in the knowledge graph',
-      };
-    }
-
     // Valid connection with allowed flow types
     return {
       status: 'valid',
       canConnect: true,
       allowedFlowTypes: Array.from(allowedFlowTypes),
       message: `Valid connection: Allowed flow types - ${Array.from(allowedFlowTypes).join(', ')}`,
-      details: `Based on ${relToTarget.length} relationship(s) in knowledge graph`,
+      details: `Based on ${connectivityData.relationships.length} relationship type(s) in knowledge graph`,
     };
 
   } catch (error) {
     console.error('❌ Error validating door connection:', error);
     console.error('Error details:', {
       message: error instanceof Error ? error.message : 'Unknown error',
-      sourceIdentifier: sourceShape.assignedNodeId || sourceShape.assignedNodeName,
-      targetIdentifier: targetShape.assignedNodeId || targetShape.assignedNodeName,
+      sourceName: sourceShape.assignedNodeName,
+      targetName: targetShape.assignedNodeName,
       error
     });
     return {
@@ -262,7 +234,7 @@ export const findSharedEdge = (
 } | null => {
   const shape1Points = computePointsRelative(shape1);
   const shape2Points = computePointsRelative(shape2);
-  const tolerance = 5;
+  const tolerance = 10; // Increased tolerance for edge alignment detection
 
   // Calculate shape centers for adjacency validation
   const shape1Center = {
@@ -294,21 +266,52 @@ export const findSharedEdge = (
   }));
 
   // Helper function to check if edge is actually between the shapes
+  // Uses shape extents (bounds) instead of just centers for more robust detection
   const isEdgeBetweenShapes = (
     edgeY: number | null,
     edgeX: number | null,
     isHorizontal: boolean
   ): boolean => {
+    const shapeTolerance = 10; // Tolerance for edge positioning
+
     if (isHorizontal && edgeY !== null) {
-      // For horizontal edge: one shape should be above, other below
-      const shape1Above = shape1Center.y < edgeY;
-      const shape2Above = shape2Center.y < edgeY;
-      return shape1Above !== shape2Above; // They should be on opposite sides
+      // For horizontal edge: check if edge Y is between the shapes' vertical extents
+      const shape1Top = shape1.y;
+      const shape1Bottom = shape1.y + (shape1.height || 80);
+      const shape2Top = shape2.y;
+      const shape2Bottom = shape2.y + (shape2.height || 80);
+
+      // Edge should be between the top of one shape and bottom of the other
+      const edgeBetweenShape1 = edgeY >= shape1Top - shapeTolerance && edgeY <= shape1Bottom + shapeTolerance;
+      const edgeBetweenShape2 = edgeY >= shape2Top - shapeTolerance && edgeY <= shape2Bottom + shapeTolerance;
+
+      // One shape should be mostly above the edge, the other mostly below
+      const shape1Above = shape1Center.y < edgeY - shapeTolerance;
+      const shape2Above = shape2Center.y < edgeY - shapeTolerance;
+      const shape1Below = shape1Center.y > edgeY + shapeTolerance;
+      const shape2Below = shape2Center.y > edgeY + shapeTolerance;
+
+      return (edgeBetweenShape1 || edgeBetweenShape2) &&
+             ((shape1Above && shape2Below) || (shape1Below && shape2Above));
     } else if (!isHorizontal && edgeX !== null) {
-      // For vertical edge: one shape should be left, other right
-      const shape1Left = shape1Center.x < edgeX;
-      const shape2Left = shape2Center.x < edgeX;
-      return shape1Left !== shape2Left; // They should be on opposite sides
+      // For vertical edge: check if edge X is between the shapes' horizontal extents
+      const shape1Left = shape1.x;
+      const shape1Right = shape1.x + (shape1.width || 120);
+      const shape2Left = shape2.x;
+      const shape2Right = shape2.x + (shape2.width || 120);
+
+      // Edge should be between the left of one shape and right of the other
+      const edgeBetweenShape1 = edgeX >= shape1Left - shapeTolerance && edgeX <= shape1Right + shapeTolerance;
+      const edgeBetweenShape2 = edgeX >= shape2Left - shapeTolerance && edgeX <= shape2Right + shapeTolerance;
+
+      // One shape should be mostly left of the edge, the other mostly right
+      const shape1LeftOfEdge = shape1Center.x < edgeX - shapeTolerance;
+      const shape2LeftOfEdge = shape2Center.x < edgeX - shapeTolerance;
+      const shape1RightOfEdge = shape1Center.x > edgeX + shapeTolerance;
+      const shape2RightOfEdge = shape2Center.x > edgeX + shapeTolerance;
+
+      return (edgeBetweenShape1 || edgeBetweenShape2) &&
+             ((shape1LeftOfEdge && shape2RightOfEdge) || (shape1RightOfEdge && shape2LeftOfEdge));
     }
     return false;
   };
