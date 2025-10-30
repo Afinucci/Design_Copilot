@@ -264,6 +264,16 @@ export const findSharedEdge = (
   const shape2Points = computePointsRelative(shape2);
   const tolerance = 5;
 
+  // Calculate shape centers for adjacency validation
+  const shape1Center = {
+    x: shape1.x + (shape1.width || 120) / 2,
+    y: shape1.y + (shape1.height || 80) / 2
+  };
+  const shape2Center = {
+    x: shape2.x + (shape2.width || 120) / 2,
+    y: shape2.y + (shape2.height || 80) / 2
+  };
+
   // Convert relative points to absolute coordinates
   const shape1Edges = shape1Points.map((p, i) => ({
     p1: { x: shape1.x + p.x, y: shape1.y + p.y },
@@ -282,6 +292,26 @@ export const findSharedEdge = (
     },
     index: i
   }));
+
+  // Helper function to check if edge is actually between the shapes
+  const isEdgeBetweenShapes = (
+    edgeY: number | null,
+    edgeX: number | null,
+    isHorizontal: boolean
+  ): boolean => {
+    if (isHorizontal && edgeY !== null) {
+      // For horizontal edge: one shape should be above, other below
+      const shape1Above = shape1Center.y < edgeY;
+      const shape2Above = shape2Center.y < edgeY;
+      return shape1Above !== shape2Above; // They should be on opposite sides
+    } else if (!isHorizontal && edgeX !== null) {
+      // For vertical edge: one shape should be left, other right
+      const shape1Left = shape1Center.x < edgeX;
+      const shape2Left = shape2Center.x < edgeX;
+      return shape1Left !== shape2Left; // They should be on opposite sides
+    }
+    return false;
+  };
 
   // If edge indices are provided, use them to find the specific edge
   if (edge1Index !== undefined && edge2Index !== undefined) {
@@ -307,13 +337,17 @@ export const findSharedEdge = (
         if (overlapStart < overlapEnd) {
           const midX = (overlapStart + overlapEnd) / 2;
           const midY = (edge1.p1.y + edge2.p1.y) / 2;
-          return {
-            point1: { x: overlapStart, y: midY },
-            point2: { x: overlapEnd, y: midY },
-            midpoint: { x: midX, y: midY },
-            edge1Index: edge1.index,
-            edge2Index: edge2.index
-          };
+
+          // Validate that this edge is actually between the shapes
+          if (isEdgeBetweenShapes(midY, null, true)) {
+            return {
+              point1: { x: overlapStart, y: midY },
+              point2: { x: overlapEnd, y: midY },
+              midpoint: { x: midX, y: midY },
+              edge1Index: edge1.index,
+              edge2Index: edge2.index
+            };
+          }
         }
       }
 
@@ -330,13 +364,17 @@ export const findSharedEdge = (
         if (overlapStart < overlapEnd) {
           const midX = (edge1.p1.x + edge2.p1.x) / 2;
           const midY = (overlapStart + overlapEnd) / 2;
-          return {
-            point1: { x: midX, y: overlapStart },
-            point2: { x: midX, y: overlapEnd },
-            midpoint: { x: midX, y: midY },
-            edge1Index: edge1.index,
-            edge2Index: edge2.index
-          };
+
+          // Validate that this edge is actually between the shapes
+          if (isEdgeBetweenShapes(null, midX, false)) {
+            return {
+              point1: { x: midX, y: overlapStart },
+              point2: { x: midX, y: overlapEnd },
+              midpoint: { x: midX, y: midY },
+              edge1Index: edge1.index,
+              edge2Index: edge2.index
+            };
+          }
         }
       }
     }
@@ -345,10 +383,11 @@ export const findSharedEdge = (
   }
 
   // Find overlapping edges (original behavior when indices not specified)
+  // Prioritize horizontal edges first (for vertical stacking), then vertical edges
+
+  // First pass: Look for horizontal edges (vertical stacking)
   for (const edge1 of shape1Edges) {
     for (const edge2 of shape2Edges) {
-      const isVertical1 = Math.abs(edge1.p2.x - edge1.p1.x) < tolerance;
-      const isVertical2 = Math.abs(edge2.p2.x - edge2.p1.x) < tolerance;
       const isHorizontal1 = Math.abs(edge1.p2.y - edge1.p1.y) < tolerance;
       const isHorizontal2 = Math.abs(edge2.p2.y - edge2.p1.y) < tolerance;
 
@@ -365,15 +404,27 @@ export const findSharedEdge = (
         if (overlapStart < overlapEnd) {
           const midX = (overlapStart + overlapEnd) / 2;
           const midY = (edge1.p1.y + edge2.p1.y) / 2;
-          return {
-            point1: { x: overlapStart, y: midY },
-            point2: { x: overlapEnd, y: midY },
-            midpoint: { x: midX, y: midY },
-            edge1Index: edge1.index,
-            edge2Index: edge2.index
-          };
+
+          // Validate that this edge is actually between the shapes
+          if (isEdgeBetweenShapes(midY, null, true)) {
+            return {
+              point1: { x: overlapStart, y: midY },
+              point2: { x: overlapEnd, y: midY },
+              midpoint: { x: midX, y: midY },
+              edge1Index: edge1.index,
+              edge2Index: edge2.index
+            };
+          }
         }
       }
+    }
+  }
+
+  // Second pass: Look for vertical edges (horizontal stacking)
+  for (const edge1 of shape1Edges) {
+    for (const edge2 of shape2Edges) {
+      const isVertical1 = Math.abs(edge1.p2.x - edge1.p1.x) < tolerance;
+      const isVertical2 = Math.abs(edge2.p2.x - edge2.p1.x) < tolerance;
 
       // Check for vertical overlap
       if (isVertical1 && isVertical2 && Math.abs(edge1.p1.x - edge2.p1.x) < tolerance) {
@@ -388,13 +439,17 @@ export const findSharedEdge = (
         if (overlapStart < overlapEnd) {
           const midX = (edge1.p1.x + edge2.p1.x) / 2;
           const midY = (overlapStart + overlapEnd) / 2;
-          return {
-            point1: { x: midX, y: overlapStart },
-            point2: { x: midX, y: overlapEnd },
-            midpoint: { x: midX, y: midY },
-            edge1Index: edge1.index,
-            edge2Index: edge2.index
-          };
+
+          // Validate that this edge is actually between the shapes
+          if (isEdgeBetweenShapes(null, midX, false)) {
+            return {
+              point1: { x: midX, y: overlapStart },
+              point2: { x: midX, y: overlapEnd },
+              midpoint: { x: midX, y: midY },
+              edge1Index: edge1.index,
+              edge2Index: edge2.index
+            };
+          }
         }
       }
     }
