@@ -1629,9 +1629,39 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                     sx={{ wordBreak: 'break-word', px: 1 }}
                   >
                     {shape.name}
+
+                    {/* Cleanroom Class Badge */}
+                    {shape.cleanroomClass && shape.cleanroomClass !== 'CNC' && (
+                      <Box
+                        component="span"
+                        sx={{
+                          display: 'inline-block',
+                          ml: 0.5,
+                          px: 0.8,
+                          py: 0.2,
+                          borderRadius: 1,
+                          fontSize: '0.65rem',
+                          fontWeight: 'bold',
+                          backgroundColor: getCleanroomColor(shape.cleanroomClass),
+                          color: '#fff',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                        }}
+                      >
+                        Class {shape.cleanroomClass}
+                      </Box>
+                    )}
+
+                    {/* Area Display */}
                     {shape.area && (
-                      <Box component="span" sx={{ display: 'block', fontSize: '0.7rem', opacity: 0.7, mt: 0.5 }}>
-                        {unitConverter.formatArea(shape.area)}
+                      <Box component="span" sx={{ display: 'block', fontSize: '0.7rem', opacity: 0.8, mt: 0.5 }}>
+                        📏 {unitConverter.formatArea(shape.area)}
+                      </Box>
+                    )}
+
+                    {/* Wall Dimensions */}
+                    {(shape.shapeType === 'rectangle' || shape.shapeType === 'custom') && (
+                      <Box component="span" sx={{ display: 'block', fontSize: '0.65rem', opacity: 0.7, mt: 0.3, fontStyle: 'italic' }}>
+                        {unitConverter.formatPixels(shape.width)} × {unitConverter.formatPixels(shape.height)}
                       </Box>
                     )}
                   </Typography>
