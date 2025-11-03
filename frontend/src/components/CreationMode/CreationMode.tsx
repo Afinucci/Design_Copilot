@@ -474,6 +474,11 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
           onDragOver={onDragOver}
           connectionMode={ConnectionMode.Loose}
           fitView
+          onlyRenderVisibleElements={true}
+          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          minZoom={0.1}
+          maxZoom={4}
+          deleteKeyCode="Delete"
         >
           <Controls />
           <Background variant={BackgroundVariant.Dots} gap={12} size={1} />

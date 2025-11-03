@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   EdgeProps,
   EdgeLabelRenderer,
@@ -9,6 +9,7 @@ import {
   Node,
   Edge
 } from 'reactflow';
+import { shallow } from 'zustand/shallow';
 import PersonnelFlowIcon from './PersonnelFlowIcon';
 import {
   EDGE_SPACING,
@@ -98,15 +99,19 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   // Get individual nodes directly - more efficient than complex selector
   const sourceNode = useStore((state) => state.nodeInternals.get(source));
   const targetNode = useStore((state) => state.nodeInternals.get(target));
-  
+
   // Get edges between the same nodes for parallel edge calculation
-  const parallelEdges = useStore(
-    (state) => state.edges.filter((edge: Edge) => 
-      (edge.source === source && edge.target === target) ||
-      (edge.source === target && edge.target === source)
-    ),
-    (a, b) => a.length === b.length && a.every((edge, i) => edge.id === b[i]?.id)
+  // Optimized: Use memoized selector with shallow comparison
+  const edgeSelector = useMemo(
+    () => (state: any) =>
+      state.edges.filter((edge: Edge) =>
+        (edge.source === source && edge.target === target) ||
+        (edge.source === target && edge.target === source)
+      ),
+    [source, target]
   );
+
+  const parallelEdges = useStore(edgeSelector, shallow);
   
   // Ensure we have valid data before rendering
   if (!data || data.relationshipIndex === undefined) {

@@ -3,6 +3,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { Box } from '@mui/material';
 import DiagramEditor from './components/DiagramEditor';
+import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
 const theme = createTheme({
@@ -21,9 +22,11 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <DiagramEditor />
-      </Box>
+      <ErrorBoundary>
+        <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+          <DiagramEditor />
+        </Box>
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }

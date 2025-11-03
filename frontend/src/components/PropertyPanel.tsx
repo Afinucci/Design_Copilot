@@ -22,6 +22,7 @@ import {
   DialogContent,
   DialogActions,
   IconButton,
+  CircularProgress,
 } from '@mui/material';
 import { Settings, Room, Speed, Warning, CheckCircle, Edit, Visibility, Lock, Delete, GroupWork, Build, Add, Remove, SwapHoriz, Person, Link, Close } from '@mui/icons-material';
 import { SpatialRelationship, NodeData, AppMode, GuidedSuggestion, NodeGroup, Equipment, CustomShapeData } from '../types';
@@ -87,6 +88,8 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
     materialFlows: any[];
     personnelFlows: any[];
   } | null>(null);
+  const [isLoadingRelationships, setIsLoadingRelationships] = useState(false);
+  const [isLoadingRequirements, setIsLoadingRequirements] = useState(false);
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState<Equipment | null>(null);
   const [newEquipment, setNewEquipment] = useState<Partial<Equipment>>({
@@ -111,6 +114,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
   }, [selectedNode]);
 
   const loadNodeRelationships = async (nodeId: string) => {
+    setIsLoadingRelationships(true);
     try {
       console.log(`🔗 PropertyPanel: Loading relationships for ${nodeId} in ${mode} mode`);
 
@@ -130,10 +134,13 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
       }
     } catch (error) {
       console.error('Error loading relationships:', error);
+    } finally {
+      setIsLoadingRelationships(false);
     }
   };
 
   const loadNodeRequirements = async (nodeId: string) => {
+    setIsLoadingRequirements(true);
     try {
       const nodeType = nodeId.replace(/^node-/, '').replace(/-\d+$/, '');
       const reqs = await apiService.getComplianceRequirements(nodeType);
@@ -146,6 +153,8 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
       });
     } catch (error) {
       console.error('Error loading requirements:', error);
+    } finally {
+      setIsLoadingRequirements(false);
     }
   };
 
@@ -1019,33 +1028,42 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
           </Card>
         )}
 
-        {relationships.length > 0 && (
+        {(relationships.length > 0 || isLoadingRelationships) && (
           <Card>
             <CardContent>
               <Typography variant="subtitle1" gutterBottom>
                 Current Relationships
               </Typography>
-              <List dense>
-                {relationships.map((rel) => (
-                  <ListItem key={rel.id}>
-                    <ListItemIcon>
-                      {getRelationshipIcon(rel.type)}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={rel.type.replace('_', ' ').toLowerCase()}
-                      secondary={rel.reason}
-                    />
-                    <Chip
-                      label={rel.priority}
-                      size="small"
-                      sx={{
-                        backgroundColor: getRelationshipColor(rel.type),
-                        color: 'white',
-                      }}
-                    />
-                  </ListItem>
-                ))}
-              </List>
+              {isLoadingRelationships ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 3 }}>
+                  <CircularProgress size={24} />
+                  <Typography variant="body2" color="text.secondary" sx={{ ml: 2 }}>
+                    Loading relationships...
+                  </Typography>
+                </Box>
+              ) : (
+                <List dense>
+                  {relationships.map((rel) => (
+                    <ListItem key={rel.id}>
+                      <ListItemIcon>
+                        {getRelationshipIcon(rel.type)}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={rel.type.replace('_', ' ').toLowerCase()}
+                        secondary={rel.reason}
+                      />
+                      <Chip
+                        label={rel.priority}
+                        size="small"
+                        sx={{
+                          backgroundColor: getRelationshipColor(rel.type),
+                          color: 'white',
+                        }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
             </CardContent>
           </Card>
         )}
@@ -1190,4 +1208,40 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode, onUpdateNod
   );
 };
 
-export default memo(PropertyPanel);
+// Custom comparison function for React.memo to prevent unnecessary re-renders
+const arePropsEqual = (prevProps: PropertyPanelProps, nextProps: PropertyPanelProps) => {
+  // Check if selectedNode changed (most important prop)
+  if (prevProps.selectedNode?.id !== nextProps.selectedNode?.id) {
+    return false;
+  }
+
+  // Check if visibility changed
+  if (prevProps.isVisible !== nextProps.isVisible) {
+    return false;
+  }
+
+  // Check if mode changed
+  if (prevProps.mode !== nextProps.mode) {
+    return false;
+  }
+
+  // Check if connection status changed
+  if (prevProps.connectionStatus !== nextProps.connectionStatus) {
+    return false;
+  }
+
+  // Check if guidedSuggestions length changed
+  if (prevProps.guidedSuggestions?.length !== nextProps.guidedSuggestions?.length) {
+    return false;
+  }
+
+  // Check if groups length changed
+  if (prevProps.groups?.length !== nextProps.groups?.length) {
+    return false;
+  }
+
+  // If nothing important changed, prevent re-render
+  return true;
+};
+
+export default memo(PropertyPanel, arePropsEqual);

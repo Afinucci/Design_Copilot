@@ -415,25 +415,41 @@ async function getEnhancedGhostSuggestions(
   const suggestions: GhostSuggestion[] = [];
   const suggestionMap = new Map<string, GhostSuggestion>();
 
-  // Stage 1: Direct relationship suggestions (same as before but enhanced)
-  const directSuggestions = await getDirectRelationshipSuggestions(session, nodeName, triggerNodePosition, confidenceThreshold);
+  // Execute all 4 stages in parallel for maximum performance
+  const [
+    directSuggestions,
+    patternSuggestions,
+    workflowSuggestions,
+    complianceSuggestions
+  ] = await Promise.all([
+    // Stage 1: Direct relationship suggestions
+    getDirectRelationshipSuggestions(session, nodeName, triggerNodePosition, confidenceThreshold),
+    // Stage 2: Pattern-based pharmaceutical facility suggestions
+    nodeCategory
+      ? getPharmaceuticalPatternSuggestions(session, nodeCategory, triggerNodePosition, confidenceThreshold)
+      : Promise.resolve([]),
+    // Stage 3: Multi-hop workflow suggestions
+    getWorkflowPatternSuggestions(session, nodeName, triggerNodePosition, confidenceThreshold),
+    // Stage 4: Compliance-based suggestions
+    getComplianceBasedSuggestions(session, nodeName, nodeCategory, triggerNodePosition, confidenceThreshold)
+  ]);
+
+  console.log('🚀 All 4 suggestion stages completed in parallel');
+
+  // Stage 1: Process direct suggestions
   directSuggestions.forEach(s => suggestionMap.set(s.nodeId || s.id, s));
 
-  // Stage 2: Pattern-based pharmaceutical facility suggestions
-  if (nodeCategory) {
-    const patternSuggestions = await getPharmaceuticalPatternSuggestions(session, nodeCategory, triggerNodePosition, confidenceThreshold);
-    patternSuggestions.forEach(s => {
-      const key = s.nodeId || s.id;
-      if (!suggestionMap.has(key)) {
-        s.reason = `Pharmaceutical pattern: ${s.reason}`;
-        s.confidence = Math.max(0.4, s.confidence * 0.8); // Slightly lower confidence for pattern-based
-        suggestionMap.set(key, s);
-      }
-    });
-  }
+  // Stage 2: Process pattern suggestions
+  patternSuggestions.forEach(s => {
+    const key = s.nodeId || s.id;
+    if (!suggestionMap.has(key)) {
+      s.reason = `Pharmaceutical pattern: ${s.reason}`;
+      s.confidence = Math.max(0.4, s.confidence * 0.8); // Slightly lower confidence for pattern-based
+      suggestionMap.set(key, s);
+    }
+  });
 
-  // Stage 3: Multi-hop workflow suggestions (2-step relationships)
-  const workflowSuggestions = await getWorkflowPatternSuggestions(session, nodeName, triggerNodePosition, confidenceThreshold);
+  // Stage 3: Process workflow suggestions
   workflowSuggestions.forEach(s => {
     const key = s.nodeId || s.id;
     if (!suggestionMap.has(key)) {
@@ -443,8 +459,7 @@ async function getEnhancedGhostSuggestions(
     }
   });
 
-  // Stage 4: Compliance-based suggestions (GMP and cleanroom requirements)
-  const complianceSuggestions = await getComplianceBasedSuggestions(session, nodeName, nodeCategory, triggerNodePosition, confidenceThreshold);
+  // Stage 4: Process compliance suggestions
   complianceSuggestions.forEach(s => {
     const key = s.nodeId || s.id;
     if (!suggestionMap.has(key)) {

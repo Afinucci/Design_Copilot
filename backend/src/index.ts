@@ -13,6 +13,7 @@ import relationshipRoutes from './routes/relationships';
 import knowledgeGraphRoutes from './routes/knowledgeGraph';
 import shapesRoutes from './routes/shapes';
 import suggestionsRoutes from './routes/suggestions';
+import logger from './utils/logger';
 
 config();
 
@@ -35,7 +36,7 @@ app.use(morgan('combined'));
 app.use(express.json());
 
 app.get('/health', async (req, res) => {
-  console.log('🩺 Health check requested');
+  logger.emoji('🩺', 'Health check requested');
   try {
     const neo4jService = Neo4jService.getInstance();
     const isConnected = await neo4jService.verifyConnection();
@@ -75,36 +76,36 @@ app.use('/api/shapes', shapesRoutes);
 app.use('/api/suggestions', suggestionsRoutes);
 
 process.on('SIGINT', async () => {
-  console.log('Shutting down gracefully...');
+  logger.info('Shutting down gracefully...');
   const neo4jService = Neo4jService.getInstance();
   await neo4jService.close();
   process.exit(0);
 });
 
 app.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV}`);
-  
+  logger.info(`Server running on port ${PORT}`);
+  logger.info(`Environment: ${process.env.NODE_ENV}`);
+
   // Initialize Static Node Templates Service
   try {
     const staticTemplatesService = StaticNodeTemplatesService.getInstance();
     await staticTemplatesService.initialize();
-    console.log('✅ Static Node Templates Service initialized successfully');
+    logger.emoji('✅', 'Static Node Templates Service initialized successfully');
   } catch (error) {
-    console.error('❌ Static Templates Service initialization error:', error);
+    logger.error('❌ Static Templates Service initialization error:', error);
   }
-  
+
   // Test database connection on startup
   try {
     const neo4jService = Neo4jService.getInstance();
     const isConnected = await neo4jService.verifyConnection();
-    
+
     if (isConnected) {
-      console.log('🎉 Neo4j Aura database connection established successfully');
+      logger.emoji('🎉', 'Neo4j Aura database connection established successfully');
     } else {
-      console.warn('⚠️  Neo4j Aura database connection failed - running in offline mode');
+      logger.warn('⚠️  Neo4j Aura database connection failed - running in offline mode');
     }
   } catch (error) {
-    console.error('❌ Database initialization error:', error);
+    logger.error('❌ Database initialization error:', error);
   }
 });
