@@ -32,6 +32,10 @@ import {
   Menu as MenuIcon,
   MenuOpen as MenuOpenIcon,
   FitScreen as FitScreenIcon,
+  Straighten as WallIcon,
+  LinearScale as MeasureIcon,
+  AspectRatio as ScaleIcon,
+  Visibility as RulerIcon,
 } from '@mui/icons-material';
 import { ShapeType } from '../../types';
 import { DrawingMode } from './types';
@@ -74,6 +78,11 @@ export interface DrawingToolsProps {
   onToggleSidebar?: () => void;
   isSidebarVisible?: boolean;
 
+  // New features
+  onToggleRulers?: () => void;
+  showRulers?: boolean;
+  onOpenScaleSettings?: () => void;
+
   // State
   canUndo: boolean;
   canRedo: boolean;
@@ -109,6 +118,9 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
   onRotateRight,
   onToggleSidebar,
   isSidebarVisible = true,
+  onToggleRulers,
+  showRulers = true,
+  onOpenScaleSettings,
   canUndo,
   canRedo,
   isDrawing,
@@ -222,6 +234,42 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
             aria-label="Door Connection Mode"
           >
             <DoorIcon />
+          </IconButton>
+        </Tooltip>
+
+        {/* Wall Drawing Mode Button */}
+        <Tooltip title="Wall Drawing Tool - Draw walls with configurable thickness" arrow>
+          <IconButton
+            size="medium"
+            color={drawingMode === 'wall' ? 'primary' : 'default'}
+            onClick={() => onDrawingModeChange(drawingMode === 'wall' ? 'select' : 'wall')}
+            sx={{
+              backgroundColor: drawingMode === 'wall' ? 'primary.light' : 'transparent',
+              '&:hover': {
+                backgroundColor: drawingMode === 'wall' ? 'primary.main' : 'action.hover',
+              },
+            }}
+            aria-label="Wall Drawing Mode"
+          >
+            <WallIcon />
+          </IconButton>
+        </Tooltip>
+
+        {/* Measurement Mode Button */}
+        <Tooltip title="Measurement Tool - Add dimensions and labels to your layout" arrow>
+          <IconButton
+            size="medium"
+            color={drawingMode === 'measurement' ? 'primary' : 'default'}
+            onClick={() => onDrawingModeChange(drawingMode === 'measurement' ? 'select' : 'measurement')}
+            sx={{
+              backgroundColor: drawingMode === 'measurement' ? 'primary.light' : 'transparent',
+              '&:hover': {
+                backgroundColor: drawingMode === 'measurement' ? 'primary.main' : 'action.hover',
+              },
+            }}
+            aria-label="Measurement Mode"
+          >
+            <MeasureIcon />
           </IconButton>
         </Tooltip>
 
@@ -391,6 +439,34 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
                 onClick={onFitToWindow}
               >
                 <FitScreenIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+
+        <Divider orientation={orientation === 'vertical' ? 'horizontal' : 'vertical'} flexItem />
+
+        {/* Scale & Ruler Controls */}
+        <Box display="flex" gap={0.5} alignItems="center" flexDirection={orientation === 'vertical' ? 'column' : 'row'}>
+          {onToggleRulers && (
+            <Tooltip title={showRulers ? 'Hide Rulers' : 'Show Rulers'} arrow>
+              <IconButton
+                size="medium"
+                color={showRulers ? 'primary' : 'default'}
+                onClick={onToggleRulers}
+              >
+                <RulerIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+
+          {onOpenScaleSettings && (
+            <Tooltip title="Scale & Unit Settings - Configure measurement units" arrow>
+              <IconButton
+                size="medium"
+                onClick={onOpenScaleSettings}
+              >
+                <ScaleIcon />
               </IconButton>
             </Tooltip>
           )}

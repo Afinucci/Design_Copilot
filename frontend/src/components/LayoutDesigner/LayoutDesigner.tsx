@@ -24,6 +24,13 @@ import DoorPlacementOverlay from './DoorPlacementOverlay';
 import { findAllSharedWalls, DoorPlacement } from '../../utils/wallDetection';
 import { updateDoorConnectionsEdgePoints } from '../../utils/doorConnectionUtils';
 import { Snackbar, Alert } from '@mui/material';
+import { UnitConverter } from '../../utils/unitConversion';
+import { Measurement } from './MeasurementTool';
+import { WallSegment } from './WallTool';
+import RulerOverlay from './RulerOverlay';
+import ScaleSettings from './ScaleSettings';
+import MeasurementRenderer from './MeasurementTool';
+import WallTool from './WallTool';
 
 export interface LayoutDesignerProps {
   onClose?: () => void;
@@ -233,6 +240,17 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+
+  // New professional floor plan features
+  const [unitConverter, setUnitConverter] = useState<UnitConverter>(
+    UnitConverter.createDefault() // 1:100 scale, metric by default
+  );
+  const [showScaleSettings, setShowScaleSettings] = useState(false);
+  const [showRulers, setShowRulers] = useState(true);
+  const [measurements, setMeasurements] = useState<Measurement[]>([]);
+  const [walls, setWalls] = useState<WallSegment[]>([]);
+  const [showWallTool, setShowWallTool] = useState(false);
+  const [selectedMeasurementId, setSelectedMeasurementId] = useState<string | null>(null);
 
   // Derived state: get selected connection object from ID
   const selectedConnection = selectedConnectionId
@@ -1418,6 +1436,15 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
               backgroundColor={canvasSettings.backgroundColor}
             />
 
+            {/* Professional Rulers */}
+            {showRulers && (
+              <RulerOverlay
+                canvasWidth={canvasSettings.width}
+                canvasHeight={canvasSettings.height}
+                unitConverter={unitConverter}
+              />
+            )}
+
             {/* Connection Layer (SVG) */}
             <svg
               style={{
@@ -1473,6 +1500,14 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                 selectedDoorId={selectedDoorPlacementId}
               />
             </svg>
+
+            {/* Measurement Layer */}
+            <MeasurementRenderer
+              measurements={measurements}
+              unitConverter={unitConverter}
+              selectedMeasurementId={selectedMeasurementId}
+              onMeasurementClick={(id) => setSelectedMeasurementId(id)}
+            />
 
             {/* Shape Overlays */}
             <Box
@@ -1594,6 +1629,11 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                     sx={{ wordBreak: 'break-word', px: 1 }}
                   >
                     {shape.name}
+                    {shape.area && (
+                      <Box component="span" sx={{ display: 'block', fontSize: '0.7rem', opacity: 0.7, mt: 0.5 }}>
+                        {unitConverter.formatArea(shape.area)}
+                      </Box>
+                    )}
                   </Typography>
 
                   {/* Resize handles - show only for selected shape */}
@@ -1652,7 +1692,15 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       {/* Drawing Tools */}
       <DrawingTools
         drawingMode={drawingMode}
-        onDrawingModeChange={setDrawingMode}
+        onDrawingModeChange={(mode) => {
+          setDrawingMode(mode);
+          // Show wall tool panel when entering wall mode
+          if (mode === 'wall') {
+            setShowWallTool(true);
+          } else {
+            setShowWallTool(false);
+          }
+        }}
         activeShapeTool={drawingState.activeShapeTool}
         onShapeToolChange={(tool) => {
           setDrawingState(prev => ({ ...prev, activeShapeTool: tool }));
@@ -1677,6 +1725,9 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         onRotateRight={handleRotateRight}
         onToggleSidebar={() => setIsSidebarVisible(!isSidebarVisible)}
         isSidebarVisible={isSidebarVisible}
+        onToggleRulers={() => setShowRulers(!showRulers)}
+        showRulers={showRulers}
+        onOpenScaleSettings={() => setShowScaleSettings(true)}
         canUndo={historyIndex > 0}
         canRedo={historyIndex < history.length - 1}
         isDrawing={drawingState.isDrawing}
@@ -1905,6 +1956,36 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
           {snackbarMessage}
         </Alert>
       </Snackbar>
+
+      {/* Wall Tool Panel */}
+      {showWallTool && drawingMode === 'wall' && (
+        <WallTool
+          onClose={() => {
+            setShowWallTool(false);
+            setDrawingMode('select');
+          }}
+          onWallCreate={(wall) => {
+            setWalls(prev => [...prev, wall]);
+            console.log('✅ Wall created:', wall);
+          }}
+          pixelsPerFoot={unitConverter.getConfig().pixelsPerUnit}
+        />
+      )}
+
+      {/* Scale Settings Dialog */}
+      <ScaleSettings
+        open={showScaleSettings}
+        onClose={() => setShowScaleSettings(false)}
+        onApply={(converter) => {
+          setUnitConverter(converter);
+          const config = converter.getConfig();
+          console.log('✅ Scale updated:', config.unit, config.pixelsPerUnit);
+          setSnackbarMessage(`Scale updated to ${config.unit} (${config.pixelsPerUnit.toFixed(1)} px/${config.abbreviation})`);
+          setSnackbarSeverity('success');
+          setSnackbarOpen(true);
+        }}
+        currentConverter={unitConverter}
+      />
     </Box>
   );
 };

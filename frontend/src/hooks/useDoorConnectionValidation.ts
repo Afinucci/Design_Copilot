@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ShapeProperties } from '../components/LayoutDesigner/PropertiesPanel';
+import { DrawingMode } from '../components/LayoutDesigner/types';
 import {
   validateDoorConnection,
   DoorValidationResult,
@@ -18,7 +19,7 @@ export interface ShapeValidationState {
 
 interface UseDoorConnectionValidationProps {
   shapes: ShapeProperties[];
-  drawingMode: 'select' | 'door' | 'shape' | 'pan';
+  drawingMode: DrawingMode;
   firstSelectedShapeId: string | null;
   hoveredShapeId: string | null;
 }

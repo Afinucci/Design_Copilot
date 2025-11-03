@@ -7,6 +7,8 @@ export type DrawingMode =
   | 'select'       // Select and move shapes
   | 'shape'        // Drawing shapes
   | 'door'         // Drawing door connections (3-step: shape1 → shape2 → edge point)
+  | 'wall'         // Drawing walls with thickness (NEW)
+  | 'measurement'  // Adding measurements and dimensions (NEW)
   | 'pan';         // Pan canvas
 
 /**
