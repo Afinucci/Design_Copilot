@@ -31,6 +31,11 @@ import RulerOverlay from './RulerOverlay';
 import ScaleSettings from './ScaleSettings';
 import MeasurementRenderer from './MeasurementTool';
 import WallTool from './WallTool';
+import ChatPanel from '../ChatPanel';
+import { useChatAssistant } from '../../hooks/useChatAssistant';
+import { ChatAction } from '../../types';
+import { Fab, Tooltip } from '@mui/material';
+import { Chat as ChatIcon } from '@mui/icons-material';
 
 export interface LayoutDesignerProps {
   onClose?: () => void;
@@ -247,6 +252,46 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   );
   const [showScaleSettings, setShowScaleSettings] = useState(false);
   const [showRulers, setShowRulers] = useState(true);
+
+  // AI Chat Assistant state
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
+  // Convert shapes to nodes for chat context - create empty arrays as placeholders
+  const chatNodes = shapes.map(shape => ({
+    id: shape.id,
+    type: 'custom',
+    position: { x: shape.x, y: shape.y },
+    data: {
+      ...shape,
+      label: shape.name
+    }
+  })) as any[];
+
+  // Convert door connections to edges for chat context
+  const chatEdges = doorConnections.map(conn => ({
+    id: conn.id,
+    source: conn.fromShape.shapeId,
+    target: conn.toShape.shapeId,
+    data: {
+      type: 'MATERIAL_FLOW', // Default type
+      priority: 1
+    }
+  })) as any[];
+
+  // Initialize chat assistant hook
+  const {
+    messages,
+    isLoading: isChatLoading,
+    error: chatError,
+    sendMessage,
+    clearHistory,
+    executeAction,
+    highlightedNodeIds
+  } = useChatAssistant({
+    nodes: chatNodes,
+    edges: chatEdges,
+    diagramId: initialLayout?.id
+  });
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [walls, setWalls] = useState<WallSegment[]>([]);
   const [showWallTool, setShowWallTool] = useState(false);
@@ -666,6 +711,83 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     setDoorPlacements(prev => prev.filter(d => d.id !== selectedDoorPlacementId));
     setSelectedDoorPlacementId(null);
   }, [selectedDoorPlacementId]);
+
+  // Chat action handler
+  const handleChatAction = useCallback((action: ChatAction) => {
+    console.log('🤖 Executing chat action:', action);
+
+    switch (action.type) {
+      case 'add_node':
+        if (action.data.nodeTemplate && action.data.position) {
+          // Create a new shape from the node template
+          const width = action.data.nodeTemplate.defaultSize?.width || 150;
+          const height = action.data.nodeTemplate.defaultSize?.height || 100;
+          const newShape: ShapeProperties = {
+            id: `shape-${Date.now()}`,
+            shapeType: 'rectangle',
+            x: action.data.position.x,
+            y: action.data.position.y,
+            width,
+            height,
+            area: width * height,
+            fillColor: action.data.nodeTemplate.color || '#3498db',
+            borderColor: '#000',
+            borderWidth: 2,
+            opacity: 1,
+            rotation: 0,
+            name: action.data.nodeTemplate.name,
+            category: action.data.nodeTemplate.category,
+            cleanroomClass: (action.data.nodeTemplate.cleanroomClass as 'A' | 'B' | 'C' | 'D' | 'CNC') || 'CNC',
+            pressureRegime: 'positive',
+            temperatureRange: { min: 20, max: 25, unit: 'C' },
+            humidityRange: { min: 30, max: 50 },
+            isCompliant: true,
+            complianceIssues: [],
+            assignedNodeName: action.data.nodeTemplate.name,
+            assignedNodeId: action.data.nodeTemplate.id,
+            customProperties: {}
+          };
+          setShapes(prev => [...prev, newShape]);
+          setSnackbarMessage(`Added ${newShape.name} to layout`);
+          setSnackbarSeverity('success');
+          setSnackbarOpen(true);
+        }
+        break;
+
+      case 'highlight_node':
+        if (action.data.highlightNodeIds && action.data.highlightNodeIds.length > 0) {
+          // Highlight is already handled by the hook's highlightedNodeIds state
+          // We just need to show a message
+          setSnackbarMessage(`Highlighting ${action.data.highlightNodeIds.length} area(s)`);
+          setSnackbarSeverity('info');
+          setSnackbarOpen(true);
+        }
+        break;
+
+      case 'add_relationship':
+        if (action.data.relationship) {
+          // This would add a door connection or other relationship
+          setSnackbarMessage('Relationship feature coming soon');
+          setSnackbarSeverity('info');
+          setSnackbarOpen(true);
+        }
+        break;
+
+      case 'suggest_layout':
+        if (action.data.layoutSuggestion) {
+          setSnackbarMessage('Layout suggestion feature coming soon');
+          setSnackbarSeverity('info');
+          setSnackbarOpen(true);
+        }
+        break;
+
+      default:
+        console.warn('Unknown action type:', action.type);
+    }
+
+    // Also call the executeAction from the hook to update highlights
+    executeAction(action);
+  }, [executeAction]);
 
   // Initialize door connection validation hook
   const {
@@ -1571,6 +1693,22 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                           ...(drawingState.selectedShapeId === shape.id && {
                             boxShadow: `0 0 0 3px ${shape.fillColor}`,
                           }),
+                          // AI Chat highlight effect
+                          ...(highlightedNodeIds.includes(shape.id) && {
+                            boxShadow: '0 0 0 4px #FFD700, 0 0 20px rgba(255, 215, 0, 0.6)',
+                            animation: 'pulse 2s infinite',
+                            '@keyframes pulse': {
+                              '0%': {
+                                boxShadow: '0 0 0 4px #FFD700, 0 0 20px rgba(255, 215, 0, 0.6)',
+                              },
+                              '50%': {
+                                boxShadow: '0 0 0 6px #FFD700, 0 0 30px rgba(255, 215, 0, 0.8)',
+                              },
+                              '100%': {
+                                boxShadow: '0 0 0 4px #FFD700, 0 0 20px rgba(255, 215, 0, 0.6)',
+                              },
+                            },
+                          }),
                         }),
                   }}
                   onClick={(e) => {
@@ -2015,6 +2153,38 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
           setSnackbarOpen(true);
         }}
         currentConverter={unitConverter}
+      />
+
+      {/* Floating AI Chat Button */}
+      <Tooltip title="AI Layout Assistant" placement="left">
+        <Fab
+          color="primary"
+          aria-label="open ai chat"
+          onClick={() => setIsChatOpen(true)}
+          sx={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            zIndex: 1300,
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            '&:hover': {
+              background: 'linear-gradient(135deg, #764ba2 0%, #667eea 100%)',
+            }
+          }}
+        >
+          <ChatIcon />
+        </Fab>
+      </Tooltip>
+
+      {/* AI Chat Panel */}
+      <ChatPanel
+        open={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        messages={messages}
+        isLoading={isChatLoading}
+        onSendMessage={sendMessage}
+        onClearHistory={clearHistory}
+        onExecuteAction={handleChatAction}
       />
     </Box>
   );

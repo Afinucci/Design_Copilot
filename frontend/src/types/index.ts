@@ -435,3 +435,59 @@ export function getCleanroomColor(cleanroomClass?: string): string {
       return '#D3D3D3'; // Default light gray for unknown
   }
 }
+
+// AI Assistant Chat Types (duplicated from shared for frontend build compatibility)
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
+  actions?: ChatAction[];
+}
+
+export interface ChatAction {
+  id: string;
+  type: 'add_node' | 'highlight_node' | 'add_relationship' | 'suggest_layout';
+  label: string;
+  data: {
+    nodeId?: string;
+    nodeTemplate?: NodeTemplate;
+    position?: { x: number; y: number };
+    relationship?: SpatialRelationship;
+    highlightNodeIds?: string[];
+    layoutSuggestion?: {
+      nodes: Array<{ template: NodeTemplate; position: { x: number; y: number } }>;
+      relationships: SpatialRelationship[];
+    };
+  };
+}
+
+export interface ChatContext {
+  diagramId?: string;
+  currentNodes: Array<{
+    id: string;
+    name: string;
+    category: NodeCategory;
+    cleanroomClass?: string;
+    position: { x: number; y: number };
+  }>;
+  currentRelationships: SpatialRelationship[];
+}
+
+export interface ChatRequest {
+  message: string;
+  context: ChatContext;
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
+}
+
+export interface ChatResponse {
+  message: string;
+  actions: ChatAction[];
+}
+
+export interface ChatHistory {
+  diagramId: string;
+  messages: ChatMessage[];
+  createdAt: Date;
+  updatedAt: Date;
+}

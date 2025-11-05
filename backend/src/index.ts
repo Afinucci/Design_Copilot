@@ -13,8 +13,10 @@ import relationshipRoutes from './routes/relationships';
 import knowledgeGraphRoutes from './routes/knowledgeGraph';
 import shapesRoutes from './routes/shapes';
 import suggestionsRoutes from './routes/suggestions';
+import chatRoutes from './routes/chat';
 import logger from './utils/logger';
 
+// Load environment variables
 config();
 
 const app = express();
@@ -74,6 +76,7 @@ app.use('/api/relationships', relationshipRoutes);
 app.use('/api/knowledge-graph', knowledgeGraphRoutes);
 app.use('/api/shapes', shapesRoutes);
 app.use('/api/suggestions', suggestionsRoutes);
+app.use('/api/chat', chatRoutes);
 
 process.on('SIGINT', async () => {
   logger.info('Shutting down gracefully...');
