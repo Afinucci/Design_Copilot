@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Tooltip, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
-import { Timeline, ShowChart, CloudUpload } from '@mui/icons-material';
+import { Timeline, ShowChart, CloudUpload, Save, FolderOpen } from '@mui/icons-material';
 import ReactFlow, {
   Node,
   Edge,
@@ -24,7 +24,9 @@ import CustomNode from '../CustomNode';
 import CustomShapeNode from '../CustomShapeNode';
 import MultiRelationshipEdge from '../MultiRelationshipEdge';
 import InlineRelationshipEditDialog from '../InlineRelationshipEditDialog';
-import { NodeTemplate, AppMode, SpatialRelationship, DiagramEdge } from '../../types';
+import SaveDiagramDialog from '../SaveDiagramDialog';
+import LoadDiagramDialog from '../LoadDiagramDialog';
+import { NodeTemplate, AppMode, SpatialRelationship, DiagramEdge, Diagram } from '../../types';
 import { apiService } from '../../services/api';
 import { formatRelationshipLabel } from '../../utils/edgeUtils';
 
@@ -41,9 +43,10 @@ interface CreationModeProps {
   mode: AppMode;
   onSave: (data: any) => void;
   onLoad: () => void;
+  onShowMessage?: (message: string, severity?: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
-const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }) => {
+const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad, onShowMessage }) => {
   const reactFlowInstance = useReactFlow();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -61,6 +64,12 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
   // State for selected node (for PropertyPanel)
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [propertyPanelVisible, setPropertyPanelVisible] = useState(false);
+
+  // State for save/load dialogs
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [loadDialogOpen, setLoadDialogOpen] = useState(false);
+  const [currentDiagramId, setCurrentDiagramId] = useState<string | null>(null);
+  const [currentDiagramName, setCurrentDiagramName] = useState<string | null>(null);
 
   // Load templates on mount
   React.useEffect(() => {
@@ -378,6 +387,176 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
     onSave(diagramData);
   }, [nodes, edges, mode, onSave]);
 
+  // Handle save diagram button click
+  const handleSaveButtonClick = useCallback(() => {
+    setSaveDialogOpen(true);
+  }, []);
+
+  // Handle save diagram with name
+  const handleSaveWithName = useCallback(async (name: string) => {
+    try {
+      console.log('💾 Saving diagram:', name);
+      console.log('📊 Current state:', {
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+        edges: edges
+      });
+
+      // Prepare diagram data
+      const diagramData = {
+        name,
+        nodes: nodes.map((node) => ({
+          id: node.id,
+          name: node.data.label || node.data.name,
+          category: node.data.category,
+          cleanroomClass: node.data.cleanroomClass,
+          x: node.position.x,
+          y: node.position.y,
+          width: node.data.width || node.width || 120,
+          height: node.data.height || node.height || 80,
+          equipment: node.data.equipment || [],
+          color: node.data.color,
+        })),
+        relationships: edges.map((edge) => ({
+          id: edge.id,
+          fromId: edge.source,
+          toId: edge.target,
+          type: edge.data?.relationshipType || 'ADJACENT_TO',
+          priority: edge.data?.priority || 5,
+          reason: edge.data?.reason || 'User-defined relationship',
+          flowDirection: edge.data?.flowDirection,
+          doorType: edge.data?.doorType,
+          flowType: edge.data?.flowType,
+          minDistance: edge.data?.minDistance || null,
+          maxDistance: edge.data?.maxDistance || null,
+        })),
+      };
+
+      console.log('📦 Prepared diagram data:', {
+        name: diagramData.name,
+        nodeCount: diagramData.nodes.length,
+        relationshipCount: diagramData.relationships.length,
+        relationships: diagramData.relationships
+      });
+
+      let result;
+      if (currentDiagramId) {
+        // Update existing diagram
+        result = await apiService.updateDiagram(currentDiagramId, diagramData);
+        console.log('✅ Diagram updated:', result);
+        onShowMessage?.(`Diagram "${name}" updated successfully!`, 'success');
+      } else {
+        // Create new diagram
+        result = await apiService.createDiagram(diagramData);
+        console.log('✅ Diagram saved:', result);
+        setCurrentDiagramId(result.id);
+        setCurrentDiagramName(name);
+        onShowMessage?.(`Diagram "${name}" saved successfully!`, 'success');
+      }
+
+      setSaveDialogOpen(false);
+    } catch (error) {
+      console.error('❌ Failed to save diagram:', error);
+      onShowMessage?.('Failed to save diagram. Please try again.', 'error');
+    }
+  }, [nodes, edges, currentDiagramId]);
+
+  // Handle load diagram button click
+  const handleLoadButtonClick = useCallback(() => {
+    setLoadDialogOpen(true);
+  }, []);
+
+  // Handle load diagram
+  const handleLoadDiagram = useCallback((diagram: Diagram) => {
+    try {
+      console.log('📂 Loading diagram:', diagram);
+      console.log('📊 Diagram data:', {
+        nodeCount: diagram.nodes?.length || 0,
+        relationshipCount: diagram.relationships?.length || 0,
+        hasNodes: !!diagram.nodes,
+        hasRelationships: !!diagram.relationships,
+        relationships: diagram.relationships
+      });
+
+      // Convert diagram nodes to ReactFlow nodes
+      const loadedNodes: Node[] = diagram.nodes.map((node: any) => ({
+        id: node.id,
+        type: 'functionalArea',
+        position: { x: node.x || 0, y: node.y || 0 },
+        data: {
+          label: node.name,
+          name: node.name,
+          category: node.category,
+          cleanroomClass: node.cleanroomClass,
+          width: node.width || 120,
+          height: node.height || 80,
+          equipment: node.equipment || [],
+          color: node.color,
+        },
+      }));
+
+      // Convert diagram relationships to ReactFlow edges
+      const loadedEdges: Edge[] = (diagram.relationships || []).map((rel: any, index: number) => {
+        console.log('🔄 Converting relationship:', rel);
+
+        // Calculate relationship index (for multiple relationships between same nodes)
+        const existingEdgesBetweenNodes = (diagram.relationships || []).slice(0, index).filter(
+          (r: any) =>
+            (r.fromId === rel.fromId && r.toId === rel.toId) ||
+            (r.fromId === rel.toId && r.toId === rel.fromId)
+        );
+        const relationshipIndex = existingEdgesBetweenNodes.length;
+
+        const edge = {
+          id: rel.id,
+          source: rel.fromId,
+          target: rel.toId,
+          type: 'default',
+          label: formatRelationshipLabel(rel.type),
+          labelShowBg: true,
+          labelBgStyle: { fill: '#ffffff' },
+          labelBgPadding: [8, 4] as [number, number],
+          data: {
+            relationshipType: rel.type,
+            relationshipIndex, // Required by MultiRelationshipEdge
+            priority: rel.priority || 5,
+            reason: rel.reason || 'User-defined relationship',
+            flowDirection: rel.flowDirection,
+            doorType: rel.doorType,
+            flowType: rel.flowType,
+            minDistance: rel.minDistance,
+            maxDistance: rel.maxDistance,
+            mode: 'creation' as const,
+            edgeStyle,
+          },
+        };
+        console.log('✅ Created edge:', edge);
+        return edge;
+      });
+
+      console.log('🔄 Converted data:', {
+        loadedNodes: loadedNodes.length,
+        loadedEdges: loadedEdges.length,
+        edges: loadedEdges
+      });
+
+      setNodes(loadedNodes);
+      setEdges(loadedEdges);
+      setCurrentDiagramId(diagram.id);
+      setCurrentDiagramName(diagram.name);
+      setLoadDialogOpen(false);
+
+      console.log('✅ Diagram loaded successfully:', {
+        nodes: loadedNodes.length,
+        edges: loadedEdges.length
+      });
+      onShowMessage?.(`Diagram "${diagram.name}" loaded successfully!`, 'success');
+    } catch (error) {
+      console.error('❌ Failed to load diagram:', error);
+      onShowMessage?.('Failed to load diagram. Please try again.', 'error');
+    }
+  }, [edgeStyle]);
+
   return (
     <Box sx={{ display: 'flex', height: '100%', width: '100%' }}>
       {/* Node Palette */}
@@ -392,15 +571,42 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
 
       {/* ReactFlow Canvas */}
       <Box sx={{ flexGrow: 1, position: 'relative' }}>
-        {/* Save to Neo4j Button */}
+        {/* Toolbar with Save, Load, and Upload buttons */}
         <Box
           sx={{
             position: 'absolute',
             top: 16,
             left: 16,
             zIndex: 10,
+            display: 'flex',
+            gap: 1,
           }}
         >
+          <Tooltip title="Save diagram to database">
+            <Button
+              variant="contained"
+              color="success"
+              startIcon={<Save />}
+              onClick={handleSaveButtonClick}
+              disabled={nodes.length === 0}
+              sx={{ boxShadow: 2 }}
+            >
+              {currentDiagramId ? 'Update' : 'Save'}
+            </Button>
+          </Tooltip>
+
+          <Tooltip title="Load saved diagram">
+            <Button
+              variant="contained"
+              color="info"
+              startIcon={<FolderOpen />}
+              onClick={handleLoadButtonClick}
+              sx={{ boxShadow: 2 }}
+            >
+              Load
+            </Button>
+          </Tooltip>
+
           <Tooltip title="Upload diagram to Neo4j Knowledge Graph">
             <Button
               variant="contained"
@@ -509,6 +715,22 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad }
           isVisible={propertyPanelVisible}
         />
       )}
+
+      {/* Save Diagram Dialog */}
+      <SaveDiagramDialog
+        open={saveDialogOpen}
+        onClose={() => setSaveDialogOpen(false)}
+        onSave={handleSaveWithName}
+        nodeCount={nodes.length}
+        relationshipCount={edges.length}
+      />
+
+      {/* Load Diagram Dialog */}
+      <LoadDiagramDialog
+        open={loadDialogOpen}
+        onClose={() => setLoadDialogOpen(false)}
+        onLoad={handleLoadDiagram}
+      />
     </Box>
   );
 };

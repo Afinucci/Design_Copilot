@@ -32,11 +32,12 @@ import { Connection } from './types';
 import apiService from '../../services/api';
 
 export interface ShapeProperties {
+  // Shape identification
   id: string;
   name: string;
   shapeType: ShapeType;
   category: NodeCategory;
-  cleanroomClass: 'A' | 'B' | 'C' | 'D' | 'CNC';
+  cleanroomClass?: 'A' | 'B' | 'C' | 'D' | 'CNC';
 
   // Dimensions
   width: number;
@@ -131,7 +132,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [localProperties, setLocalProperties] = useState<ShapeProperties | null>(null);
 
   // State for Neo4j functional areas
-  const [functionalAreas, setFunctionalAreas] = useState<Array<{ name: string; id: string; category: string }>>([]);
+  const [functionalAreas, setFunctionalAreas] = useState<Array<{ name: string; id: string; category: string; cleanroomClass?: string }>>([]);
 
   // Update local state when selected shape changes
   useEffect(() => {
@@ -150,7 +151,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         const areas = templates.map(t => ({
           name: t.name,
           id: t.id,
-          category: t.category
+          category: t.category,
+          cleanroomClass: t.cleanroomClass
         }));
         setFunctionalAreas(areas);
       } catch (error) {
@@ -719,6 +721,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 onChange={(_, newValue) => {
                   handlePropertyUpdate('assignedNodeName', newValue?.name || undefined);
                   handlePropertyUpdate('assignedNodeId', newValue?.id || undefined);
+                  // Inherit cleanroom class from the assigned functional area
+                  if (newValue?.cleanroomClass) {
+                    handlePropertyUpdate('cleanroomClass', newValue.cleanroomClass);
+                    // Also update the fill color to match the cleanroom class
+                    const newColor = getCleanroomColor(newValue.cleanroomClass);
+                    handlePropertyUpdate('fillColor', newColor);
+                  }
                 }}
                 renderInput={(params) => (
                   <TextField
@@ -747,6 +756,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   onDelete={() => {
                     handlePropertyUpdate('assignedNodeName', undefined);
                     handlePropertyUpdate('assignedNodeId', undefined);
+                    // Clear cleanroom class and reset color when assignment is removed
+                    handlePropertyUpdate('cleanroomClass', undefined);
+                    handlePropertyUpdate('fillColor', getCleanroomColor()); // Reset to neutral gray
                   }}
                   color="primary"
                   variant="outlined"

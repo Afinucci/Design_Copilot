@@ -54,7 +54,7 @@ interface SuggestionSidebarProps {
   selectedShapeNeo4jNode: string | null; // Name of the assigned Neo4j functional area
   selectedShapeCleanroomClass?: string; // Cleanroom class of the selected shape
   onSuggestionClick: (suggestion: RelationshipSuggestion) => void;
-  onAssignNode: (shapeId: string, nodeName: string, nodeId: string) => void; // Callback to assign a node to the shape
+  onAssignNode: (shapeId: string, nodeName: string, nodeId: string, cleanroomClass?: string, color?: string) => void; // Callback to assign a node to the shape
   isVisible: boolean;
 }
 
@@ -234,8 +234,8 @@ const SuggestionSidebar: React.FC<SuggestionSidebarProps> = ({
                     <ListItemButton
                       onClick={() => {
                         if (selectedShapeId) {
-                          console.log('🎯 SuggestionSidebar: Assigning node', node.name, 'to shape', selectedShapeId);
-                          onAssignNode(selectedShapeId, node.name, node.id);
+                          console.log('🎯 SuggestionSidebar: Assigning node', node.name, 'to shape', selectedShapeId, 'with cleanroom class:', node.cleanroomClass);
+                          onAssignNode(selectedShapeId, node.name, node.id, node.cleanroomClass, node.color);
                         }
                       }}
                       sx={{

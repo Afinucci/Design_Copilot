@@ -108,8 +108,10 @@ const DiagramEditor: React.FC = () => {
             mode={mode}
             onSave={handleSaveDiagram}
             onLoad={() => {
-              console.log('Loading diagram');
+              // Load functionality is now handled internally by CreationMode
+              console.log('Loading diagram (handled by CreationMode)');
             }}
+            onShowMessage={showSnackbar}
           />
         )}
         {mode === 'layoutDesigner' && (

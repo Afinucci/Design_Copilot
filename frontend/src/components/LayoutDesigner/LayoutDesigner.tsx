@@ -8,6 +8,7 @@ import ValidationOverlay, { ValidationResult } from './ValidationOverlay';
 import ConnectionRenderer from './ConnectionRenderer';
 import SuggestionSidebar from './SuggestionSidebar';
 import { ShapeType, NodeCategory, getCleanroomColor } from '../../types';
+import apiService from '../../services/api';
 import {
   DrawingMode,
   Connection,
@@ -490,7 +491,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       name: `New ${shapeData.shapeType} Room`,
       shapeType: shapeData.shapeType,
       category: 'Production', // Default category
-      cleanroomClass: 'D',
+      // cleanroomClass should only be assigned after Neo4j functional area assignment
 
       // Use bounding box top-left as position
       x: minX,
@@ -506,8 +507,8 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       temperatureRange: { min: 18, max: 26, unit: 'C' },
       humidityRange: { min: 30, max: 60 },
 
-      // Visual properties
-      fillColor: getCleanroomColor('D'),
+      // Visual properties - neutral color until cleanroom class is assigned
+      fillColor: getCleanroomColor(), // Default light gray for unclassified
       borderColor: '#333333',
       borderWidth: 2,
       opacity: 0.8,
@@ -2053,25 +2054,37 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
             selectedShapeNeo4jNode={assignedNodeName}
             selectedShapeCleanroomClass={selectedShape?.cleanroomClass}
             onSuggestionClick={handleSuggestionClick}
-            onAssignNode={(shapeId, nodeName, nodeId) => {
+            onAssignNode={(shapeId, nodeName, nodeId, cleanroomClass, color) => {
               console.log('🎯 LayoutDesigner: Assigning node to shape', {
                 shapeId,
                 nodeName,
                 nodeId,
+                cleanroomClass,
+                color,
                 updates: {
                   assignedNodeName: nodeName,
                   assignedNodeId: nodeId,
-                  name: nodeName
+                  name: nodeName,
+                  cleanroomClass
                 }
               });
 
-              handleShapeUpdate(shapeId, {
+              const updates: Partial<ShapeProperties> = {
                 assignedNodeName: nodeName,
                 assignedNodeId: nodeId,
                 name: nodeName // Also update the shape's display name
-              });
+              };
 
-              console.log('🎯 LayoutDesigner: Shape updated, new shapes:',
+              // Inherit cleanroom class and color from Neo4j functional area
+              if (cleanroomClass) {
+                updates.cleanroomClass = cleanroomClass as 'A' | 'B' | 'C' | 'D' | 'CNC';
+                updates.fillColor = color || getCleanroomColor(cleanroomClass);
+                console.log('✅ LayoutDesigner: Inherited cleanroom class from Neo4j:', cleanroomClass);
+              }
+
+              handleShapeUpdate(shapeId, updates);
+
+              console.log('🎯 LayoutDesigner: Shape updated with cleanroom class, new shape:',
                 shapes.find(s => s.id === shapeId)
               );
             }}

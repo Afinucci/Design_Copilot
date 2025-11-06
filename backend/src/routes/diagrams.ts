@@ -172,7 +172,9 @@ router.get('/:id', async (req, res) => {
        RETURN r, fa1.id as fromId, fa2.id as toId, type(r) as relType`,
       { id }
     );
-    
+
+    console.log('🔍 Found relationships:', relationshipsResult.records.length);
+
     const relationships = relationshipsResult.records.map(record => ({
       id: record.get('r').properties.id,
       type: record.get('relType'),
@@ -182,8 +184,12 @@ router.get('/:id', async (req, res) => {
       reason: record.get('r').properties.reason,
       doorType: record.get('r').properties.doorType,
       minDistance: record.get('r').properties.minDistance,
-      maxDistance: record.get('r').properties.maxDistance
+      maxDistance: record.get('r').properties.maxDistance,
+      flowDirection: record.get('r').properties.flowDirection,
+      flowType: record.get('r').properties.flowType
     }));
+
+    console.log('🔍 Returning diagram with:', { nodeCount: nodes.length, relationshipCount: relationships.length });
     
     const fullDiagram: Diagram = {
       id: diagram.id,
@@ -212,7 +218,8 @@ router.post('/', async (req, res) => {
     
     // Debug: Log what we're actually saving
     console.log('🔍 Saving diagram:', { name, nodeCount: nodes.length, relationshipCount: relationships.length });
-    console.log('🔍 Nodes being saved:', nodes.map((n: any) => ({ id: n.id, name: n.name, category: n.category })));
+    console.log('🔍 Nodes being saved:', nodes.map((n: any) => ({ id: n.id, name: n.name, category: n.category, color: n.color })));
+    console.log('🔍 Relationships being saved:', relationships.map((r: any) => ({ id: r.id, type: r.type, fromId: r.fromId, toId: r.toId })));
     
     const tx = session.beginTransaction();
     
@@ -245,6 +252,8 @@ router.post('/', async (req, res) => {
              fa.y = node.y,
              fa.width = node.width,
              fa.height = node.height,
+             fa.color = node.color,
+             fa.equipment = node.equipment,
              fa.createdAt = datetime(),
              fa.updatedAt = datetime()
            ON MATCH SET
@@ -255,6 +264,8 @@ router.post('/', async (req, res) => {
              fa.y = node.y,
              fa.width = node.width,
              fa.height = node.height,
+             fa.color = node.color,
+             fa.equipment = node.equipment,
              fa.updatedAt = datetime()
            WITH fa
            MATCH (d:Diagram {id: $diagramId})
@@ -268,7 +279,9 @@ router.post('/', async (req, res) => {
               x: node.x,
               y: node.y,
               width: node.width,
-              height: node.height
+              height: node.height,
+              color: node.color,
+              equipment: node.equipment || []
             })),
             diagramId
           }
@@ -374,6 +387,8 @@ router.put('/:id', async (req, res) => {
              fa.y = node.y,
              fa.width = node.width,
              fa.height = node.height,
+             fa.color = node.color,
+             fa.equipment = node.equipment,
              fa.createdAt = datetime(),
              fa.updatedAt = datetime()
            ON MATCH SET
@@ -384,6 +399,8 @@ router.put('/:id', async (req, res) => {
              fa.y = node.y,
              fa.width = node.width,
              fa.height = node.height,
+             fa.color = node.color,
+             fa.equipment = node.equipment,
              fa.updatedAt = datetime()`,
           {
             nodes: nodes.map((node: any) => ({
@@ -394,7 +411,9 @@ router.put('/:id', async (req, res) => {
               x: node.x,
               y: node.y,
               width: node.width,
-              height: node.height
+              height: node.height,
+              color: node.color,
+              equipment: node.equipment || []
             }))
           }
         );
@@ -415,7 +434,9 @@ router.put('/:id', async (req, res) => {
             reason: rel.reason || 'User-defined relationship',
             doorType: rel.doorType || null,
             minDistance: rel.minDistance || null,
-            maxDistance: rel.maxDistance || null
+            maxDistance: rel.maxDistance || null,
+            flowDirection: rel.flowDirection || null,
+            flowType: rel.flowType || null
           });
           return acc;
         }, {} as Record<string, any[]>);
@@ -433,6 +454,8 @@ router.put('/:id', async (req, res) => {
                r.doorType = rel.doorType,
                r.minDistance = rel.minDistance,
                r.maxDistance = rel.maxDistance,
+               r.flowDirection = rel.flowDirection,
+               r.flowType = rel.flowType,
                r.createdAt = datetime(),
                r.updatedAt = datetime()
              ON MATCH SET
@@ -441,6 +464,8 @@ router.put('/:id', async (req, res) => {
                r.doorType = rel.doorType,
                r.minDistance = rel.minDistance,
                r.maxDistance = rel.maxDistance,
+               r.flowDirection = rel.flowDirection,
+               r.flowType = rel.flowType,
                r.updatedAt = datetime()`,
             { rels }
           );

@@ -91,6 +91,8 @@ export interface Diagram {
   relationships: SpatialRelationship[];
   createdAt: string | null;
   updatedAt: string | null;
+  nodeCount?: number;  // Optional: count of nodes (for list view)
+  relationshipCount?: number;  // Optional: count of relationships (for list view)
 }
 
 export interface ValidationResult {
