@@ -37,6 +37,7 @@ import { useChatAssistant } from '../../hooks/useChatAssistant';
 import { ChatAction } from '../../types';
 import { Fab, Tooltip } from '@mui/material';
 import { Chat as ChatIcon } from '@mui/icons-material';
+import GenerativeApiService from '../../services/generativeApi';
 
 export interface LayoutDesignerProps {
   onClose?: () => void;
@@ -782,13 +783,185 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         }
         break;
 
+      case 'generate_layout':
+        if (action.data.description) {
+          // Generate layout from natural language description
+          (async () => {
+            try {
+              setSnackbarMessage('Generating layout...');
+              setSnackbarSeverity('info');
+              setSnackbarOpen(true);
+
+              const generatedLayout = await GenerativeApiService.generateLayout({
+                description: action.data.description!,
+                constraints: action.data.constraints || {},
+                mode: 'detailed'
+              });
+
+              // Convert generated layout to shapes
+              const newShapes: ShapeProperties[] = generatedLayout.nodes.map((node: any) => ({
+                id: `shape-${node.id}-${Date.now()}`,
+                shapeType: 'rectangle' as ShapeType,
+                x: node.x || 0,
+                y: node.y || 0,
+                width: node.width || 150,
+                height: node.height || 100,
+                area: (node.width || 150) * (node.height || 100),
+                fillColor: node.color || getCleanroomColor(node.cleanroomClass),
+                borderColor: '#000',
+                borderWidth: 2,
+                opacity: 1,
+                rotation: 0,
+                name: node.name,
+                category: node.category as NodeCategory,
+                cleanroomClass: (node.cleanroomClass as 'A' | 'B' | 'C' | 'D' | 'CNC') || 'CNC',
+                pressureRegime: 'positive',
+                temperatureRange: { min: 20, max: 25, unit: 'C' },
+                humidityRange: { min: 30, max: 50 },
+                isCompliant: true,
+                complianceIssues: [],
+                assignedNodeName: node.name,
+                assignedNodeId: node.id,
+                customProperties: {}
+              }));
+
+              setShapes(newShapes);
+              setSnackbarMessage(`Generated ${newShapes.length} functional areas. Compliance score: ${generatedLayout.complianceScore}/100`);
+              setSnackbarSeverity('success');
+              setSnackbarOpen(true);
+            } catch (error: any) {
+              console.error('Failed to generate layout:', error);
+              setSnackbarMessage(`Failed to generate layout: ${error.message}`);
+              setSnackbarSeverity('error');
+              setSnackbarOpen(true);
+            }
+          })();
+        }
+        break;
+
+      case 'instantiate_template':
+        if (action.data.templateId) {
+          // Instantiate a facility template
+          (async () => {
+            try {
+              setSnackbarMessage('Instantiating template...');
+              setSnackbarSeverity('info');
+              setSnackbarOpen(true);
+
+              const diagram = await GenerativeApiService.instantiateTemplate({
+                templateId: action.data.templateId!,
+                parameters: action.data.parameters || {}
+              });
+
+              // Convert diagram to shapes
+              const newShapes: ShapeProperties[] = diagram.nodes.map((node: any) => ({
+                id: `shape-${node.id}-${Date.now()}`,
+                shapeType: 'rectangle' as ShapeType,
+                x: node.x || 0,
+                y: node.y || 0,
+                width: node.width || 150,
+                height: node.height || 100,
+                area: (node.width || 150) * (node.height || 100),
+                fillColor: node.color || getCleanroomColor(node.cleanroomClass),
+                borderColor: '#000',
+                borderWidth: 2,
+                opacity: 1,
+                rotation: 0,
+                name: node.name,
+                category: node.category as NodeCategory,
+                cleanroomClass: (node.cleanroomClass as 'A' | 'B' | 'C' | 'D' | 'CNC') || 'CNC',
+                pressureRegime: 'positive',
+                temperatureRange: { min: 20, max: 25, unit: 'C' },
+                humidityRange: { min: 30, max: 50 },
+                isCompliant: true,
+                complianceIssues: [],
+                assignedNodeName: node.name,
+                assignedNodeId: node.id,
+                customProperties: {}
+              }));
+
+              setShapes(newShapes);
+              setSnackbarMessage(`Created ${diagram.name} with ${newShapes.length} functional areas`);
+              setSnackbarSeverity('success');
+              setSnackbarOpen(true);
+            } catch (error: any) {
+              console.error('Failed to instantiate template:', error);
+              setSnackbarMessage(`Failed to instantiate template: ${error.message}`);
+              setSnackbarSeverity('error');
+              setSnackbarOpen(true);
+            }
+          })();
+        }
+        break;
+
+      case 'optimize_layout':
+        // Optimize current layout
+        (async () => {
+          try {
+            if (shapes.length === 0) {
+              setSnackbarMessage('No shapes to optimize');
+              setSnackbarSeverity('warning');
+              setSnackbarOpen(true);
+              return;
+            }
+
+            setSnackbarMessage('Optimizing layout...');
+            setSnackbarSeverity('info');
+            setSnackbarOpen(true);
+
+            // Convert shapes to nodes array
+            const nodes = shapes.map(shape => ({
+              id: shape.id,
+              name: shape.name || '',
+              category: shape.category,
+              cleanroomClass: shape.cleanroomClass,
+              x: shape.x,
+              y: shape.y,
+              width: shape.width,
+              height: shape.height
+            }));
+
+            const optimizedPositions = await GenerativeApiService.optimizeLayout(
+              nodes,
+              [], // No relationships for now
+              {
+                objectives: ['minimize_overlap', 'optimize_flow', 'cluster_by_cleanroom']
+              }
+            );
+
+            // Update shapes with optimized positions
+            const optimizedShapes = shapes.map(shape => {
+              const newPosition = optimizedPositions[shape.id];
+              if (newPosition) {
+                return {
+                  ...shape,
+                  x: newPosition.x,
+                  y: newPosition.y
+                };
+              }
+              return shape;
+            });
+
+            setShapes(optimizedShapes);
+            setSnackbarMessage('Layout optimized successfully');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+          } catch (error: any) {
+            console.error('Failed to optimize layout:', error);
+            setSnackbarMessage(`Failed to optimize layout: ${error.message}`);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+          }
+        })();
+        break;
+
       default:
         console.warn('Unknown action type:', action.type);
     }
 
     // Also call the executeAction from the hook to update highlights
     executeAction(action);
-  }, [executeAction]);
+  }, [executeAction, shapes]);
 
   // Initialize door connection validation hook
   const {

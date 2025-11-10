@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Tooltip, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
-import { Timeline, ShowChart, CloudUpload, Save, FolderOpen } from '@mui/icons-material';
+import { Timeline, ShowChart, CloudUpload, Save, FolderOpen, Factory } from '@mui/icons-material';
 import ReactFlow, {
   Node,
   Edge,
@@ -26,6 +26,7 @@ import MultiRelationshipEdge from '../MultiRelationshipEdge';
 import InlineRelationshipEditDialog from '../InlineRelationshipEditDialog';
 import SaveDiagramDialog from '../SaveDiagramDialog';
 import LoadDiagramDialog from '../LoadDiagramDialog';
+import FacilityTemplateSelector from '../FacilityTemplateSelector';
 import { NodeTemplate, AppMode, SpatialRelationship, DiagramEdge, Diagram } from '../../types';
 import { apiService } from '../../services/api';
 import { formatRelationshipLabel } from '../../utils/edgeUtils';
@@ -70,6 +71,9 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad, 
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
   const [currentDiagramId, setCurrentDiagramId] = useState<string | null>(null);
   const [currentDiagramName, setCurrentDiagramName] = useState<string | null>(null);
+
+  // State for template selector
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
 
   // Load templates on mount
   React.useEffect(() => {
@@ -557,6 +561,88 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad, 
     }
   }, [edgeStyle]);
 
+  // Handle template application
+  const handleTemplateApplied = useCallback((diagram: Diagram) => {
+    try {
+      console.log('🏗️ Applying template:', diagram);
+      console.log('📊 Template data:', {
+        nodeCount: diagram.nodes?.length || 0,
+        relationshipCount: diagram.relationships?.length || 0,
+      });
+
+      // Convert diagram nodes to ReactFlow nodes
+      const templateNodes: Node[] = diagram.nodes.map((node: any) => ({
+        id: node.id,
+        type: 'functionalArea',
+        position: { x: node.x || 0, y: node.y || 0 },
+        data: {
+          label: node.name,
+          name: node.name,
+          category: node.category,
+          cleanroomClass: node.cleanroomClass,
+          width: node.width || 120,
+          height: node.height || 80,
+          equipment: node.equipment || [],
+          color: node.color,
+        },
+      }));
+
+      // Convert diagram relationships to ReactFlow edges
+      const templateEdges: Edge[] = (diagram.relationships || []).map((rel: any, index: number) => {
+        // Calculate relationship index (for multiple relationships between same nodes)
+        const existingEdgesBetweenNodes = (diagram.relationships || []).slice(0, index).filter(
+          (r: any) =>
+            (r.fromId === rel.fromId && r.toId === rel.toId) ||
+            (r.fromId === rel.toId && r.toId === rel.fromId)
+        );
+        const relationshipIndex = existingEdgesBetweenNodes.length;
+
+        return {
+          id: rel.id,
+          source: rel.fromId,
+          target: rel.toId,
+          type: 'default',
+          label: formatRelationshipLabel(rel.type),
+          labelShowBg: true,
+          labelBgStyle: { fill: '#ffffff' },
+          labelBgPadding: [8, 4] as [number, number],
+          data: {
+            relationshipType: rel.type,
+            relationshipIndex,
+            priority: rel.priority || 5,
+            reason: rel.reason || 'Template relationship',
+            flowDirection: rel.flowDirection,
+            doorType: rel.doorType,
+            flowType: rel.flowType,
+            minDistance: rel.minDistance,
+            maxDistance: rel.maxDistance,
+            mode: 'creation' as const,
+            edgeStyle,
+          },
+        };
+      });
+
+      console.log('🔄 Converted template data:', {
+        nodes: templateNodes.length,
+        edges: templateEdges.length,
+      });
+
+      // Add template nodes and edges to the canvas
+      setNodes(templateNodes);
+      setEdges(templateEdges);
+
+      // Update diagram info
+      setCurrentDiagramName(diagram.name);
+      setCurrentDiagramId(null); // New diagram from template
+
+      console.log('✅ Template applied successfully');
+      onShowMessage?.(`Template "${diagram.name}" applied successfully! ${templateNodes.length} rooms added.`, 'success');
+    } catch (error) {
+      console.error('❌ Failed to apply template:', error);
+      onShowMessage?.('Failed to apply template. Please try again.', 'error');
+    }
+  }, [edgeStyle, onShowMessage]);
+
   return (
     <Box sx={{ display: 'flex', height: '100%', width: '100%' }}>
       {/* Node Palette */}
@@ -617,6 +703,18 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad, 
               sx={{ boxShadow: 2 }}
             >
               Upload to Neo4j
+            </Button>
+          </Tooltip>
+
+          <Tooltip title="Create facility from template">
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<Factory />}
+              onClick={() => setTemplateDialogOpen(true)}
+              sx={{ boxShadow: 2 }}
+            >
+              Templates
             </Button>
           </Tooltip>
         </Box>
@@ -730,6 +828,13 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad, 
         open={loadDialogOpen}
         onClose={() => setLoadDialogOpen(false)}
         onLoad={handleLoadDiagram}
+      />
+
+      {/* Facility Template Selector */}
+      <FacilityTemplateSelector
+        open={templateDialogOpen}
+        onClose={() => setTemplateDialogOpen(false)}
+        onTemplateApplied={handleTemplateApplied}
       />
     </Box>
   );

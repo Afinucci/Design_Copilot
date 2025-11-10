@@ -14,6 +14,7 @@ import knowledgeGraphRoutes from './routes/knowledgeGraph';
 import shapesRoutes from './routes/shapes';
 import suggestionsRoutes from './routes/suggestions';
 import chatRoutes from './routes/chat';
+import generativeRoutes from './routes/generative';
 import logger from './utils/logger';
 
 // Load environment variables
@@ -77,6 +78,7 @@ app.use('/api/knowledge-graph', knowledgeGraphRoutes);
 app.use('/api/shapes', shapesRoutes);
 app.use('/api/suggestions', suggestionsRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/generative', generativeRoutes);
 
 process.on('SIGINT', async () => {
   logger.info('Shutting down gracefully...');

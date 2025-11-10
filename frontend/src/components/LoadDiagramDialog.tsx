@@ -109,9 +109,9 @@ const LoadDiagramDialog: React.FC<LoadDiagramDialogProps> = ({
     onClose();
   };
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'Unknown date';
-    const date = new Date(dateString);
+  const formatDate = (dateValue: Date | string | null) => {
+    if (!dateValue) return 'Unknown date';
+    const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
   };
 

@@ -2,10 +2,14 @@ import OpenAI from 'openai';
 import Neo4jService from '../config/database';
 import { ChatRequest, ChatResponse, ChatAction, NodeTemplate, SpatialRelationship } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import GenerativeLayoutService from './generativeLayoutService';
+import FacilityTemplatesService from './facilityTemplatesService';
 
 export class AIChatService {
   private openai: OpenAI;
   private neo4jService: Neo4jService;
+  private generativeService: GenerativeLayoutService;
+  private templatesService: FacilityTemplatesService;
 
   constructor() {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -15,6 +19,8 @@ export class AIChatService {
 
     this.openai = new OpenAI({ apiKey });
     this.neo4jService = Neo4jService.getInstance();
+    this.generativeService = GenerativeLayoutService.getInstance();
+    this.templatesService = FacilityTemplatesService.getInstance();
   }
 
   /**
@@ -231,17 +237,29 @@ When the user asks about specific nodes (e.g., "what can be connected to the Pro
 
 When actual graph data is provided, your response should be based EXCLUSIVELY on what exists in the Neo4j database.
 
+**🚨 CRITICAL ROOM SELECTION CONSTRAINT 🚨**
+You MUST ONLY suggest rooms from the "Available Room Types" list below.
+❌ DO NOT suggest ANY room types that are not explicitly listed in the Available Room Types.
+❌ DO NOT invent or hallucinate room names like "Material Air-Lock (Class B)" or "Gowning Area" unless they appear EXACTLY in the list below.
+✅ ONLY use room names that exist in the Neo4j knowledge graph (listed below).
+✅ When suggesting a room, use the EXACT name and cleanroom class from the list.
+
+**Available Room Types (Node Templates):**
+${nodeTemplates.length > 0 
+  ? nodeTemplates.map(t => `- ${t.name} (${t.category}, Cleanroom Class: ${t.cleanroomClass || 'N/A'})`).join('\n')
+  : '⚠️ WARNING: No functional areas found in Neo4j database. Cannot make room suggestions.'}
+
 **Your Capabilities:**
 1. Answer questions about pharmaceutical facility design
 2. Query actual relationships from the Neo4j graph database
-3. Suggest appropriate room types and their placement
+3. Suggest appropriate room types and their placement **ONLY from the Available Room Types list above**
 4. Recommend relationships between rooms (adjacency, flow, etc.)
 5. Validate layouts against GMP constraints
 6. Create nodes on the canvas automatically
 7. Highlight specific nodes when discussing them
-
-**Available Room Types (Node Templates):**
-${nodeTemplates.map(t => `- ${t.name} (${t.category}, Cleanroom Class: ${t.cleanroomClass || 'N/A'})`).join('\n')}
+8. **GENERATE COMPLETE LAYOUTS** from natural language descriptions (e.g., "Generate a sterile vial filling facility for 500L batches")
+9. **INSTANTIATE FACILITY TEMPLATES** with custom parameters (e.g., "Create an oral solid dosage facility")
+10. **OPTIMIZE LAYOUTS** to improve flow efficiency and GMP compliance
 
 **General Relationship Rules (use ONLY when actual graph data is not provided):**
 ${relationshipRules.map(r => `- ${r.fromNode} → ${r.relationshipType} → ${r.toNode}${r.reason ? `: ${r.reason}` : ''}`).join('\n')}
@@ -263,6 +281,22 @@ When suggesting actions, use this JSON structure in your response:
       }
     },
     {
+      "type": "generate_layout",
+      "label": "Generate Complete Facility Layout",
+      "data": {
+        "description": "Sterile vial filling facility for 500L batches",
+        "constraints": { "batchSize": 500, "productType": "sterile" }
+      }
+    },
+    {
+      "type": "instantiate_template",
+      "label": "Create from Template",
+      "data": {
+        "templateId": "sterile-injectable-facility",
+        "parameters": { "batchSize": "500L", "fillSpeed": 300 }
+      }
+    },
+    {
       "type": "highlight_node",
       "label": "Highlight existing nodes",
       "data": {
@@ -273,7 +307,15 @@ When suggesting actions, use this JSON structure in your response:
 }
 \`\`\`
 
+**Action Types:**
+- \`add_node\`: Add a single node to canvas
+- \`generate_layout\`: Generate a complete facility layout from description
+- \`instantiate_template\`: Create layout from facility template
+- \`highlight_node\`: Highlight existing nodes
+- \`add_relationship\`: Create relationship between nodes
+
 **Guidelines:**
+- 🚨 NEVER suggest room types not in the "Available Room Types" list above
 - ALWAYS prioritize actual Neo4j graph data over general rules when provided
 - When actual graph data shows specific connections, list ONLY those connections
 - Consider cleanroom class transitions (A → B → C → D) for general recommendations
@@ -281,6 +323,7 @@ When suggesting actions, use this JSON structure in your response:
 - Validate against GMP constraints
 - Provide clear explanations for your suggestions
 - When referring to existing nodes in the layout, use their IDs for highlighting
+- If asked to suggest rooms and no templates are available in Neo4j, inform the user that the knowledge graph is empty
 `;
   }
 

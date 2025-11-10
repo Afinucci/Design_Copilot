@@ -94,8 +94,8 @@ export interface Diagram {
   name: string;
   nodes: FunctionalArea[];
   relationships: SpatialRelationship[];
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 }
 
 export interface ValidationResult {
@@ -325,4 +325,296 @@ export function getCleanroomColor(cleanroomClass?: string): string {
     default:
       return '#D3D3D3'; // Default light gray for unknown
   }
+}
+
+// ============================================
+// GENERATIVE AI LAYOUT TYPES
+// ============================================
+
+/**
+ * Layout generation request from natural language
+ */
+export interface LayoutGenerationRequest {
+  description: string; // Natural language description (e.g., "Design a sterile vial filling facility")
+  constraints: LayoutConstraints;
+  preferences?: LayoutPreferences;
+  mode?: 'quick' | 'detailed' | 'comprehensive'; // Generation thoroughness
+}
+
+/**
+ * Constraints for layout generation
+ */
+export interface LayoutConstraints {
+  totalArea?: number; // Total area in square meters
+  batchSize?: number; // Batch size in liters
+  productType?: 'sterile' | 'non-sterile' | 'oral-solid' | 'biologics' | 'vaccines' | 'api';
+  throughput?: number; // Units per day
+  regulatoryZone?: 'FDA' | 'EMA' | 'ICH' | 'WHO' | 'PIC/S';
+  requiredRooms?: string[]; // Specific rooms that must be included
+  excludedRooms?: string[]; // Rooms to avoid
+  maxCleanroomClass?: 'A' | 'B' | 'C' | 'D'; // Highest cleanroom class needed
+}
+
+/**
+ * User preferences for layout optimization
+ */
+export interface LayoutPreferences {
+  minimizeDistance?: boolean; // Optimize for shortest paths
+  maximizeSeparation?: boolean; // Maximize contamination barriers
+  prioritizeFlow?: 'material' | 'personnel' | 'balanced';
+  layoutStyle?: 'linear' | 'clustered' | 'modular' | 'centralized';
+  compactness?: 'tight' | 'moderate' | 'spacious';
+}
+
+/**
+ * Generated layout response
+ */
+export interface GeneratedLayout {
+  nodes: FunctionalArea[];
+  relationships: SpatialRelationship[];
+  zones: ZoneDefinition[];
+  rationale: string; // Explanation for design decisions
+  complianceScore: number; // 0-100 GMP compliance rating
+  optimizationMetrics: OptimizationMetrics;
+  warnings: string[]; // Potential issues
+  suggestions: string[]; // Improvement recommendations
+}
+
+/**
+ * Zone/cluster of related functional areas
+ */
+export interface ZoneDefinition {
+  id: string;
+  name: string;
+  category: 'production' | 'quality-control' | 'warehouse' | 'utilities' | 'support';
+  nodeIds: string[];
+  cleanroomClass?: string;
+  color: string;
+  bounds?: { x: number; y: number; width: number; height: number };
+}
+
+/**
+ * Metrics for layout quality assessment
+ */
+export interface OptimizationMetrics {
+  totalArea: number; // Square meters
+  flowEfficiency: number; // 0-1 score (higher = better)
+  crossContaminationRisk: number; // 0-1 score (lower = better)
+  averageMaterialDistance: number; // Average distance for material flow
+  averagePersonnelDistance: number; // Average distance for personnel flow
+  cleanroomUtilization: number; // Percentage of high-grade cleanroom area
+  estimatedConstructionCost?: number; // Relative cost index
+}
+
+/**
+ * Spatial reasoning for optimal node placement
+ */
+export interface SpatialPlacement {
+  nodeId: string;
+  position: { x: number; y: number };
+  score: number; // Quality score for this placement
+  reasoning: string; // Why this position was chosen
+  constraints: PlacementConstraint[];
+}
+
+/**
+ * Constraint for node placement
+ */
+export interface PlacementConstraint {
+  type: 'distance' | 'adjacency' | 'separation' | 'flow-path' | 'cleanroom-zone' | 'orientation';
+  targetNodeId?: string;
+  minValue?: number;
+  maxValue?: number;
+  priority: 'required' | 'high' | 'medium' | 'low';
+  description: string;
+}
+
+/**
+ * Enhanced ghost suggestion with spatial intelligence
+ */
+export interface SmartGhostSuggestion extends GhostSuggestion {
+  optimalPosition: { x: number; y: number }; // Calculated optimal position
+  alternativePositions: Array<{ x: number; y: number; score: number }>; // Other valid positions
+  spatialScore: number; // Quality of spatial placement (0-1)
+  placementReasoning: string; // Why this position is optimal
+  autoConnections: SpatialRelationship[]; // Relationships to create automatically
+}
+
+// ============================================
+// FACILITY TEMPLATE TYPES
+// ============================================
+
+/**
+ * Parametric facility template
+ */
+export interface FacilityTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: 'sterile-injectable' | 'oral-solid-dosage' | 'biologics' | 'api' | 'packaging' | 'warehouse' | 'qc-lab';
+  icon?: string;
+  parameters: TemplateParameter[];
+  baseLayout?: Diagram; // Base layout that gets modified by parameters
+  estimatedArea: { min: number; max: number }; // Square meters
+  complexity: 'simple' | 'moderate' | 'complex';
+  regulatoryCompliance: string[]; // ['FDA 21 CFR 211', 'EMA Annex 1', etc.]
+}
+
+/**
+ * Template parameter for customization
+ */
+export interface TemplateParameter {
+  id: string;
+  name: string;
+  description: string;
+  type: 'number' | 'select' | 'boolean' | 'range';
+  defaultValue: any;
+  options?: any[]; // For select type
+  min?: number; // For number/range type
+  max?: number; // For number/range type
+  unit?: string; // e.g., 'L', 'units/day', 'm²'
+  required: boolean;
+  impact: string; // How this parameter affects the layout
+}
+
+/**
+ * Template instantiation request
+ */
+export interface TemplateInstantiationRequest {
+  templateId: string;
+  parameters: Record<string, any>; // parameter_id → value
+  customizations?: {
+    addRooms?: string[]; // Additional room IDs to include
+    removeRooms?: string[]; // Room IDs to exclude
+    modifyRoomSizes?: Record<string, { width: number; height: number }>;
+  };
+}
+
+// ============================================
+// GMP COMPLIANCE & VALIDATION TYPES
+// ============================================
+
+/**
+ * Regulatory rule from GMP/FDA/EMA guidelines
+ */
+export interface RegulatoryRule {
+  id: string;
+  source: 'FDA 21 CFR 211' | 'FDA 21 CFR 210' | 'EMA Annex 1' | 'ICH Q7' | 'PIC/S PE 009' | 'WHO GMP';
+  section: string; // e.g., '4.14', '211.42'
+  requirement: string; // Text of the requirement
+  applicableAreas: string[]; // Which room types/categories this applies to
+  severity: 'critical' | 'major' | 'minor';
+  checkable: boolean; // Can be automatically validated
+}
+
+/**
+ * Compliance check result
+ */
+export interface ComplianceCheckResult {
+  ruleId: string;
+  passed: boolean;
+  severity: 'critical' | 'major' | 'minor';
+  message: string;
+  affectedNodeIds: string[];
+  recommendation?: string;
+  autoFixAvailable: boolean;
+  autoFix?: LayoutModification;
+}
+
+/**
+ * Comprehensive compliance report
+ */
+export interface ComplianceReport {
+  overallScore: number; // 0-100
+  totalChecks: number;
+  passed: number;
+  failed: number;
+  warnings: number;
+  results: ComplianceCheckResult[];
+  summary: string;
+  regulatoryZone: string;
+  generatedAt: Date;
+}
+
+/**
+ * Layout modification for auto-fix or optimization
+ */
+export interface LayoutModification {
+  type: 'add_node' | 'remove_node' | 'move_node' | 'add_relationship' |
+        'remove_relationship' | 'modify_room_size' | 'add_zone';
+  nodeId?: string;
+  node?: FunctionalArea;
+  newPosition?: { x: number; y: number };
+  relationship?: SpatialRelationship;
+  rationale: string;
+}
+
+// ============================================
+// OPTIMIZATION TYPES
+// ============================================
+
+/**
+ * Optimization objective for layout refinement
+ */
+export interface OptimizationObjective {
+  type: 'minimize_distance' | 'minimize_area' | 'maximize_throughput' |
+        'minimize_contamination_risk' | 'minimize_construction_cost' |
+        'maximize_cleanroom_clustering' | 'balance_flow_separation';
+  weight: number; // 0-1 (relative importance)
+  target?: number; // Optional target value
+}
+
+/**
+ * Optimization result
+ */
+export interface OptimizationResult {
+  originalLayout: Diagram;
+  optimizedLayout: Diagram;
+  improvements: {
+    metric: string;
+    before: number;
+    after: number;
+    improvement: number; // Percentage improvement
+  }[];
+  modifications: LayoutModification[];
+  convergenceScore: number; // How well objectives were met (0-1)
+  iterations: number;
+}
+
+// ============================================
+// PREDICTIVE VALIDATION TYPES
+// ============================================
+
+/**
+ * Predictive insight from AI analysis
+ */
+export interface PredictiveInsight {
+  id: string;
+  type: 'error' | 'warning' | 'suggestion' | 'optimization';
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  category: 'compliance' | 'flow' | 'contamination' | 'efficiency' | 'cost';
+  title: string;
+  message: string;
+  affectedNodeIds: string[];
+  impact: string; // Description of consequences
+  autoFixAvailable: boolean;
+  autoFix?: LayoutModification;
+  learnMoreUrl?: string;
+  confidence: number; // 0-1
+}
+
+/**
+ * Design health assessment
+ */
+export interface DesignHealthScore {
+  overall: number; // 0-100
+  compliance: number; // 0-100
+  efficiency: number; // 0-100
+  safety: number; // 0-100
+  cost: number; // 0-100
+  insights: PredictiveInsight[];
+  trends: {
+    improving: string[];
+    degrading: string[];
+  };
 }

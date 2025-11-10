@@ -89,8 +89,8 @@ export interface Diagram {
   name: string;
   nodes: FunctionalArea[];
   relationships: SpatialRelationship[];
-  createdAt: string | null;
-  updatedAt: string | null;
+  createdAt: Date | string | null;
+  updatedAt: Date | string | null;
   nodeCount?: number;  // Optional: count of nodes (for list view)
   relationshipCount?: number;  // Optional: count of relationships (for list view)
 }
@@ -449,7 +449,7 @@ export interface ChatMessage {
 
 export interface ChatAction {
   id: string;
-  type: 'add_node' | 'highlight_node' | 'add_relationship' | 'suggest_layout';
+  type: 'add_node' | 'highlight_node' | 'add_relationship' | 'suggest_layout' | 'generate_layout' | 'instantiate_template' | 'optimize_layout';
   label: string;
   data: {
     nodeId?: string;
@@ -461,6 +461,11 @@ export interface ChatAction {
       nodes: Array<{ template: NodeTemplate; position: { x: number; y: number } }>;
       relationships: SpatialRelationship[];
     };
+    // Generative AI action data
+    description?: string; // For generate_layout
+    constraints?: any; // For generate_layout
+    templateId?: string; // For instantiate_template
+    parameters?: Record<string, any>; // For instantiate_template
   };
 }
 

@@ -26,6 +26,9 @@ export interface FunctionalArea {
   equipment?: Equipment[];
 }
 
+// Import DoorType from shared (type-only to avoid rootDir issues)
+import type { DoorType } from '../../../shared/types';
+
 export interface SpatialRelationship {
   id: string;
   type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW' | 'WORKFLOW_SUGGESTION';
@@ -33,7 +36,7 @@ export interface SpatialRelationship {
   toId: string;
   priority: number;
   reason: string;
-  doorType?: string;
+  doorType?: DoorType;
   minDistance?: number;
   maxDistance?: number;
   flowDirection?: 'bidirectional' | 'unidirectional';
@@ -207,3 +210,60 @@ export function getCleanroomColor(cleanroomClass?: string): string {
       return '#D3D3D3'; // Default light gray for unknown
   }
 }
+
+// Re-export Door types as well
+export type { DoorType, DoorFlowType, DoorFlowDirection, DoorConnection, DoorConnectionPoint };
+
+// Re-export generative AI types from shared (use type-only exports to avoid rootDir issues)
+export type {
+  LayoutGenerationRequest,
+  LayoutConstraints,
+  LayoutPreferences,
+  GeneratedLayout,
+  ZoneDefinition,
+  OptimizationMetrics,
+  SpatialPlacement,
+  PlacementConstraint,
+  SmartGhostSuggestion,
+  GhostSuggestion,
+  FacilityTemplate,
+  TemplateParameter,
+  TemplateInstantiationRequest,
+  RegulatoryRule,
+  ComplianceCheckResult,
+  ComplianceReport,
+  LayoutModification,
+  OptimizationObjective,
+  OptimizationResult,
+  PredictiveInsight,
+  DesignHealthScore
+};
+
+// Import from shared for type safety
+import type {
+  LayoutGenerationRequest,
+  LayoutConstraints,
+  LayoutPreferences,
+  GeneratedLayout,
+  ZoneDefinition,
+  OptimizationMetrics,
+  SpatialPlacement,
+  PlacementConstraint,
+  SmartGhostSuggestion,
+  GhostSuggestion,
+  FacilityTemplate,
+  TemplateParameter,
+  TemplateInstantiationRequest,
+  RegulatoryRule,
+  ComplianceCheckResult,
+  ComplianceReport,
+  LayoutModification,
+  OptimizationObjective,
+  OptimizationResult,
+  PredictiveInsight,
+  DesignHealthScore,
+  DoorFlowType,
+  DoorFlowDirection,
+  DoorConnection,
+  DoorConnectionPoint
+} from '../../../shared/types';

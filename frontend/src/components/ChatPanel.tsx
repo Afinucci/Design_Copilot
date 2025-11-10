@@ -121,13 +121,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 Try asking:
               </Typography>
               <Typography variant="caption" display="block" color="primary" sx={{ py: 0.5 }}>
-                • "What can be connected to the Process Suite?"
+                🏗️ "Generate a sterile vial filling facility for 500L batches"
               </Typography>
               <Typography variant="caption" display="block" color="primary" sx={{ py: 0.5 }}>
-                • "Add a quality control area"
+                📋 "Create an oral solid dosage facility from template"
               </Typography>
               <Typography variant="caption" display="block" color="primary" sx={{ py: 0.5 }}>
-                • "What are cleanroom class requirements?"
+                🔍 "What can be connected to the Process Suite?"
+              </Typography>
+              <Typography variant="caption" display="block" color="primary" sx={{ py: 0.5 }}>
+                ➕ "Add a quality control area"
+              </Typography>
+              <Typography variant="caption" display="block" color="primary" sx={{ py: 0.5 }}>
+                ⚡ "Optimize this layout for material flow"
               </Typography>
             </Box>
           </Box>
