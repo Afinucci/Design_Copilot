@@ -18,6 +18,8 @@ import {
   Person as PersonIcon,
   PlayArrow as ExecuteIcon
 } from '@mui/icons-material';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ChatMessage, ChatAction } from '../types';
 
 interface ChatPanelProps {
@@ -227,12 +229,42 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onExecuteAction 
           sx={{
             p: 2,
             bgcolor: isUser ? 'primary.light' : 'grey.100',
-            color: isUser ? 'white' : 'text.primary'
+            color: isUser ? 'white' : 'text.primary',
+            '& p': { margin: '0.5em 0', '&:first-of-type': { marginTop: 0 }, '&:last-child': { marginBottom: 0 } },
+            '& ul, & ol': { marginLeft: '1.5em', marginTop: '0.5em', marginBottom: '0.5em' },
+            '& li': { marginBottom: '0.25em' },
+            '& strong': { fontWeight: 'bold' },
+            '& em': { fontStyle: 'italic' },
+            '& code': {
+              bgcolor: isUser ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)',
+              padding: '2px 4px',
+              borderRadius: '3px',
+              fontFamily: 'monospace',
+              fontSize: '0.9em'
+            },
+            '& pre': {
+              bgcolor: isUser ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)',
+              padding: '8px',
+              borderRadius: '4px',
+              overflow: 'auto',
+              '& code': { bgcolor: 'transparent', padding: 0 }
+            },
+            '& h1, & h2, & h3, & h4, & h5, & h6': {
+              marginTop: '0.75em',
+              marginBottom: '0.5em',
+              fontWeight: 'bold'
+            }
           }}
         >
-          <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-            {message.content}
-          </Typography>
+          {isUser ? (
+            <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+              {message.content}
+            </Typography>
+          ) : (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          )}
 
           {message.actions && message.actions.length > 0 && (
             <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
