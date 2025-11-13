@@ -15,6 +15,7 @@ import shapesRoutes from './routes/shapes';
 import suggestionsRoutes from './routes/suggestions';
 import chatRoutes from './routes/chat';
 import generativeRoutes from './routes/generative';
+import layoutRoutes from './routes/layouts';
 import logger from './utils/logger';
 
 // Load environment variables
@@ -79,6 +80,7 @@ app.use('/api/shapes', shapesRoutes);
 app.use('/api/suggestions', suggestionsRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/generative', generativeRoutes);
+app.use('/api/layouts', layoutRoutes);
 
 process.on('SIGINT', async () => {
   logger.info('Shutting down gracefully...');

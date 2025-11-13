@@ -37,6 +37,8 @@ import {
   AspectRatio as ScaleIcon,
   Visibility as RulerIcon,
   CallMerge as MergeIcon,
+  Save as SaveIcon,
+  FolderOpen as FolderOpenIcon,
 } from '@mui/icons-material';
 import { ShapeType } from '../../types';
 import { DrawingMode } from './types';
@@ -95,6 +97,12 @@ export interface DrawingToolsProps {
   // Layout
   orientation?: 'horizontal' | 'vertical';
   position?: 'top' | 'bottom' | 'left' | 'right';
+
+  // Save/Load functionality
+  onSave?: () => void;
+  onLoad?: () => void;
+  hasUnsavedChanges?: boolean;
+  layoutName?: string;
 }
 
 const DrawingTools: React.FC<DrawingToolsProps> = ({
@@ -132,6 +140,10 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
   hasSelectedShape = false,
   orientation = 'horizontal',
   position = 'top',
+  onSave,
+  onLoad,
+  hasUnsavedChanges = false,
+  layoutName = 'Untitled Layout',
 }) => {
   const [showSettings, setShowSettings] = React.useState(false);
   const [tempCanvasWidth, setTempCanvasWidth] = React.useState(canvasWidth);
@@ -207,6 +219,45 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
   return (
     <>
       <Paper sx={getToolbarSx()} data-testid="drawing-toolbar">
+        {/* Save/Load Buttons */}
+        {(onSave || onLoad) && (
+          <>
+            <Box display="flex" gap={0.5} flexDirection={orientation === 'vertical' ? 'column' : 'row'}>
+              {onSave && (
+                <Tooltip title={`Save Layout${hasUnsavedChanges ? ' (Unsaved Changes)' : ''} (Ctrl+S)`} arrow>
+                  <IconButton
+                    size="medium"
+                    onClick={onSave}
+                    color={hasUnsavedChanges ? 'warning' : 'primary'}
+                    sx={{
+                      backgroundColor: hasUnsavedChanges ? 'warning.light' : 'transparent',
+                      '&:hover': {
+                        backgroundColor: hasUnsavedChanges ? 'warning.main' : 'action.hover',
+                      },
+                    }}
+                  >
+                    <SaveIcon />
+                  </IconButton>
+                </Tooltip>
+              )}
+
+              {onLoad && (
+                <Tooltip title="Load Layout (Ctrl+O)" arrow>
+                  <IconButton
+                    size="medium"
+                    onClick={onLoad}
+                    color="primary"
+                  >
+                    <FolderOpenIcon />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
+
+            <Divider orientation={orientation === 'vertical' ? 'horizontal' : 'vertical'} flexItem />
+          </>
+        )}
+
         {/* Sidebar Toggle */}
         {onToggleSidebar && (
           <>

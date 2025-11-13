@@ -35,8 +35,8 @@ import WallTool from './WallTool';
 import ChatPanel from '../ChatPanel';
 import { useChatAssistant } from '../../hooks/useChatAssistant';
 import { ChatAction } from '../../types';
-import { Fab, Tooltip, Chip } from '@mui/material';
-import { Chat as ChatIcon } from '@mui/icons-material';
+import { Fab, Tooltip, Chip, IconButton, Toolbar, AppBar } from '@mui/material';
+import { Chat as ChatIcon, Save as SaveIcon, FolderOpen as FolderOpenIcon } from '@mui/icons-material';
 import GenerativeApiService from '../../services/generativeApi';
 import {
   mergePolygons,
@@ -44,6 +44,8 @@ import {
   polygonCentroid,
   Polygon
 } from '../../utils/polygonUnion';
+import SaveLayoutDialog from './SaveLayoutDialog';
+import LoadLayoutDialog from './LoadLayoutDialog';
 
 export interface LayoutDesignerProps {
   onClose?: () => void;
@@ -58,10 +60,15 @@ export interface LayoutData {
   shapes: ShapeProperties[];
   connections: Connection[];
   doorConnections: DoorConnection[];
+  doorPlacements: DoorPlacement[];
   canvasSettings: {
     width: number;
     height: number;
     backgroundColor: string;
+    showGrid: boolean;
+    snapToGrid: boolean;
+    gridSize: number;
+    zoom: number;
   };
   metadata: {
     createdAt: Date;
@@ -93,8 +100,8 @@ interface HistoryState {
 }
 
 const DEFAULT_CANVAS_SETTINGS: CanvasSettings = {
-  width: 1200,
-  height: 800,
+  width: 20000,
+  height: 20000,
   backgroundColor: '#f8f9fa',
   showGrid: true,
   snapToGrid: true,
@@ -305,6 +312,13 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   const [showWallTool, setShowWallTool] = useState(false);
   const [selectedMeasurementId, setSelectedMeasurementId] = useState<string | null>(null);
 
+  // Save/Load Layout state
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showLoadDialog, setShowLoadDialog] = useState(false);
+  const [currentLayoutId, setCurrentLayoutId] = useState<string | null>(initialLayout?.id || null);
+  const [currentLayoutName, setCurrentLayoutName] = useState<string>(initialLayout?.name || 'Untitled Layout');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
   // Derived state: get selected connection object from ID
   const selectedConnection = selectedConnectionId
     ? connections.find(conn => conn.id === selectedConnectionId) || null
@@ -321,6 +335,14 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   useEffect(() => {
     shapesRef.current = shapes;
   }, [shapes]);
+
+  // Track unsaved changes
+  useEffect(() => {
+    // Skip initial render
+    if (shapes.length > 0 || connections.length > 0 || doorConnections.length > 0 || doorPlacements.length > 0) {
+      setHasUnsavedChanges(true);
+    }
+  }, [shapes, connections, doorConnections, doorPlacements]);
 
   // Initialize history with initial layout or empty state
   useEffect(() => {
@@ -341,8 +363,8 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     const updateCanvasSize = () => {
       if (scrollContainerRef.current) {
         const rect = scrollContainerRef.current.getBoundingClientRect();
-        const newWidth = Math.max(Math.floor(rect.width), 2000);
-        const newHeight = Math.max(Math.floor(rect.height), 1500);
+        const newWidth = Math.max(Math.floor(rect.width), 20000);
+        const newHeight = Math.max(Math.floor(rect.height), 20000);
 
         setCanvasSettings(prev => {
           // Only update if dimensions changed significantly (avoid infinite loops)
@@ -1341,6 +1363,13 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   }, [historyIndex, runValidation]);
 
   const handleClear = useCallback(() => {
+    // Show confirmation if there are shapes
+    if (shapes.length > 0) {
+      if (!window.confirm('This will clear all shapes and connections. Are you sure?')) {
+        return;
+      }
+    }
+
     setShapes([]);
     addToHistory([]);
     setDrawingState({
@@ -1351,7 +1380,185 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     });
     setShowPropertiesPanel(false);
     runValidation([]);
-  }, [addToHistory, runValidation]);
+    setHasUnsavedChanges(false); // Reset unsaved changes when clearing
+  }, [addToHistory, runValidation, shapes.length]);
+
+  // Save/Load Layout handlers
+  const handleSaveLayout = useCallback(async (name: string) => {
+    const layoutData: LayoutData = {
+      id: currentLayoutId || `layout-${Date.now()}`,
+      name,
+      shapes,
+      connections,
+      doorConnections,
+      doorPlacements,
+      canvasSettings: {
+        width: canvasSettings.width,
+        height: canvasSettings.height,
+        backgroundColor: canvasSettings.backgroundColor,
+        showGrid: canvasSettings.showGrid,
+        snapToGrid: canvasSettings.snapToGrid,
+        gridSize: canvasSettings.gridSize,
+        zoom: canvasSettings.zoom,
+      },
+      metadata: {
+        createdAt: new Date(),
+        modifiedAt: new Date(),
+        version: '1.0.0',
+      },
+    };
+
+    try {
+      let response;
+      if (currentLayoutId) {
+        // Update existing layout
+        response = await fetch(`http://localhost:5000/api/layouts/${currentLayoutId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(layoutData),
+        });
+      } else {
+        // Create new layout
+        response = await fetch('http://localhost:5000/api/layouts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(layoutData),
+        });
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to save layout');
+      }
+
+      const result = await response.json();
+      
+      // Update current layout info
+      setCurrentLayoutId(result.id || layoutData.id);
+      setCurrentLayoutName(name);
+      setHasUnsavedChanges(false); // Reset unsaved changes flag
+
+      // Show success message
+      setSnackbarMessage('Layout saved successfully!');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+
+      console.log('✅ Layout saved:', result);
+    } catch (error) {
+      console.error('Error saving layout:', error);
+      setSnackbarMessage('Failed to save layout');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      throw error;
+    }
+  }, [shapes, connections, doorConnections, doorPlacements, canvasSettings, currentLayoutId]);
+
+  const handleLoadLayout = useCallback(async (layoutId: string) => {
+    // Show confirmation if there are unsaved changes
+    if (hasUnsavedChanges) {
+      if (!window.confirm('You have unsaved changes. Loading a new layout will lose these changes. Continue?')) {
+        return;
+      }
+    }
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/layouts/${layoutId}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to load layout');
+      }
+
+      const layout = await response.json();
+      const data: LayoutData = layout.data;
+
+      // Load all the data
+      setShapes(data.shapes || []);
+      setConnections(data.connections || []);
+      setDoorConnections(data.doorConnections || []);
+      setDoorPlacements(data.doorPlacements || []);
+      
+      // Load canvas settings
+      if (data.canvasSettings) {
+        setCanvasSettings({
+          width: data.canvasSettings.width,
+          height: data.canvasSettings.height,
+          backgroundColor: data.canvasSettings.backgroundColor,
+          showGrid: data.canvasSettings.showGrid ?? true,
+          snapToGrid: data.canvasSettings.snapToGrid ?? true,
+          gridSize: data.canvasSettings.gridSize || 20,
+          zoom: data.canvasSettings.zoom || 1,
+        });
+      }
+
+      // Update current layout info
+      setCurrentLayoutId(layout.id);
+      setCurrentLayoutName(data.name);
+      setHasUnsavedChanges(false); // Reset unsaved changes flag
+
+      // Clear history and add loaded state
+      clearHistory();
+      addToHistory(data.shapes || []);
+
+      // Show success message
+      setSnackbarMessage(`Layout "${data.name}" loaded successfully!`);
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+
+      console.log('✅ Layout loaded:', layout);
+    } catch (error) {
+      console.error('Error loading layout:', error);
+      setSnackbarMessage('Failed to load layout');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      throw error;
+    }
+  }, [addToHistory, clearHistory, hasUnsavedChanges]);
+
+  const handleFetchLayouts = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/layouts');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch layouts');
+      }
+
+      const layouts = await response.json();
+      return layouts;
+    } catch (error) {
+      console.error('Error fetching layouts:', error);
+      throw error;
+    }
+  }, []);
+
+  const handleDeleteLayout = useCallback(async (layoutId: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/layouts/${layoutId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete layout');
+      }
+
+      // If we deleted the current layout, reset the current layout info
+      if (layoutId === currentLayoutId) {
+        setCurrentLayoutId(null);
+        setCurrentLayoutName('Untitled Layout');
+      }
+
+      setSnackbarMessage('Layout deleted successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+
+      console.log('✅ Layout deleted:', layoutId);
+    } catch (error) {
+      console.error('Error deleting layout:', error);
+      throw error;
+    }
+  }, [currentLayoutId]);
 
   // Canvas settings
   const handleCanvasSizeChange = useCallback((width: number, height: number) => {
@@ -1748,9 +1955,35 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     document.addEventListener('mouseup', handleMouseUp);
   }, [drawingState.isDrawing, canvasSettings, addToHistory, runValidation]);
 
-  // Keyboard nudging and deletion for selected shape
+  // Keyboard shortcuts and nudging
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Global keyboard shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl+S or Cmd+S - Save
+        if (e.key === 's' || e.key === 'S') {
+          e.preventDefault();
+          setShowSaveDialog(true);
+          return;
+        }
+
+        // Ctrl+O or Cmd+O - Load
+        if (e.key === 'o' || e.key === 'O') {
+          e.preventDefault();
+          setShowLoadDialog(true);
+          return;
+        }
+
+        // Ctrl+Shift+S - Save As (force new save)
+        if (e.shiftKey && (e.key === 's' || e.key === 'S')) {
+          e.preventDefault();
+          setCurrentLayoutId(null); // Clear current ID to force save as new
+          setShowSaveDialog(true);
+          return;
+        }
+      }
+
+      // Shape-specific keyboard handling
       const selectedId = drawingState.selectedShapeId;
       if (!selectedId) return;
 
@@ -1795,12 +2028,105 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [drawingState.selectedShapeId, canvasSettings, addToHistory, runValidation, handleShapeDelete]);
+  }, [drawingState.selectedShapeId, canvasSettings, addToHistory, runValidation, handleShapeDelete, setShowSaveDialog, setShowLoadDialog, setCurrentLayoutId]);
 
   return (
     <Box sx={{ height: '100vh', position: 'relative' }}>
+      {/* Header Toolbar */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 9999,
+        backgroundColor: '#ffffff',
+        borderBottom: '3px solid #2196f3',
+        padding: '12px 24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
+        minHeight: '60px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#1976d2' }}>
+            {currentLayoutName}
+            {hasUnsavedChanges && <span style={{ color: '#ff9800', marginLeft: '8px' }}>*</span>}
+          </h2>
+          {shapes.length > 0 && (
+            <span style={{ fontSize: '14px', color: '#666' }}>
+              ({shapes.length} shapes, {connections.length + doorConnections.length} connections)
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            style={{
+              padding: '10px 20px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              backgroundColor: '#2196f3',
+              color: 'white',
+              border: '2px solid #1976d2',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }}
+            onClick={() => setShowSaveDialog(true)}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = '#1976d2';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = '#2196f3';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            title="Save Layout (Ctrl+S)"
+          >
+            <SaveIcon style={{ fontSize: '20px' }} />
+            <span>Save Layout</span>
+          </button>
+
+          <button
+            style={{
+              padding: '10px 20px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              backgroundColor: '#4caf50',
+              color: 'white',
+              border: '2px solid #45a049',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }}
+            onClick={() => setShowLoadDialog(true)}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = '#45a049';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = '#4caf50';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            title="Load Layout (Ctrl+O)"
+          >
+            <FolderOpenIcon style={{ fontSize: '20px' }} />
+            <span>Load Layout</span>
+          </button>
+        </div>
+      </div>
+
       {/* Main Canvas Area - Full viewport */}
-      <Box sx={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+      <Box sx={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', paddingTop: '72px' }}>
         {/* Canvas Container */}
         <Box
           ref={scrollContainerRef}
@@ -2248,6 +2574,10 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         isDrawing={drawingState.isDrawing}
         hasSelectedShape={!!drawingState.selectedShapeId}
         position="bottom"
+        onSave={() => setShowSaveDialog(true)}
+        onLoad={() => setShowLoadDialog(true)}
+        hasUnsavedChanges={hasUnsavedChanges}
+        layoutName={currentLayoutName}
       />
 
       {/* Properties Panel */}
@@ -2544,6 +2874,23 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         onSendMessage={sendMessage}
         onClearHistory={clearHistory}
         onExecuteAction={handleChatAction}
+      />
+
+      {/* Save Layout Dialog */}
+      <SaveLayoutDialog
+        open={showSaveDialog}
+        currentName={currentLayoutName}
+        onClose={() => setShowSaveDialog(false)}
+        onSave={handleSaveLayout}
+      />
+
+      {/* Load Layout Dialog */}
+      <LoadLayoutDialog
+        open={showLoadDialog}
+        onClose={() => setShowLoadDialog(false)}
+        onLoad={handleLoadLayout}
+        onDelete={handleDeleteLayout}
+        onFetchLayouts={handleFetchLayouts}
       />
     </Box>
   );

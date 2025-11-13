@@ -260,7 +260,10 @@ const SnapCanvasCore: React.FC<SnapCanvasProps> = ({
         connectionLineType={ConnectionLineType.Straight}
         snapToGrid
         snapGrid={[20, 20]}
-        fitView
+        translateExtent={[[-50000, -50000], [50000, 50000]]}
+        nodeExtent={[[-50000, -50000], [50000, 50000]]}
+        minZoom={0.1}
+        maxZoom={4}
         attributionPosition="bottom-left"
         defaultEdgeOptions={{
           type: 'multiRelationship',

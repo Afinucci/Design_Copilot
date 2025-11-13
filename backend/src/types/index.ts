@@ -52,6 +52,94 @@ export interface Diagram {
   updatedAt: string | null;
 }
 
+// Layout Designer Types (for freeform shape-based layouts)
+export interface ShapeProperties {
+  id: string;
+  name: string;
+  shapeType: string;
+  category: NodeCategory;
+  cleanroomClass?: 'A' | 'B' | 'C' | 'D' | 'CNC';
+  width: number;
+  height: number;
+  area: number;
+  x: number;
+  y: number;
+  rotation?: number;
+  pressureRegime: 'positive' | 'negative' | 'neutral';
+  temperatureRange: {
+    min: number;
+    max: number;
+    unit: 'C' | 'F';
+  };
+  humidityRange: {
+    min: number;
+    max: number;
+  };
+  fillColor: string;
+  borderColor: string;
+  borderWidth: number;
+  opacity: number;
+  isCompliant: boolean;
+  complianceIssues: string[];
+  assignedNodeName?: string;
+  assignedNodeId?: string;
+  customProperties: Record<string, any>;
+}
+
+export interface Connection {
+  id: string;
+  fromShapeId: string;
+  toShapeId: string;
+  type: 'personnel' | 'material';
+  direction: 'unidirectional' | 'bidirectional';
+  createdAt: Date;
+  label?: string;
+}
+
+export interface DoorPlacement {
+  id: string;
+  sharedWallId: string;
+  shape1Id: string;
+  shape2Id: string;
+  position: { x: number; y: number };
+  normalizedPosition: number;
+  width: number;
+  flowType: 'material' | 'personnel' | 'waste';
+  flowDirection: 'unidirectional' | 'bidirectional';
+  unidirectionalDirection?: 'fromFirstToSecond' | 'fromSecondToFirst';
+}
+
+export interface LayoutData {
+  id: string;
+  name: string;
+  shapes: ShapeProperties[];
+  connections: Connection[];
+  doorConnections: DoorConnection[];
+  doorPlacements: DoorPlacement[];
+  canvasSettings: {
+    width: number;
+    height: number;
+    backgroundColor: string;
+    showGrid: boolean;
+    snapToGrid: boolean;
+    gridSize: number;
+    zoom: number;
+  };
+  metadata: {
+    createdAt: Date;
+    modifiedAt: Date;
+    version: string;
+  };
+}
+
+export interface Layout {
+  id: string;
+  name: string;
+  data: LayoutData;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 export interface ValidationResult {
   isValid: boolean;
   violations: ValidationViolation[];
