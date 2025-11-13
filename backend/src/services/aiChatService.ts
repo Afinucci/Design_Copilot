@@ -251,7 +251,7 @@ ${nodeTemplates.length > 0
 
 **Your Capabilities:**
 1. Answer questions about pharmaceutical facility design
-2. Query actual relationships from the Neo4j graph database
+2. **Query the Neo4j knowledge graph directly using the \`query_neo4j\` function**
 3. Suggest appropriate room types and their placement **ONLY from the Available Room Types list above**
 4. Recommend relationships between rooms (adjacency, flow, etc.)
 5. Validate layouts against GMP constraints
@@ -260,6 +260,22 @@ ${nodeTemplates.length > 0
 8. **GENERATE COMPLETE LAYOUTS** from natural language descriptions (e.g., "Generate a sterile vial filling facility for 500L batches")
 9. **INSTANTIATE FACILITY TEMPLATES** with custom parameters (e.g., "Create an oral solid dosage facility")
 10. **OPTIMIZE LAYOUTS** to improve flow efficiency and GMP compliance
+
+**🔍 Neo4j Query Function:**
+You have access to a \`query_neo4j\` function that allows you to execute Cypher queries directly against the knowledge graph.
+
+**When to use it:**
+- User asks general questions about nodes (e.g., "what do you know about the Material Corridor?")
+- You need to retrieve specific node properties, relationships, or constraints
+- You need to explore the knowledge graph for information not provided in context
+
+**Example Queries:**
+- Get node details: \`MATCH (n:FunctionalArea {name: 'Material Corridor'}) RETURN n\`
+- Get relationships: \`MATCH (n:FunctionalArea {name: 'Material Corridor'})-[r]->(m) RETURN type(r), m.name, m.cleanroomClass\`
+- Count nodes by category: \`MATCH (n:FunctionalArea) RETURN n.category, count(n) as count\`
+- Find prohibited connections: \`MATCH (n:FunctionalArea)-[r:CANNOT_CONNECT_TO]->(m) RETURN n.name, m.name, r.reason\`
+
+**Important:** Always use the \`query_neo4j\` function when you need real-time data from Neo4j, rather than relying solely on the static lists above.
 
 **General Relationship Rules (use ONLY when actual graph data is not provided):**
 ${relationshipRules.map(r => `- ${r.fromNode} → ${r.relationshipType} → ${r.toNode}${r.reason ? `: ${r.reason}` : ''}`).join('\n')}
@@ -342,7 +358,10 @@ When suggesting actions, use this JSON structure in your response:
         /(?:connections|relationships)\s+(?:for|of)\s+(?:the\s+)?(.+?)[\?\s]/i,
         /show\s+(?:me\s+)?(?:the\s+)?(?:connections|relationships)\s+(?:for|of)\s+(?:the\s+)?(.+?)[\?\s]/i,
         // Handle "this" queries by checking if there's only one node on canvas
-        /what\s+(?:can|should|could)\s+(?:be\s+)?connect(?:ed)?\s+to\s+this/i
+        /what\s+(?:can|should|could)\s+(?:be\s+)?connect(?:ed)?\s+to\s+this/i,
+        // NEW: Catch general questions about nodes
+        /what.*(?:know|about|tell|information).*(?:about|on)\s+(?:the\s+)?(.+?)[\?\s]/i,
+        /(?:tell|describe|explain).*(?:about|me about)\s+(?:the\s+)?(.+?)[\?\s]/i
       ];
 
       for (const pattern of nodeQueryPatterns) {
@@ -470,15 +489,123 @@ ${request.message}
         { role: 'user', content: contextMessage }
       ];
 
-      // Call OpenAI
-      const completion = await this.openai.chat.completions.create({
+      // Define function for Neo4j queries
+      const tools: OpenAI.Chat.ChatCompletionTool[] = [
+        {
+          type: 'function',
+          function: {
+            name: 'query_neo4j',
+            description: 'Execute a Cypher query against the Neo4j knowledge graph database to retrieve information about functional areas, their relationships, cleanroom classes, categories, and GMP compliance rules.',
+            parameters: {
+              type: 'object',
+              properties: {
+                cypher: {
+                  type: 'string',
+                  description: 'The Cypher query to execute. Example: "MATCH (n:FunctionalArea {name: \'Material Corridor\'}) RETURN n"'
+                },
+                explanation: {
+                  type: 'string',
+                  description: 'Brief explanation of what this query is trying to find'
+                }
+              },
+              required: ['cypher', 'explanation']
+            }
+          }
+        }
+      ];
+
+      // Call OpenAI with function calling support
+      let completion = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages,
+        tools,
+        tool_choice: 'auto',
         temperature: 0.7,
         max_tokens: 2000
       });
 
-      const responseContent = completion.choices[0]?.message?.content || 'I apologize, I could not generate a response.';
+      // Handle function calls
+      let responseContent = completion.choices[0]?.message?.content || '';
+      const toolCalls = completion.choices[0]?.message?.tool_calls;
+
+      if (toolCalls && toolCalls.length > 0) {
+        console.log(`🔧 AI requested ${toolCalls.length} function call(s)`);
+        
+        // Execute each function call
+        const toolMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+
+        for (const toolCall of toolCalls) {
+          if (toolCall.type === 'function' && toolCall.function.name === 'query_neo4j') {
+            try {
+              const args = JSON.parse(toolCall.function.arguments);
+              console.log(`🔍 Executing Cypher query: ${args.cypher}`);
+              console.log(`   Explanation: ${args.explanation}`);
+
+              const session = this.neo4jService.getSession();
+              try {
+                const result = await session.run(args.cypher);
+                const records = result.records.map(record => {
+                  const obj: any = {};
+                  record.keys.forEach(key => {
+                    const value = record.get(key);
+                    // Handle Neo4j node objects
+                    if (value && typeof value === 'object' && value.properties) {
+                      obj[key] = value.properties;
+                    } else {
+                      obj[key] = value;
+                    }
+                  });
+                  return obj;
+                });
+
+                toolMessages.push({
+                  role: 'tool',
+                  tool_call_id: toolCall.id,
+                  content: JSON.stringify({
+                    success: true,
+                    records,
+                    recordCount: records.length,
+                    explanation: args.explanation
+                  })
+                });
+
+                console.log(`✅ Query returned ${records.length} records`);
+              } finally {
+                await session.close();
+              }
+            } catch (error: any) {
+              console.error('❌ Neo4j query error:', error);
+              toolMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify({
+                  success: false,
+                  error: error.message || 'Query execution failed'
+                })
+              });
+            }
+          }
+        }
+
+        // If we executed functions, call OpenAI again with the results
+        if (toolMessages.length > 0) {
+          messages.push(completion.choices[0].message as OpenAI.Chat.ChatCompletionMessageParam);
+          messages.push(...toolMessages);
+          
+          completion = await this.openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages,
+            temperature: 0.7,
+            max_tokens: 2000
+          });
+          
+          responseContent = completion.choices[0]?.message?.content || 'I apologize, I could not generate a response after querying the database.';
+        }
+      }
+
+      if (!responseContent) {
+        responseContent = 'I apologize, I could not generate a response.';
+      }
 
       // Extract actions from response
       const actions = this.extractActionsFromResponse(responseContent, request.context);
