@@ -285,6 +285,59 @@ class ApiService {
     });
   }
 
+  // AI Assistant
+  async askAI(question: string): Promise<{
+    success: boolean;
+    question: string;
+    query: string;
+    explanation: string;
+    results: any[];
+    resultCount: number;
+    error?: string;
+  }> {
+    return this.request<{
+      success: boolean;
+      question: string;
+      query: string;
+      explanation: string;
+      results: any[];
+      resultCount: number;
+      error?: string;
+    }>('/ai/ask', {
+      method: 'POST',
+      body: JSON.stringify({ question }),
+    });
+  }
+
+  async executeAICypherQuery(query: string): Promise<{
+    success: boolean;
+    query: string;
+    explanation: string;
+    results: any[];
+    resultCount: number;
+    error?: string;
+  }> {
+    return this.request<{
+      success: boolean;
+      query: string;
+      explanation: string;
+      results: any[];
+      resultCount: number;
+      error?: string;
+    }>('/ai/execute', {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    });
+  }
+
+  async getAISchema(): Promise<{ success: boolean; schema: string }> {
+    return this.request<{ success: boolean; schema: string }>('/ai/schema');
+  }
+
+  async checkAIHealth(): Promise<{ success: boolean; configured: boolean; status: string }> {
+    return this.request<{ success: boolean; configured: boolean; status: string }>('/ai/health');
+  }
+
   // Health Check
   async healthCheck(): Promise<{ status: string; timestamp: string; database: string }> {
     const url = `${API_BASE_URL.replace('/api', '')}/health`;

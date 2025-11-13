@@ -42,7 +42,7 @@ import {
   MenuItem,
   Checkbox,
 } from '@mui/material';
-import { Save, PlayArrow, Stop, Edit, Search, Wifi, WifiOff, Sync, GroupWork, Cancel, Delete, Room, Warning, Speed, Settings, SwapHoriz, Person } from '@mui/icons-material';
+import { Save, PlayArrow, Stop, Edit, Search, Wifi, WifiOff, Sync, GroupWork, Cancel, Delete, Room, Warning, Speed, Settings, SwapHoriz, Person, SmartToy } from '@mui/icons-material';
 import NodePalette from './NodePalette';
 import PropertyPanel from './PropertyPanel';
 import ValidationPanel from './ValidationPanel';
@@ -51,6 +51,7 @@ import GroupBoundaryNode from './GroupBoundaryNode';
 import MultiRelationshipEdge from './MultiRelationshipEdge';
 import RelationshipLegend from './RelationshipLegend';
 import InlineRelationshipEditDialog from './InlineRelationshipEditDialog';
+import AIAssistantPanel from './AIAssistantPanel';
 import { addMultiEdge } from '../utils/edgeUtils';
 import { DiagramEdge, NodeTemplate, ValidationResult, NodeData, AppMode, GuidedSuggestion, ModeConfig, NodeGroup, GroupingState, SpatialRelationship } from '../types';
 import { apiService } from '../services/api';
@@ -281,6 +282,7 @@ const DiagramEditor: React.FC = () => {
     severity: 'info',
   });
   const [isValidating, setIsValidating] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   
@@ -1568,7 +1570,15 @@ const DiagramEditor: React.FC = () => {
           >
             {isValidating ? 'Stop Validation' : 'Validate'}
           </Button>
-          
+          <Button
+            color="inherit"
+            startIcon={<SmartToy />}
+            onClick={() => setShowAIAssistant(!showAIAssistant)}
+            variant={showAIAssistant ? 'outlined' : 'text'}
+          >
+            AI Assistant
+          </Button>
+
         </Toolbar>
       </AppBar>
 
@@ -1625,9 +1635,15 @@ const DiagramEditor: React.FC = () => {
           </ReactFlowProvider>
         </Box>
 
+        {showAIAssistant && (
+          <Box sx={{ width: 400, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e0e0e0' }}>
+            <AIAssistantPanel onClose={() => setShowAIAssistant(false)} />
+          </Box>
+        )}
+
         <Box sx={{ width: 320, display: 'flex', flexDirection: 'column' }}>
-          <PropertyPanel 
-            selectedNode={selectedNode} 
+          <PropertyPanel
+            selectedNode={selectedNode}
             mode={mode}
             guidedSuggestions={guidedSuggestions}
             groups={groupingState.groups}

@@ -9,6 +9,7 @@ import nodeRoutes from './routes/nodes';
 import validationRoutes from './routes/validation';
 import groupRoutes from './routes/groups';
 import relationshipRoutes from './routes/relationships';
+import aiRoutes from './routes/ai';
 
 config();
 
@@ -43,6 +44,7 @@ app.use('/api/nodes', nodeRoutes);
 app.use('/api/validation', validationRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/relationships', relationshipRoutes);
+app.use('/api/ai', aiRoutes);
 
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');
