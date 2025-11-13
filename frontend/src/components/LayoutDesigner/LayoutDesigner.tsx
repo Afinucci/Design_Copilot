@@ -35,9 +35,15 @@ import WallTool from './WallTool';
 import ChatPanel from '../ChatPanel';
 import { useChatAssistant } from '../../hooks/useChatAssistant';
 import { ChatAction } from '../../types';
-import { Fab, Tooltip } from '@mui/material';
+import { Fab, Tooltip, Chip } from '@mui/material';
 import { Chat as ChatIcon } from '@mui/icons-material';
 import GenerativeApiService from '../../services/generativeApi';
+import {
+  mergePolygons,
+  calculateBoundingBox,
+  polygonCentroid,
+  Polygon
+} from '../../utils/polygonUnion';
 
 export interface LayoutDesignerProps {
   onClose?: () => void;
@@ -366,6 +372,9 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   // UI state
   const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
   const [showValidationOverlay, setShowValidationOverlay] = useState(true);
+
+  // Merge queue: tracks shapes to be merged together
+  const [mergeQueue, setMergeQueue] = useState<string[]>([]);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [validationResult, setValidationResult] = useState<ValidationResult>({
     isValid: true,
@@ -622,6 +631,108 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       rotation: ((shape.rotation || 0) + 15) % 360
     });
   }, [drawingState.selectedShapeId, shapes, handleShapeUpdate]);
+
+  // Merge shapes handler
+  const handleMergeShapes = useCallback(() => {
+    if (mergeQueue.length < 2) {
+      setSnackbarMessage('Please add at least 2 shapes to the merge queue (Shift+Click shapes)');
+      setSnackbarSeverity('warning');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    // Get shapes from merge queue
+    const shapesToMerge = shapes.filter(s => mergeQueue.includes(s.id));
+    if (shapesToMerge.length < 2) {
+      setSnackbarMessage('Not enough valid shapes to merge');
+      setSnackbarSeverity('warning');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    // Convert shapes to polygons
+    const polygons: Polygon[] = shapesToMerge.map(shape => {
+      const points = computePointsRelative(shape).map(p => ({
+        x: shape.x + p.x,
+        y: shape.y + p.y
+      }));
+      console.log('📐 Shape to merge:', shape.id, 'type:', shape.shapeType, 'bbox:', { x: shape.x, y: shape.y, w: shape.width, h: shape.height }, 'points:', points.length);
+      return { points };
+    });
+
+    console.log('🔀 Calling mergePolygons with', polygons.length, 'polygons');
+    // Merge polygons
+    const mergedPolygon = mergePolygons(polygons);
+    console.log('📊 Merged polygon has', mergedPolygon.points.length, 'points:', mergedPolygon.points);
+
+    // Calculate bounding box for the merged shape
+    const bbox = calculateBoundingBox(mergedPolygon.points);
+
+    // Use the first shape's properties as base
+    const baseShape = shapesToMerge[0];
+
+    // Calculate the center of the first original shape (in absolute coordinates)
+    const originalCenterX = baseShape.x + baseShape.width / 2;
+    const originalCenterY = baseShape.y + baseShape.height / 2;
+
+    // Convert to relative coordinates within the merged shape's bounding box
+    const labelCenterRelative = {
+      x: originalCenterX - bbox.minX,
+      y: originalCenterY - bbox.minY
+    };
+
+    // Create new merged shape
+    const mergedShape: ShapeProperties = {
+      id: generateShapeId(),
+      shapeType: 'polygon',
+      name: `Merged ${baseShape.name}`,
+      x: bbox.minX,
+      y: bbox.minY,
+      width: bbox.width,
+      height: bbox.height,
+      area: bbox.width * bbox.height,
+      fillColor: baseShape.fillColor,
+      borderColor: baseShape.borderColor,
+      borderWidth: baseShape.borderWidth,
+      opacity: baseShape.opacity,
+      rotation: 0,
+      cleanroomClass: baseShape.cleanroomClass,
+      category: baseShape.category,
+      pressureRegime: baseShape.pressureRegime,
+      temperatureRange: baseShape.temperatureRange,
+      humidityRange: baseShape.humidityRange,
+      isCompliant: baseShape.isCompliant,
+      complianceIssues: baseShape.complianceIssues,
+      assignedNodeName: baseShape.assignedNodeName,
+      assignedNodeId: baseShape.assignedNodeId,
+      customProperties: {
+        ...baseShape.customProperties,
+        pointsRelative: mergedPolygon.points.map(p => ({
+          x: p.x - bbox.minX,
+          y: p.y - bbox.minY
+        })),
+        // Store the center position of the first original shape for label positioning
+        labelCenter: labelCenterRelative
+      }
+    };
+
+    // Update shapes: remove merged shapes and add new one
+    setShapes(prev => {
+      const filtered = prev.filter(s => !mergeQueue.includes(s.id));
+      const newShapes = [...filtered, mergedShape];
+      addToHistory(newShapes);
+      runValidation(newShapes);
+      return newShapes;
+    });
+
+    // Clear merge queue and select new shape
+    setMergeQueue([]);
+    setDrawingState(prev => ({ ...prev, selectedShapeId: mergedShape.id }));
+
+    setSnackbarMessage(`Successfully merged ${shapesToMerge.length} shapes`);
+    setSnackbarSeverity('success');
+    setSnackbarOpen(true);
+  }, [mergeQueue, shapes, computePointsRelative, generateShapeId, addToHistory, runValidation]);
 
   // Connection handlers
   const handleConnectionUpdate = useCallback((id: string, updates: Partial<Connection>) => {
@@ -1824,6 +1935,24 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                 const validationColor = validationState?.color;
                 const validationBorderWidth = isValidating ? 4 : shape.borderWidth;
 
+                // Calculate label position (use stored position from merge or calculate centroid)
+                const labelPosition = (() => {
+                  if (polygonRenderTypes.has(shape.shapeType)) {
+                    // Check if we have a stored label center from merge operation
+                    if (shape.customProperties?.labelCenter) {
+                      return shape.customProperties.labelCenter;
+                    }
+                    // Fall back to centroid calculation for non-merged polygons
+                    const relativePoints = computePointsRelative(shape);
+                    if (relativePoints.length > 0) {
+                      const centroid = polygonCentroid(relativePoints);
+                      return { x: centroid.x, y: centroid.y };
+                    }
+                  }
+                  // For simple shapes, use center
+                  return { x: shape.width / 2, y: shape.height / 2 };
+                })();
+
                 return (
                 <Box
                   key={shape.id}
@@ -1847,9 +1976,10 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                     opacity: shape.opacity,
                     cursor: 'grab',
                     pointerEvents: 'all',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    // Remove flexbox centering for polygon shapes
+                    display: polygonRenderTypes.has(shape.shapeType) ? 'block' : 'flex',
+                    alignItems: polygonRenderTypes.has(shape.shapeType) ? undefined : 'center',
+                    justifyContent: polygonRenderTypes.has(shape.shapeType) ? undefined : 'center',
                     transition: 'all 0.2s',
                     transform: `rotate(${shape.rotation || 0}deg)`,
                     transformOrigin: 'center center',
@@ -1866,6 +1996,11 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                           },
                           ...(drawingState.selectedShapeId === shape.id && {
                             boxShadow: `0 0 0 3px ${shape.fillColor}`,
+                          }),
+                          // Merge queue highlight effect
+                          ...(mergeQueue.includes(shape.id) && {
+                            boxShadow: '0 0 0 4px #00BCD4, 0 0 15px rgba(0, 188, 212, 0.5)',
+                            backgroundColor: shape.fillColor + '80',
                           }),
                           // AI Chat highlight effect
                           ...(highlightedNodeIds.includes(shape.id) && {
@@ -1888,6 +2023,15 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                   onClick={(e) => {
                     if (drawingMode === 'door') {
                       handleDoorConnectionClick(e, shape.id);
+                    } else if (e.shiftKey) {
+                      // Shift+Click: Add/remove from merge queue
+                      setMergeQueue(prev => {
+                        if (prev.includes(shape.id)) {
+                          return prev.filter(id => id !== shape.id);
+                        } else {
+                          return [...prev, shape.id];
+                        }
+                      });
                     } else {
                       setDrawingState(prev => ({
                         ...prev,
@@ -1933,14 +2077,41 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                       </g>
                     </svg>
                   )}
-                  <Typography
-                    variant="caption"
-                    fontWeight="bold"
-                    color="text.primary"
-                    textAlign="center"
-                    sx={{ wordBreak: 'break-word', px: 1 }}
+                  <Box
+                    sx={{
+                      // Position at centroid for polygon shapes, or use default for simple shapes
+                      ...(polygonRenderTypes.has(shape.shapeType) && {
+                        position: 'absolute',
+                        left: labelPosition.x,
+                        top: labelPosition.y,
+                        transform: 'translate(-50%, -50%)',
+                        pointerEvents: 'none',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 0.3,
+                        maxWidth: Math.min(180, shape.width * 0.6), // Constrain to reasonable width
+                      }),
+                    }}
                   >
-                    {shape.name}
+                    <Typography
+                      variant="caption"
+                      fontWeight="bold"
+                      color="text.primary"
+                      textAlign="center"
+                      sx={{
+                        wordBreak: 'break-word',
+                        // Conditional padding
+                        px: polygonRenderTypes.has(shape.shapeType) ? 0 : 1,
+                        // Allow wrapping for polygon shapes to fit text
+                        ...(polygonRenderTypes.has(shape.shapeType) && {
+                          lineHeight: 1.2,
+                          fontSize: '0.75rem', // Slightly smaller for better fit
+                        }),
+                      }}
+                    >
+                      {shape.name}
+                    </Typography>
 
                     {/* Cleanroom Class Badge */}
                     {shape.cleanroomClass && shape.cleanroomClass !== 'CNC' && (
@@ -1948,7 +2119,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                         component="span"
                         sx={{
                           display: 'inline-block',
-                          ml: 0.5,
+                          ml: polygonRenderTypes.has(shape.shapeType) ? 0 : 0.5,
                           px: 0.8,
                           py: 0.2,
                           borderRadius: 1,
@@ -1976,7 +2147,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                         {unitConverter.formatPixels(shape.width)} × {unitConverter.formatPixels(shape.height)}
                       </Box>
                     )}
-                  </Typography>
+                  </Box>
 
                   {/* Resize handles - show only for selected shape */}
                   {drawingState.selectedShapeId === shape.id && (
@@ -2065,6 +2236,8 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         onClear={handleClear}
         onRotateLeft={handleRotateLeft}
         onRotateRight={handleRotateRight}
+        onMergeShapes={handleMergeShapes}
+        mergeQueueCount={mergeQueue.length}
         onToggleSidebar={() => setIsSidebarVisible(!isSidebarVisible)}
         isSidebarVisible={isSidebarVisible}
         onToggleRulers={() => setShowRulers(!showRulers)}

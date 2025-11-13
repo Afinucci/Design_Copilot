@@ -36,6 +36,7 @@ import {
   LinearScale as MeasureIcon,
   AspectRatio as ScaleIcon,
   Visibility as RulerIcon,
+  CallMerge as MergeIcon,
 } from '@mui/icons-material';
 import { ShapeType } from '../../types';
 import { DrawingMode } from './types';
@@ -73,6 +74,8 @@ export interface DrawingToolsProps {
   onClear: () => void;
   onRotateLeft?: () => void;
   onRotateRight?: () => void;
+  onMergeShapes?: () => void;
+  mergeQueueCount?: number;
 
   // Sidebar toggle
   onToggleSidebar?: () => void;
@@ -116,6 +119,8 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
   onClear,
   onRotateLeft,
   onRotateRight,
+  onMergeShapes,
+  mergeQueueCount = 0,
   onToggleSidebar,
   isSidebarVisible = true,
   onToggleRulers,
@@ -399,6 +404,53 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
                     disabled={!hasSelectedShape}
                   >
                     <RotateRightIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Box>
+
+            <Divider orientation={orientation === 'vertical' ? 'horizontal' : 'vertical'} flexItem />
+          </>
+        )}
+
+        {/* Merge Shapes Button */}
+        {onMergeShapes && (
+          <>
+            <Box display="flex" gap={0.5} flexDirection={orientation === 'vertical' ? 'column' : 'row'}>
+              <Tooltip title={`Merge Shapes (Shift+Click to add shapes, ${mergeQueueCount || 0} selected)`} arrow>
+                <span>
+                  <IconButton
+                    size="medium"
+                    onClick={onMergeShapes}
+                    disabled={!mergeQueueCount || mergeQueueCount < 2}
+                    color={mergeQueueCount && mergeQueueCount >= 2 ? 'primary' : 'default'}
+                    sx={{
+                      position: 'relative',
+                      backgroundColor: mergeQueueCount && mergeQueueCount >= 2 ? 'primary.light' : 'transparent',
+                    }}
+                  >
+                    <MergeIcon />
+                    {mergeQueueCount && mergeQueueCount > 0 && (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          top: 2,
+                          right: 2,
+                          minWidth: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          backgroundColor: '#00BCD4',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '10px',
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        {mergeQueueCount}
+                      </Box>
+                    )}
                   </IconButton>
                 </span>
               </Tooltip>

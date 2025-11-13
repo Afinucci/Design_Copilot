@@ -4,6 +4,7 @@ import { Box, Typography, Chip, Paper, Tooltip, Badge, IconButton, Alert } from 
 import { Build, Edit, Link, LinkOff, Warning, CheckCircle, Crop } from '@mui/icons-material';
 import { CustomShapeData, ShapePoint, ResizeHandle, ResizeHandleType, ResizeHandlePosition } from '../types';
 import { generateShapePath, calculateShapeArea, calculateShapeDimensions } from '../utils/shapeGeometry';
+import { polygonCentroid } from '../utils/polygonUnion';
 import './CustomNode.css';
 
 interface Equipment {
@@ -525,6 +526,43 @@ const CustomShapeNode: React.FC<CustomShapeNodeProps> = ({
   const displayCategory = getDisplayCategory();
   const shapeColor = getShapeColor();
 
+  // Calculate centroid for label positioning
+  const labelPosition = useMemo(() => {
+    console.log('🔄 Calculating labelPosition for', id, 'with', shapePoints.length, 'points');
+    if (shapePoints.length === 0) return { x: width ? width / 2 : 60, y: height ? height / 2 : 40 };
+
+    // Calculate the bounding box of the shape
+    const minX = Math.min(...shapePoints.map(p => p.x));
+    const maxX = Math.max(...shapePoints.map(p => p.x));
+    const minY = Math.min(...shapePoints.map(p => p.y));
+    const maxY = Math.max(...shapePoints.map(p => p.y));
+
+    const boundsWidth = maxX - minX;
+    const boundsHeight = maxY - minY;
+
+    // Calculate centroid of the actual shape
+    const centroid = polygonCentroid(shapePoints);
+
+    console.log('🎯 Label positioning debug:', {
+      id,
+      shapeType,
+      nodeWidth: width,
+      nodeHeight: height,
+      boundsWidth,
+      boundsHeight,
+      minX, maxX, minY, maxY,
+      centroid,
+      numPoints: shapePoints.length,
+      firstPoint: shapePoints[0],
+      lastPoint: shapePoints[shapePoints.length - 1]
+    });
+
+    // The shapePoints should be in the SVG's local coordinate system
+    // The centroid is already in that same coordinate system
+    // So we can use it directly
+    return { x: centroid.x, y: centroid.y };
+  }, [shapePoints, width, height, shapeType, id]);
+
   return (
     <Box
       sx={{
@@ -588,6 +626,18 @@ const CustomShapeNode: React.FC<CustomShapeNodeProps> = ({
               filter: getBorderStyle().filter,
               pointerEvents: 'none', // Let the rect handle clicks
             }}
+          />
+
+          {/* Debug: Show calculated centroid position */}
+          <circle
+            cx={labelPosition.x}
+            cy={labelPosition.y}
+            r={5}
+            fill="red"
+            stroke="white"
+            strokeWidth={2}
+            opacity={0.8}
+            style={{ pointerEvents: 'none' }}
           />
 
         {/* Editing handles */}
@@ -790,8 +840,8 @@ const CustomShapeNode: React.FC<CustomShapeNodeProps> = ({
       <Box
         sx={{
           position: 'absolute',
-          top: '50%',
-          left: '50%',
+          top: labelPosition.y,
+          left: labelPosition.x,
           transform: 'translate(-50%, -50%)',
           display: 'flex',
           flexDirection: 'column',

@@ -156,13 +156,14 @@ export class AIChatService {
     const session = this.neo4jService.getSession();
     try {
       // Build WHERE clause that includes cleanroom class filtering
+      // Use case-insensitive matching with toLower() for node names
       const whereClause = cleanroomClass 
-        ? `(from.name = $nodeName OR from.id = $nodeName OR from.id = $nodeId) AND from.cleanroomClass = $cleanroomClass`
-        : `from.name = $nodeName OR from.id = $nodeName OR from.id = $nodeId`;
+        ? `(toLower(from.name) = toLower($nodeName) OR from.id = $nodeName OR from.id = $nodeId) AND from.cleanroomClass = $cleanroomClass`
+        : `toLower(from.name) = toLower($nodeName) OR from.id = $nodeName OR from.id = $nodeId`;
       
       const whereClauseIncoming = cleanroomClass
-        ? `(to.name = $nodeName OR to.id = $nodeName OR to.id = $nodeId) AND to.cleanroomClass = $cleanroomClass`
-        : `to.name = $nodeName OR to.id = $nodeName OR to.id = $nodeId`;
+        ? `(toLower(to.name) = toLower($nodeName) OR to.id = $nodeName OR to.id = $nodeId) AND to.cleanroomClass = $cleanroomClass`
+        : `toLower(to.name) = toLower($nodeName) OR to.id = $nodeName OR to.id = $nodeId`;
 
       // Get outgoing relationships with full node details
       const outgoingResult = await session.run(`
@@ -270,9 +271,10 @@ You have access to a \`query_neo4j\` function that allows you to execute Cypher 
 - You need to explore the knowledge graph for information not provided in context
 
 **Example Queries:**
-- Get node details: \`MATCH (n:FunctionalArea {name: 'Material Corridor'}) RETURN n\`
-- Get relationships: \`MATCH (n:FunctionalArea {name: 'Material Corridor'})-[r]->(m) RETURN type(r), m.name, m.cleanroomClass\`
-- Count nodes by category: \`MATCH (n:FunctionalArea) RETURN n.category, count(n) as count\`
+- Get node details: \`MATCH (n:FunctionalArea) WHERE toLower(n.name) = toLower('Material Corridor') RETURN n\`
+- Get relationships: \`MATCH (n:FunctionalArea)-[r]->(m:FunctionalArea) WHERE toLower(n.name) = toLower('Material Corridor') RETURN type(r) as relationshipType, m.name, m.cleanroomClass, m.category, r.reason\`
+- Get all connections (bidirectional): \`MATCH (n:FunctionalArea)-[r]-(m:FunctionalArea) WHERE toLower(n.name) = toLower('Material Corridor') RETURN type(r) as relationshipType, m.name, m.cleanroomClass, m.category, r.reason\`
+- Count nodes by category: \`MATCH (n:FunctionalArea) RETURN n.category, count(n) as count ORDER BY count(n) DESC\`
 - Find prohibited connections: \`MATCH (n:FunctionalArea)-[r:CANNOT_CONNECT_TO]->(m) RETURN n.name, m.name, r.reason\`
 
 **Important:** Always use the \`query_neo4j\` function when you need real-time data from Neo4j, rather than relying solely on the static lists above.

@@ -30,7 +30,8 @@ import {
   Draw,
   RoundedCorner,
   RotateLeft,
-  RotateRight
+  RotateRight,
+  CallMerge
 } from '@mui/icons-material';
 import { ShapeType, ShapeTemplate } from '../types';
 
@@ -43,11 +44,13 @@ interface ShapeDrawingToolbarProps {
   onToggleSnap?: () => void;
   onRotateLeft?: () => void;
   onRotateRight?: () => void;
+  onMergeShapes?: () => void; // New merge callback
   canUndo?: boolean;
   canRedo?: boolean;
   isGridVisible?: boolean;
   isSnapEnabled?: boolean;
   hasSelectedShape?: boolean;
+  canMerge?: boolean; // Whether merge is available (2+ shapes selected for merge)
   orientation?: 'horizontal' | 'vertical';
 }
 
@@ -308,11 +311,13 @@ const ShapeDrawingToolbar: React.FC<ShapeDrawingToolbarProps> = ({
   onToggleSnap,
   onRotateLeft,
   onRotateRight,
+  onMergeShapes,
   canUndo = false,
   canRedo = false,
   isGridVisible = false,
   isSnapEnabled = false,
   hasSelectedShape = false,
+  canMerge = false,
   orientation = 'horizontal'
 }) => {
   const [templateMenuAnchor, setTemplateMenuAnchor] = useState<null | HTMLElement>(null);
@@ -536,8 +541,27 @@ const ShapeDrawingToolbar: React.FC<ShapeDrawingToolbarProps> = ({
             size="small"
             onClick={onRotateRight}
             disabled={!hasSelectedShape}
+            sx={{ mr: isVertical ? 0 : 0.5, mb: isVertical ? 0.5 : 0 }}
           >
             <RotateRight />
+          </IconButton>
+        </span>
+      </Tooltip>
+
+      {/* Merge Shapes Tool */}
+      <Tooltip title="Merge Selected Shapes (Ctrl+M)">
+        <span>
+          <IconButton
+            size="small"
+            onClick={onMergeShapes}
+            disabled={!canMerge}
+            sx={{
+              color: canMerge ? 'primary.main' : 'inherit',
+              mr: isVertical ? 0 : 0,
+              mb: isVertical ? 0 : 0
+            }}
+          >
+            <CallMerge />
           </IconButton>
         </span>
       </Tooltip>
