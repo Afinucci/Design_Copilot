@@ -27,6 +27,7 @@ import InlineRelationshipEditDialog from '../InlineRelationshipEditDialog';
 import SaveDiagramDialog from '../SaveDiagramDialog';
 import LoadDiagramDialog from '../LoadDiagramDialog';
 import FacilityTemplateSelector from '../FacilityTemplateSelector';
+import CostEstimationPanel from '../CostEstimationPanel';
 import { NodeTemplate, AppMode, SpatialRelationship, DiagramEdge, Diagram } from '../../types';
 import { apiService } from '../../services/api';
 import { formatRelationshipLabel } from '../../utils/edgeUtils';
@@ -975,6 +976,9 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad, 
         onClose={() => setTemplateDialogOpen(false)}
         onTemplateApplied={handleTemplateApplied}
       />
+
+      {/* Cost Estimation Panel */}
+      <CostEstimationPanel nodes={nodes} />
     </Box>
   );
 };

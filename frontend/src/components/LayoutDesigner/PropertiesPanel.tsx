@@ -35,6 +35,7 @@ export interface ShapeProperties {
   // Shape identification
   id: string;
   name: string;
+  label?: string; // Optional label for display
   shapeType: ShapeType;
   category: NodeCategory;
   cleanroomClass?: 'A' | 'B' | 'C' | 'D' | 'CNC';
@@ -74,9 +75,14 @@ export interface ShapeProperties {
   // Neo4j Knowledge Graph Integration
   assignedNodeName?: string; // Name of the assigned Neo4j functional area
   assignedNodeId?: string; // ID of the assigned Neo4j node
+  nodeId?: string; // Alternative property name for node ID
 
   // Custom Properties
   customProperties: Record<string, any>;
+
+  // Cost properties
+  equipment?: string[]; // Equipment IDs
+  costFactors?: any; // Room cost factors
 }
 
 export interface PropertiesPanelProps {

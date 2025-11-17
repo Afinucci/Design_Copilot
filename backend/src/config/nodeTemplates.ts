@@ -5,6 +5,25 @@ import { NodeTemplate, NodeCategory, SpatialRelationship, getCleanroomColor } fr
  * This replaces the NodeTemplate nodes previously stored in Neo4j
  */
 
+import { CLEANROOM_COST_FACTORS, ROOM_TYPE_COST_ADJUSTMENTS, getEquipmentForRoomType } from './costConfiguration';
+
+// Helper function to get cost factors for a room
+function getCostFactors(cleanroomClass: string, roomId: string) {
+  const baseCostFactors = CLEANROOM_COST_FACTORS[cleanroomClass] || CLEANROOM_COST_FACTORS['CNC'];
+  const roomAdjustment = ROOM_TYPE_COST_ADJUSTMENTS[roomId] || 1.0;
+  
+  return {
+    baseConstructionCostPerSqm: baseCostFactors.baseConstructionCostPerSqm * roomAdjustment,
+    cleanroomMultiplier: baseCostFactors.cleanroomMultiplier,
+    hvacCostPerSqm: baseCostFactors.hvacCostPerSqm * roomAdjustment,
+    validationCostPerSqm: baseCostFactors.validationCostPerSqm
+  };
+}
+
+// Helper function to get typical equipment IDs for a room
+function getTypicalEquipmentIds(roomId: string): string[] {
+  return getEquipmentForRoomType(roomId).map(e => e.id);
+}
 export const NODE_TEMPLATES: NodeTemplate[] = [
   // Production Areas
   {
@@ -13,7 +32,9 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     category: 'Production' as NodeCategory,
     cleanroomClass: 'D',
     color: getCleanroomColor('D'),
-    defaultSize: { width: 120, height: 80 }
+    defaultSize: { width: 120, height: 80 },
+    costFactors: getCostFactors('D', 'weighing-area'),
+    typicalEquipment: getTypicalEquipmentIds('weighing-area')
   },
   {
     id: 'granulation',
@@ -21,7 +42,9 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     category: 'Production' as NodeCategory,
     cleanroomClass: 'D',
     color: getCleanroomColor('D'),
-    defaultSize: { width: 150, height: 100 }
+    defaultSize: { width: 150, height: 100 },
+    costFactors: getCostFactors('D', 'granulation'),
+    typicalEquipment: getTypicalEquipmentIds('granulation')
   },
   {
     id: 'compression',
@@ -29,7 +52,9 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     category: 'Production' as NodeCategory,
     cleanroomClass: 'D',
     color: getCleanroomColor('D'),
-    defaultSize: { width: 140, height: 90 }
+    defaultSize: { width: 140, height: 90 },
+    costFactors: getCostFactors('D', 'compression'),
+    typicalEquipment: getTypicalEquipmentIds('compression')
   },
   {
     id: 'coating',
@@ -37,7 +62,9 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     category: 'Production' as NodeCategory,
     cleanroomClass: 'D',
     color: getCleanroomColor('D'),
-    defaultSize: { width: 130, height: 85 }
+    defaultSize: { width: 130, height: 85 },
+    costFactors: getCostFactors('D', 'coating'),
+    typicalEquipment: getTypicalEquipmentIds('coating')
   },
   {
     id: 'packaging',
@@ -45,7 +72,9 @@ export const NODE_TEMPLATES: NodeTemplate[] = [
     category: 'Production' as NodeCategory,
     cleanroomClass: 'D',
     color: getCleanroomColor('D'),
-    defaultSize: { width: 160, height: 100 }
+    defaultSize: { width: 160, height: 100 },
+    costFactors: getCostFactors('D', 'packaging'),
+    typicalEquipment: getTypicalEquipmentIds('packaging')
   },
 
   // Quality Control

@@ -46,6 +46,7 @@ import {
 } from '../../utils/polygonUnion';
 import SaveLayoutDialog from './SaveLayoutDialog';
 import LoadLayoutDialog from './LoadLayoutDialog';
+import CostEstimationPanel from '../CostEstimationPanel';
 
 export interface LayoutDesignerProps {
   onClose?: () => void;
@@ -2970,6 +2971,31 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         onDelete={handleDeleteLayout}
         onFetchLayouts={handleFetchLayouts}
       />
+
+      {/* Cost Estimation Panel */}
+      {shapes.length > 0 && (
+        <CostEstimationPanel
+          nodes={shapes.map(shape => ({
+            id: shape.id,
+            type: 'customShape',
+            position: { x: shape.x, y: shape.y },
+            width: shape.width,
+            height: shape.height,
+            data: {
+              id: shape.nodeId || shape.id,
+              name: shape.name || shape.label,
+              label: shape.label,
+              category: shape.category,
+              cleanroomClass: shape.cleanroomClass,
+              defaultSize: { width: shape.width, height: shape.height },
+              typicalEquipment: shape.equipment || [],
+              color: shape.fillColor,
+              area: (shape.width * shape.height * 0.01), // Convert pixels to m² (100px = 1m²)
+              costFactors: shape.costFactors,
+            }
+          }))}
+        />
+      )}
     </Box>
   );
 };

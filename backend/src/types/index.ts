@@ -26,8 +26,8 @@ export interface FunctionalArea {
   equipment?: Equipment[];
 }
 
-// Import DoorType from shared (type-only to avoid rootDir issues)
-import type { DoorType } from '../../../shared/types';
+// Import DoorType and cost types from shared (type-only to avoid rootDir issues)
+import type { DoorType, RoomCostFactors } from '../../../shared/types';
 
 export interface SpatialRelationship {
   id: string;
@@ -84,6 +84,9 @@ export interface ShapeProperties {
   assignedNodeName?: string;
   assignedNodeId?: string;
   customProperties: Record<string, any>;
+  // Cost properties
+  equipment?: string[]; // Equipment IDs
+  costFactors?: RoomCostFactors;
 }
 
 export interface Connection {
@@ -178,6 +181,9 @@ export interface NodeTemplate {
   color: string;
   icon?: string;
   defaultSize: { width: number; height: number };
+  // Cost factors
+  costFactors?: RoomCostFactors;
+  typicalEquipment?: string[]; // IDs of typical equipment for this room type
 }
 
 export interface NodeGroup {

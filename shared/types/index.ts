@@ -8,6 +8,13 @@ export interface Equipment {
   specifications?: { [key: string]: string };
   maintenanceSchedule?: string;
   status?: 'operational' | 'maintenance' | 'offline';
+  // Cost properties
+  purchaseCost?: number; // Base cost in USD
+  installationCost?: number; // Installation cost in USD
+  validationCost?: number; // Validation/qualification cost in USD
+  annualMaintenanceCost?: number; // Annual maintenance cost in USD
+  lifespan?: number; // Expected lifespan in years
+  linkedRoomTypes?: string[]; // Room types this equipment is typically used in
 }
 
 export interface FunctionalArea {
@@ -24,6 +31,10 @@ export interface FunctionalArea {
   width?: number;
   height?: number;
   equipment?: Equipment[];
+  // Cost properties
+  area?: number; // Calculated area in square meters
+  costBreakdown?: CostBreakdown; // Detailed cost breakdown
+  customCostFactors?: RoomCostFactors; // Override default cost factors
 }
 
 /**
@@ -120,6 +131,65 @@ export interface Suggestion {
   confidence: number;
 }
 
+// Cost estimation interfaces
+export interface CostBreakdown {
+  constructionCost: number; // Civil work and basic construction
+  hvacCost: number; // HVAC and utilities installation
+  equipmentPurchaseCost: number; // Equipment purchase
+  equipmentInstallationCost: number; // Equipment installation
+  validationCost: number; // Validation and qualification
+  otherCosts: number; // Other miscellaneous costs
+  totalCost: number; // Total cost
+}
+
+export interface RoomCostFactors {
+  baseConstructionCostPerSqm: number; // Base construction cost per square meter
+  cleanroomMultiplier: number; // Multiplier based on cleanroom class
+  hvacCostPerSqm: number; // HVAC cost per square meter
+  validationCostPerSqm: number; // Validation cost per square meter
+}
+
+export interface CostEstimationSettings {
+  currency: string; // Default: USD
+  regionalFactor: number; // Regional cost variation multiplier (default: 1.0)
+  escalationFactor: number; // Cost escalation factor (default: 1.0)
+  contingencyPercentage: number; // Contingency percentage (default: 10)
+}
+
+export interface ProjectCostEstimate {
+  rooms: {
+    roomId: string;
+    roomName: string;
+    area: number; // in square meters
+    costBreakdown: CostBreakdown;
+  }[];
+  equipment: {
+    equipmentId: string;
+    equipmentName: string;
+    quantity: number;
+    unitCost: number;
+    totalCost: number;
+  }[];
+  settings: CostEstimationSettings;
+  subtotal: number;
+  contingency: number;
+  grandTotal: number;
+  currency: string;
+  estimatedDate: Date;
+}
+
+export interface EquipmentCatalogItem {
+  id: string;
+  name: string;
+  type: string;
+  purchaseCost: number;
+  installationCost: number;
+  validationCost: number;
+  annualMaintenanceCost: number;
+  lifespan: number;
+  linkedRoomTypes: string[];
+}
+
 export type NodeCategory = 
   | 'Production'
   | 'Quality Control'
@@ -138,6 +208,9 @@ export interface NodeTemplate {
   color: string;
   icon?: string;
   defaultSize: { width: number; height: number };
+  // Cost factors
+  costFactors?: RoomCostFactors;
+  typicalEquipment?: string[]; // IDs of typical equipment for this room type
 }
 
 export interface NodeGroup {

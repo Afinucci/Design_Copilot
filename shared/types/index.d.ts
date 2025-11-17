@@ -10,6 +10,12 @@ export interface Equipment {
     };
     maintenanceSchedule?: string;
     status?: 'operational' | 'maintenance' | 'offline';
+    purchaseCost?: number;
+    installationCost?: number;
+    validationCost?: number;
+    annualMaintenanceCost?: number;
+    lifespan?: number;
+    linkedRoomTypes?: string[];
 }
 export interface FunctionalArea {
     id: string;
@@ -25,6 +31,9 @@ export interface FunctionalArea {
     width?: number;
     height?: number;
     equipment?: Equipment[];
+    area?: number;
+    costBreakdown?: CostBreakdown;
+    customCostFactors?: RoomCostFactors;
 }
 /**
  * Door types for pharmaceutical facilities with GMP compliance considerations
@@ -104,6 +113,59 @@ export interface Suggestion {
     reason: string;
     confidence: number;
 }
+export interface CostBreakdown {
+    constructionCost: number;
+    hvacCost: number;
+    equipmentPurchaseCost: number;
+    equipmentInstallationCost: number;
+    validationCost: number;
+    otherCosts: number;
+    totalCost: number;
+}
+export interface RoomCostFactors {
+    baseConstructionCostPerSqm: number;
+    cleanroomMultiplier: number;
+    hvacCostPerSqm: number;
+    validationCostPerSqm: number;
+}
+export interface CostEstimationSettings {
+    currency: string;
+    regionalFactor: number;
+    escalationFactor: number;
+    contingencyPercentage: number;
+}
+export interface ProjectCostEstimate {
+    rooms: {
+        roomId: string;
+        roomName: string;
+        area: number;
+        costBreakdown: CostBreakdown;
+    }[];
+    equipment: {
+        equipmentId: string;
+        equipmentName: string;
+        quantity: number;
+        unitCost: number;
+        totalCost: number;
+    }[];
+    settings: CostEstimationSettings;
+    subtotal: number;
+    contingency: number;
+    grandTotal: number;
+    currency: string;
+    estimatedDate: Date;
+}
+export interface EquipmentCatalogItem {
+    id: string;
+    name: string;
+    type: string;
+    purchaseCost: number;
+    installationCost: number;
+    validationCost: number;
+    annualMaintenanceCost: number;
+    lifespan: number;
+    linkedRoomTypes: string[];
+}
 export type NodeCategory = 'Production' | 'Quality Control' | 'Warehouse' | 'Utilities' | 'Personnel' | 'Support' | 'None' | string;
 export interface NodeTemplate {
     id: string;
@@ -116,6 +178,8 @@ export interface NodeTemplate {
         width: number;
         height: number;
     };
+    costFactors?: RoomCostFactors;
+    typicalEquipment?: string[];
 }
 export interface NodeGroup {
     id: string;
@@ -544,4 +608,3 @@ export interface DesignHealthScore {
         degrading: string[];
     };
 }
-//# sourceMappingURL=index.d.ts.map
