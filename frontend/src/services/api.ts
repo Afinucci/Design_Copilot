@@ -26,11 +26,35 @@ class ApiService {
       });
 
       if (!response.ok) {
-        const errorMsg = `API request failed: ${response.status} ${response.statusText}`;
-        throw new Error(errorMsg);
+        // Try to get error details from response body
+        let errorDetails = `${response.status} ${response.statusText}`;
+        try {
+          const errorBody = await response.json();
+          if (errorBody.error || errorBody.details) {
+            errorDetails = `${errorBody.error || errorDetails}: ${errorBody.details || ''}`;
+          }
+          console.error('🌐 API Error Response:', errorBody);
+        } catch (e) {
+          // Ignore JSON parse errors for error responses
+        }
+        throw new Error(`API request failed: ${errorDetails}`);
       }
 
       const data = await response.json();
+
+      // Log the response for debugging (only for import endpoint)
+      if (endpoint.includes('export-all')) {
+        console.log('🌐 API Response received:', {
+          endpoint,
+          dataType: typeof data,
+          hasNodes: 'nodes' in data,
+          hasRelationships: 'relationships' in data,
+          nodesType: data.nodes ? (Array.isArray(data.nodes) ? 'array' : typeof data.nodes) : 'missing',
+          relationshipsType: data.relationships ? (Array.isArray(data.relationships) ? 'array' : typeof data.relationships) : 'missing',
+          fullData: data
+        });
+      }
+
       return data;
     } catch (error) {
       console.error('🌐 API Request Error:', endpoint, error instanceof Error ? error.message : error);
@@ -252,6 +276,48 @@ class ApiService {
     return this.request<{ nodes: any[]; relationships: any[]; patterns: any[]; metadata: any }>('/nodes/kg/import');
   }
 
+  // Import entire Neo4j graph for reverse engineering
+  async importEntireNeo4jGraph(): Promise<{
+    nodes: any[];
+    relationships: any[];
+    metadata: {
+      totalNodes: number;
+      totalRelationships: number;
+      timestamp: string;
+    }
+  }> {
+    console.log('🔄 API Service: Importing entire Neo4j graph...');
+    try {
+      const result = await this.request<{
+        nodes: any[];
+        relationships: any[];
+        metadata: any
+      }>('/knowledge-graph/export-all');
+
+      // Validate response structure
+      if (!result.nodes || !Array.isArray(result.nodes)) {
+        console.error('🔄 API Service: Invalid response - missing or invalid nodes array', result);
+        throw new Error('Invalid response from server: nodes array missing or malformed');
+      }
+
+      if (!result.relationships || !Array.isArray(result.relationships)) {
+        console.error('🔄 API Service: Invalid response - missing or invalid relationships array', result);
+        throw new Error('Invalid response from server: relationships array missing or malformed');
+      }
+
+      console.log('🔄 API Service: ✅ Import successful:', {
+        nodes: result.nodes.length,
+        relationships: result.relationships.length,
+        metadata: result.metadata
+      });
+
+      return result;
+    } catch (error) {
+      console.error('🔄 API Service: ❌ Import failed:', error);
+      throw error;
+    }
+  }
+
   async getNeo4jOverview(): Promise<{
     connectionStatus: string;
     database: { name: string; uri: string; user: string };
@@ -279,8 +345,16 @@ class ApiService {
     return this.request(`${url}${queryParam}`);
   }
 
-  // Creation Mode: Enhanced persistence with knowledge graph integration
-  async persistToKnowledgeGraphEnhanced(diagramData: any): Promise<{ message: string; nodesAdded: number; relationshipsAdded: number }> {
+  // Creation Mode: Enhanced persistence with knowledge graph integration (merge/upsert)
+  async persistToKnowledgeGraphEnhanced(diagramData: any): Promise<{
+    message: string;
+    nodesCreated?: number;
+    nodesUpdated?: number;
+    relationshipsCreated?: number;
+    relationshipsUpdated?: number;
+    nodesAdded: number;
+    relationshipsAdded: number;
+  }> {
     console.log('🌐 API Service: persistToKnowledgeGraphEnhanced called');
     console.log('🌐 API Service: Diagram data to persist:', {
       nodeCount: diagramData.nodes?.length,
@@ -290,7 +364,15 @@ class ApiService {
     console.log('🌐 API Service: Full request body:', JSON.stringify(diagramData, null, 2));
 
     try {
-      const result = await this.request<{ message: string; nodesAdded: number; relationshipsAdded: number }>('/nodes/kg/persist', {
+      const result = await this.request<{
+        message: string;
+        nodesCreated?: number;
+        nodesUpdated?: number;
+        relationshipsCreated?: number;
+        relationshipsUpdated?: number;
+        nodesAdded: number;
+        relationshipsAdded: number;
+      }>('/nodes/kg/persist', {
         method: 'POST',
         body: JSON.stringify(diagramData),
       });

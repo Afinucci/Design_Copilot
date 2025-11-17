@@ -53,8 +53,17 @@ const DiagramEditor: React.FC = () => {
       const response = await apiService.persistToKnowledgeGraphEnhanced(diagramData);
 
       console.log('✅ Diagram saved successfully:', response);
+
+      // Build informative message with create/update stats
+      const nodeStats = response.nodesCreated || response.nodesUpdated
+        ? `Nodes: ${response.nodesCreated || 0} created, ${response.nodesUpdated || 0} updated`
+        : `${response.nodesAdded} nodes`;
+      const relStats = response.relationshipsCreated || response.relationshipsUpdated
+        ? `Relationships: ${response.relationshipsCreated || 0} created, ${response.relationshipsUpdated || 0} updated`
+        : `${response.relationshipsAdded} relationships`;
+
       showSnackbar(
-        `Diagram uploaded to Neo4j: ${response.nodesAdded} nodes, ${response.relationshipsAdded} relationships`,
+        `Diagram merged to Neo4j - ${nodeStats}, ${relStats}`,
         'success'
       );
     } catch (error) {

@@ -2248,16 +2248,19 @@ router.post('/kg/persist', async (req, res) => {
       return res.status(400).json({ error: 'Invalid data: relationships must be an array' });
     }
 
-    await functionalAreaModel.persistToKnowledgeGraph(diagramData);
-    const nodesAdded = diagramData.nodes.length;
-    const relationshipsAdded = diagramData.relationships.length;
+    const stats = await functionalAreaModel.persistToKnowledgeGraph(diagramData);
 
-    console.log(`✅ Successfully persisted: ${nodesAdded} nodes, ${relationshipsAdded} relationships`);
+    console.log(`✅ Successfully persisted:`, stats);
 
     res.json({
-      message: 'Diagram data persisted to knowledge graph successfully',
-      nodesAdded,
-      relationshipsAdded
+      message: 'Diagram data merged to knowledge graph successfully',
+      nodesCreated: stats.nodesCreated,
+      nodesUpdated: stats.nodesUpdated,
+      relationshipsCreated: stats.relationshipsCreated,
+      relationshipsUpdated: stats.relationshipsUpdated,
+      // Backwards compatibility
+      nodesAdded: stats.nodesCreated,
+      relationshipsAdded: stats.relationshipsCreated
     });
   } catch (error) {
     console.error('❌ Error persisting to knowledge graph:', error);

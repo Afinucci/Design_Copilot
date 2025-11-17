@@ -306,19 +306,43 @@ export class FunctionalAreaModel {
   }
 
   // Persist diagram data to knowledge graph (for creation mode)
-  async persistToKnowledgeGraph(diagramData: any): Promise<void> {
+  async persistToKnowledgeGraph(diagramData: any): Promise<{
+    nodesCreated: number;
+    nodesUpdated: number;
+    relationshipsCreated: number;
+    relationshipsUpdated: number;
+  }> {
     const session = this.driver.session();
+    
+    let nodesCreated = 0;
+    let nodesUpdated = 0;
+    let relationshipsCreated = 0;
+    let relationshipsUpdated = 0;
     
     try {
       const tx = session.beginTransaction();
       
       try {
         console.log('🔄 Merging diagram data with existing knowledge graph...');
+        console.log(`📊 Input: ${diagramData.nodes.length} nodes, ${diagramData.relationships.length} relationships`);
         
-        // MERGE functional areas instead of overwriting
-        // This preserves existing nodes and only adds new ones
+        // MERGE functional areas and track create vs update
         for (const node of diagramData.nodes) {
-          await tx.run(
+          // Serialize equipment array to JSON strings for Neo4j compatibility
+          // Neo4j can only store primitive types or arrays of primitives
+          const equipmentSerialized = Array.isArray(node.equipment)
+            ? node.equipment.map((item: any) =>
+                typeof item === 'object' ? JSON.stringify(item) : String(item)
+              )
+            : [];
+
+          console.log(`📦 Node ${node.id} equipment:`, {
+            original: node.equipment,
+            serialized: equipmentSerialized,
+            types: equipmentSerialized.map((e: any) => typeof e)
+          });
+
+          const result = await tx.run(
             `MERGE (fa:FunctionalArea {id: $id})
              ON CREATE SET
                fa.name = $name,
@@ -330,7 +354,8 @@ export class FunctionalAreaModel {
                fa.height = $height,
                fa.equipment = $equipment,
                fa.createdAt = datetime(),
-               fa.updatedAt = datetime()
+               fa.updatedAt = datetime(),
+               fa._wasCreated = true
              ON MATCH SET
                fa.name = $name,
                fa.category = $category,
@@ -340,7 +365,9 @@ export class FunctionalAreaModel {
                fa.width = $width,
                fa.height = $height,
                fa.equipment = $equipment,
-               fa.updatedAt = datetime()`,
+               fa.updatedAt = datetime(),
+               fa._wasCreated = false
+             RETURN fa._wasCreated as wasCreated`,
             {
               id: node.id,
               name: node.name,
@@ -350,19 +377,29 @@ export class FunctionalAreaModel {
               y: node.y,
               width: node.width,
               height: node.height,
-              equipment: node.equipment || []
+              equipment: equipmentSerialized
             }
           );
+          
+          const wasCreated = result.records[0]?.get('wasCreated');
+          if (wasCreated) {
+            nodesCreated++;
+          } else {
+            nodesUpdated++;
+          }
         }
         
-        // MERGE relationships instead of creating duplicates
-        // Note: Cypher MERGE cannot match on relationship properties directly
-        // We need to match by type and then use WHERE clause for the id
+        // Clean up temporary _wasCreated flag from all nodes
+        await tx.run(`MATCH (fa:FunctionalArea) REMOVE fa._wasCreated`);
+        
+        console.log(`📦 Nodes: ${nodesCreated} created, ${nodesUpdated} updated`);
+        
+        // MERGE relationships and track create vs update
         for (const rel of diagramData.relationships) {
           // Sanitize relationship type (Neo4j relationship types cannot have spaces or special chars)
           const sanitizedType = (rel.type || 'ADJACENT_TO').replace(/[^A-Z_]/g, '_');
 
-          await tx.run(
+          const result = await tx.run(
             `MATCH (from:FunctionalArea {id: $fromId})
              MATCH (to:FunctionalArea {id: $toId})
              MERGE (from)-[r:${sanitizedType}]->(to)
@@ -371,18 +408,25 @@ export class FunctionalAreaModel {
                r.priority = $priority,
                r.reason = $reason,
                r.doorType = $doorType,
+               r.flowDirection = $flowDirection,
+               r.flowType = $flowType,
                r.minDistance = $minDistance,
                r.maxDistance = $maxDistance,
                r.createdAt = datetime(),
-               r.updatedAt = datetime()
+               r.updatedAt = datetime(),
+               r._wasCreated = true
              ON MATCH SET
                r.id = $relId,
                r.priority = $priority,
                r.reason = $reason,
                r.doorType = $doorType,
+               r.flowDirection = $flowDirection,
+               r.flowType = $flowType,
                r.minDistance = $minDistance,
                r.maxDistance = $maxDistance,
-               r.updatedAt = datetime()`,
+               r.updatedAt = datetime(),
+               r._wasCreated = false
+             RETURN r._wasCreated as wasCreated`,
             {
               fromId: rel.fromId,
               toId: rel.toId,
@@ -390,14 +434,35 @@ export class FunctionalAreaModel {
               priority: rel.priority || 5,
               reason: rel.reason || 'User-defined relationship',
               doorType: rel.doorType || null,
+              flowDirection: rel.flowDirection || null,
+              flowType: rel.flowType || null,
               minDistance: rel.minDistance || null,
               maxDistance: rel.maxDistance || null
             }
           );
+          
+          const wasCreated = result.records[0]?.get('wasCreated');
+          if (wasCreated) {
+            relationshipsCreated++;
+          } else {
+            relationshipsUpdated++;
+          }
         }
         
+        // Clean up temporary _wasCreated flag from all relationships
+        await tx.run(`MATCH ()-[r]-() WHERE r._wasCreated IS NOT NULL REMOVE r._wasCreated`);
+        
+        console.log(`🔗 Relationships: ${relationshipsCreated} created, ${relationshipsUpdated} updated`);
+        
         await tx.commit();
-        console.log(`✅ Knowledge graph updated successfully: ${diagramData.nodes.length} nodes, ${diagramData.relationships.length} relationships`);
+        console.log(`✅ Knowledge graph merge completed successfully`);
+        
+        return {
+          nodesCreated,
+          nodesUpdated,
+          relationshipsCreated,
+          relationshipsUpdated
+        };
       } catch (error) {
         await tx.rollback();
         throw error;

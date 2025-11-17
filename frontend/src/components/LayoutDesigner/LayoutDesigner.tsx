@@ -391,13 +391,110 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     };
   }, []);
 
+  // Document-level middle mouse button panning
+  useEffect(() => {
+    const handleDocumentMouseDown = (e: MouseEvent) => {
+      // Only handle middle mouse button
+      if (e.button !== 1) return;
+
+      const container = scrollContainerRef.current;
+      if (!container) return;
+
+      // Check if the click is within the canvas area
+      const rect = container.getBoundingClientRect();
+      const isInsideCanvas =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom;
+
+      if (!isInsideCanvas) return;
+
+      // Prevent default middle-click behavior (like auto-scroll on some browsers)
+      e.preventDefault();
+      e.stopPropagation();
+
+      console.log('🖱️ Pan started - Initial scroll:', {
+        scrollLeft: container.scrollLeft,
+        scrollTop: container.scrollTop,
+        scrollWidth: container.scrollWidth,
+        scrollHeight: container.scrollHeight,
+        clientWidth: container.clientWidth,
+        clientHeight: container.clientHeight,
+      });
+
+      panningRef.current = {
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startScrollLeft: container.scrollLeft,
+        startScrollTop: container.scrollTop,
+        active: true,
+      };
+
+      container.style.cursor = 'grabbing';
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!panningRef.current.active) return;
+        const currentContainer = scrollContainerRef.current;
+        if (!currentContainer) return;
+
+        const dx = moveEvent.clientX - panningRef.current.startClientX;
+        const dy = moveEvent.clientY - panningRef.current.startClientY;
+        const newScrollLeft = panningRef.current.startScrollLeft - dx;
+        const newScrollTop = panningRef.current.startScrollTop - dy;
+
+        currentContainer.scrollLeft = newScrollLeft;
+        currentContainer.scrollTop = newScrollTop;
+
+        // Debug: Log every 10th mouse move to avoid spam
+        if (Math.abs(dx) % 50 < 2 || Math.abs(dy) % 50 < 2) {
+          console.log('🖱️ Panning:', {
+            dx,
+            dy,
+            newScrollLeft,
+            newScrollTop,
+            actualScrollLeft: currentContainer.scrollLeft,
+            actualScrollTop: currentContainer.scrollTop,
+          });
+        }
+      };
+
+      const handleMouseUp = () => {
+        if (panningRef.current.active) {
+          const currentContainer = scrollContainerRef.current;
+          if (currentContainer) {
+            currentContainer.style.cursor = 'default';
+            console.log('🖱️ Pan ended - Final scroll:', {
+              scrollLeft: currentContainer.scrollLeft,
+              scrollTop: currentContainer.scrollTop,
+            });
+          }
+          panningRef.current.active = false;
+        }
+
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    };
+
+    // Add listener to document to capture all middle clicks
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown);
+    };
+  }, []);
+
   // UI state
   const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
   const [showValidationOverlay, setShowValidationOverlay] = useState(true);
 
   // Merge queue: tracks shapes to be merged together
   const [mergeQueue, setMergeQueue] = useState<string[]>([]);
-  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [validationResult, setValidationResult] = useState<ValidationResult>({
     isValid: true,
     issues: [],
@@ -1754,38 +1851,18 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     document.addEventListener('mouseup', handleMouseUp);
   }, [drawingState.isDrawing, canvasSettings, addToHistory, runValidation]);
 
-  // Middle mouse panning handlers on the scroll container
+  // Container mouse handlers - kept for compatibility but panning is now handled by document-level listeners
   const handleContainerMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 1) return; // middle button only
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    panningRef.current = {
-      startClientX: e.clientX,
-      startClientY: e.clientY,
-      startScrollLeft: el.scrollLeft,
-      startScrollTop: el.scrollTop,
-      active: true,
-    };
-    (e.currentTarget as HTMLElement).style.cursor = 'grabbing';
-    e.preventDefault();
+    // Panning is now handled by document-level listener in useEffect
+    // This is kept to avoid breaking other interactions
   }, []);
 
   const handleContainerMouseMove = useCallback((e: React.MouseEvent) => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    if (!panningRef.current.active) return;
-    const dx = e.clientX - panningRef.current.startClientX;
-    const dy = e.clientY - panningRef.current.startClientY;
-    el.scrollLeft = panningRef.current.startScrollLeft - dx;
-    el.scrollTop = panningRef.current.startScrollTop - dy;
+    // Panning is now handled by document-level listener in useEffect
   }, []);
 
   const handleContainerMouseUp = useCallback(() => {
-    if (panningRef.current.active) {
-      const el = scrollContainerRef.current;
-      if (el) el.style.cursor = 'default';
-      panningRef.current.active = false;
-    }
+    // Panning is now handled by document-level listener in useEffect
   }, []);
 
   const clampZoom = (z: number) => Math.min(4, Math.max(0.25, z));
@@ -2035,10 +2112,10 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       {/* Header Toolbar */}
       <div style={{
         position: 'fixed',
-        top: 0,
+        top: '64px', // Account for AppBar height
         left: 0,
         right: 0,
-        zIndex: 9999,
+        zIndex: 1200, // Below AppBar (1300) but above content
         backgroundColor: '#ffffff',
         borderBottom: '3px solid #2196f3',
         padding: '12px 24px',
@@ -2126,7 +2203,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       </div>
 
       {/* Main Canvas Area - Full viewport */}
-      <Box sx={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', paddingTop: '72px' }}>
+      <Box sx={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', paddingTop: '128px' }}>
         {/* Canvas Container */}
         <Box
           ref={scrollContainerRef}
@@ -2150,8 +2227,9 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
             sx={{
               transform: `scale(${canvasSettings.zoom})`,
               transformOrigin: 'top left',
-              minWidth: '100%',
-              minHeight: '100%',
+              width: canvasSettings.width,
+              height: canvasSettings.height,
+              position: 'relative',
             }}
           >
             <DrawingCanvas
@@ -2764,7 +2842,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                 shapes.find(s => s.id === shapeId)
               );
             }}
-            isVisible={!!selectedShape}
+            isVisible={!!selectedShape && drawingMode !== 'door'}
           />
         );
       })()}

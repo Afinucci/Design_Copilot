@@ -11,6 +11,206 @@ router.get('/test', (req, res) => {
   res.json({ message: 'Knowledge Graph route is working!' });
 });
 
+// Export entire Neo4j graph - MUST BE BEFORE /:nodeId route!
+router.get('/export-all', async (req, res) => {
+  try {
+    console.log('📤 KnowledgeGraph: Exporting entire Neo4j graph...');
+
+    const session = Neo4jService.getInstance().getDriver().session();
+
+    try {
+      // Query to get all FunctionalArea nodes and their relationships
+      const query = `
+        // Get all FunctionalArea nodes
+        MATCH (n:FunctionalArea)
+        OPTIONAL MATCH (n)-[r]-(connected:FunctionalArea)
+
+        WITH n, collect(DISTINCT {
+          node: connected,
+          relationship: r,
+          relType: type(r),
+          isOutgoing: startNode(r) = n
+        }) as relationships
+
+        RETURN collect({
+          node: {
+            id: n.id,
+            name: n.name,
+            category: n.category,
+            cleanroomClass: n.cleanroomClass,
+            description: n.description,
+            equipment: n.equipment,
+            color: n.color
+          },
+          relationships: [rel IN relationships WHERE rel.node IS NOT NULL | {
+            connectedNodeId: rel.node.id,
+            connectedNodeName: rel.node.name,
+            type: rel.relType,
+            priority: COALESCE(rel.relationship.priority, 5),
+            reason: COALESCE(rel.relationship.reason, 'Neo4j relationship'),
+            flowDirection: rel.relationship.flowDirection,
+            doorType: rel.relationship.doorType,
+            flowType: rel.relationship.flowType,
+            minDistance: rel.relationship.minDistance,
+            maxDistance: rel.relationship.maxDistance,
+            isOutgoing: rel.isOutgoing
+          }]
+        }) as nodesWithRelationships
+      `;
+
+      const result = await session.run(query);
+
+      if (result.records.length === 0 || !result.records[0].get('nodesWithRelationships') || result.records[0].get('nodesWithRelationships').length === 0) {
+        console.log('📤 KnowledgeGraph: No data found in Neo4j');
+        return res.json({
+          nodes: [],
+          relationships: [],
+          metadata: {
+            totalNodes: 0,
+            totalRelationships: 0,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      const nodesWithRelationships = result.records[0].get('nodesWithRelationships');
+
+      console.log('📤 KnowledgeGraph: Processing Neo4j data...', {
+        itemCount: nodesWithRelationships.length,
+        sampleItem: nodesWithRelationships[0] ? {
+          nodeId: nodesWithRelationships[0].node?.id,
+          nodeName: nodesWithRelationships[0].node?.name,
+          relationshipsCount: nodesWithRelationships[0].relationships?.length
+        } : null
+      });
+
+      // Process nodes
+      const nodesMap = new Map();
+      const relationshipsSet = new Set();
+
+      nodesWithRelationships.forEach((item: any, index: number) => {
+        try {
+          const node = item.node;
+          if (!node || !node.id) {
+            console.warn(`📤 Skipping item ${index}: missing node or node.id`);
+            return;
+          }
+
+          if (!nodesMap.has(node.id)) {
+            nodesMap.set(node.id, {
+              id: node.id,
+              name: node.name || 'Unnamed Node',
+              category: node.category || 'Unknown',
+              cleanroomClass: node.cleanroomClass || 'N/A',
+              description: node.description || '',
+              equipment: Array.isArray(node.equipment) ? node.equipment : [],
+              color: node.color || '#90CAF9'
+            });
+          }
+
+          // Process relationships
+          if (Array.isArray(item.relationships)) {
+            item.relationships.forEach((rel: any) => {
+              if (!rel || !rel.connectedNodeId) return;
+
+              const relKey = rel.isOutgoing
+                ? `${node.id}-${rel.connectedNodeId}-${rel.type}`
+                : `${rel.connectedNodeId}-${node.id}-${rel.type}`;
+
+              if (!relationshipsSet.has(relKey)) {
+                relationshipsSet.add(relKey);
+              }
+            });
+          }
+        } catch (err) {
+          console.error(`📤 Error processing item ${index}:`, err);
+        }
+      });
+
+      // Build unique relationships
+      const relationships: any[] = [];
+      nodesWithRelationships.forEach((item: any) => {
+        try {
+          const sourceNodeId = item.node?.id;
+          if (!sourceNodeId) return;
+
+          if (Array.isArray(item.relationships)) {
+            item.relationships.forEach((rel: any) => {
+              if (!rel || !rel.connectedNodeId) return;
+
+              // Only add outgoing relationships to avoid duplicates
+              if (rel.isOutgoing) {
+                const relId = `rel-${sourceNodeId}-${rel.connectedNodeId}-${rel.type}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+                relationships.push({
+                  id: relId,
+                  fromId: sourceNodeId,
+                  toId: rel.connectedNodeId,
+                  type: rel.type || 'RELATED_TO',
+                  priority: rel.priority ?? 5,
+                  reason: rel.reason || 'Neo4j relationship',
+                  flowDirection: rel.flowDirection || null,
+                  doorType: rel.doorType || null,
+                  flowType: rel.flowType || null,
+                  minDistance: rel.minDistance ?? null,
+                  maxDistance: rel.maxDistance ?? null
+                });
+              }
+            });
+          }
+        } catch (err) {
+          console.error('📤 Error processing relationships:', err);
+        }
+      });
+
+      // Deduplicate relationships
+      const uniqueRelationships = Array.from(
+        new Map(relationships.map(rel => [
+          `${rel.fromId}-${rel.toId}-${rel.type}`,
+          rel
+        ])).values()
+      );
+
+      const nodes = Array.from(nodesMap.values());
+
+      console.log(`📤 KnowledgeGraph: ✅ Exported ${nodes.length} nodes and ${uniqueRelationships.length} relationships`);
+      console.log('📤 Sample node:', nodes[0]);
+      console.log('📤 Sample relationship:', uniqueRelationships[0]);
+      console.log('📤 Total relationships before dedup:', relationships.length);
+
+      const responseData = {
+        nodes,
+        relationships: uniqueRelationships,
+        metadata: {
+          totalNodes: nodes.length,
+          totalRelationships: uniqueRelationships.length,
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      console.log('📤 Response structure:', {
+        hasNodes: !!responseData.nodes,
+        isNodesArray: Array.isArray(responseData.nodes),
+        nodesLength: responseData.nodes?.length,
+        hasRelationships: !!responseData.relationships,
+        isRelationshipsArray: Array.isArray(responseData.relationships),
+        relationshipsLength: responseData.relationships?.length
+      });
+
+      res.json(responseData);
+
+    } finally {
+      await session.close();
+    }
+
+  } catch (error) {
+    console.error('📤 KnowledgeGraph: ❌ Error exporting graph:', error);
+    res.status(500).json({
+      error: 'Failed to export knowledge graph',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Knowledge Graph Explorer endpoint
 router.get('/:nodeId', async (req, res) => {
   try {

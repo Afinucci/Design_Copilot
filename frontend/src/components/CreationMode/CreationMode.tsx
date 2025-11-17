@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Tooltip, ToggleButtonGroup, ToggleButton, Button } from '@mui/material';
-import { Timeline, ShowChart, CloudUpload, Save, FolderOpen, Factory } from '@mui/icons-material';
+import { Timeline, ShowChart, CloudUpload, Save, FolderOpen, Factory, Download } from '@mui/icons-material';
 import ReactFlow, {
   Node,
   Edge,
@@ -643,6 +643,133 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad, 
     }
   }, [edgeStyle, onShowMessage]);
 
+  // Handle import from Neo4j
+  const handleImportFromNeo4j = useCallback(async () => {
+    try {
+      console.log('📥 Importing entire Neo4j graph...');
+      onShowMessage?.('Importing graph from Neo4j...', 'info');
+
+      // Fetch the entire Neo4j graph
+      const graphData = await apiService.importEntireNeo4jGraph();
+
+      if (!graphData.nodes || graphData.nodes.length === 0) {
+        onShowMessage?.('No data found in Neo4j database.', 'warning');
+        return;
+      }
+
+      console.log('📊 Received graph data:', {
+        nodes: graphData.nodes.length,
+        relationships: graphData.relationships.length
+      });
+
+      // Import auto-layout utility
+      const { autoLayout } = await import('../../utils/autoLayout');
+
+      // Apply auto-layout to position nodes
+      const layoutNodes = graphData.nodes.map(node => ({ id: node.id }));
+      const layoutEdges = graphData.relationships.map(rel => ({
+        fromId: rel.fromId,
+        toId: rel.toId
+      }));
+
+      const positions = autoLayout(layoutNodes, layoutEdges, 'force-directed', {
+        width: 1400,
+        height: 900,
+        iterations: 250,
+        nodeSpacing: 180,
+        edgeLength: 220
+      });
+
+      // Match Neo4j nodes to templates
+      const importedNodes: Node[] = graphData.nodes.map((node: any) => {
+        // Try to find matching template
+        const matchingTemplate = templates.find(
+          t => t.name === node.name ||
+               t.category === node.category ||
+               (t.id && t.id.includes(node.name.toLowerCase().replace(/\s+/g, '-')))
+        );
+
+        const position = positions.get(node.id) || { x: 100, y: 100 };
+
+        return {
+          id: node.id,
+          type: 'functionalArea',
+          position,
+          data: {
+            label: node.name,
+            name: node.name,
+            category: node.category || 'Unknown',
+            cleanroomClass: node.cleanroomClass || 'N/A',
+            description: node.description || '',
+            equipment: node.equipment || [],
+            color: node.color || matchingTemplate?.color || '#90CAF9',
+            width: matchingTemplate?.defaultSize?.width || 150,
+            height: matchingTemplate?.defaultSize?.height || 100,
+          },
+        };
+      });
+
+      // Convert relationships to edges
+      const importedEdges: Edge[] = graphData.relationships.map((rel: any, index: number) => {
+        // Calculate relationship index for multiple relationships between same nodes
+        const existingEdgesBetweenNodes = graphData.relationships.slice(0, index).filter(
+          (r: any) =>
+            (r.fromId === rel.fromId && r.toId === rel.toId) ||
+            (r.fromId === rel.toId && r.toId === rel.fromId)
+        );
+        const relationshipIndex = existingEdgesBetweenNodes.length;
+
+        return {
+          id: rel.id,
+          source: rel.fromId,
+          target: rel.toId,
+          type: 'default',
+          label: rel.type.replace(/_/g, ' '),
+          labelShowBg: true,
+          labelBgStyle: { fill: '#ffffff' },
+          labelBgPadding: [8, 4] as [number, number],
+          data: {
+            relationshipType: rel.type,
+            relationshipIndex,
+            priority: rel.priority || 5,
+            reason: rel.reason || 'Imported from Neo4j',
+            flowDirection: rel.flowDirection,
+            doorType: rel.doorType,
+            flowType: rel.flowType,
+            minDistance: rel.minDistance,
+            maxDistance: rel.maxDistance,
+            mode: 'creation' as const,
+            edgeStyle,
+          },
+        };
+      });
+
+      console.log('✅ Converted to ReactFlow format:', {
+        nodes: importedNodes.length,
+        edges: importedEdges.length
+      });
+
+      // Replace canvas content with imported graph
+      setNodes(importedNodes);
+      setEdges(importedEdges);
+
+      // Clear current diagram info
+      setCurrentDiagramId(null);
+      setCurrentDiagramName(null);
+
+      onShowMessage?.(
+        `Successfully imported ${importedNodes.length} nodes and ${importedEdges.length} relationships from Neo4j!`,
+        'success'
+      );
+    } catch (error) {
+      console.error('❌ Failed to import from Neo4j:', error);
+      onShowMessage?.(
+        `Failed to import from Neo4j: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error'
+      );
+    }
+  }, [templates, edgeStyle, onShowMessage]);
+
   return (
     <Box sx={{ display: 'flex', height: '100%', width: '100%' }}>
       {/* Node Palette */}
@@ -715,6 +842,18 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad, 
               sx={{ boxShadow: 2 }}
             >
               Templates
+            </Button>
+          </Tooltip>
+
+          <Tooltip title="Import entire Neo4j graph (reverse engineering)">
+            <Button
+              variant="contained"
+              color="warning"
+              startIcon={<Download />}
+              onClick={handleImportFromNeo4j}
+              sx={{ boxShadow: 2 }}
+            >
+              Import Neo4j
             </Button>
           </Tooltip>
         </Box>
