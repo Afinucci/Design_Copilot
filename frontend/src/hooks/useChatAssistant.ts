@@ -62,7 +62,10 @@ export const useChatAssistant = ({
         templateId: node.data.templateId, // Neo4j node ID for querying relationships
         category: node.data.category,
         cleanroomClass: node.data.cleanroomClass,
-        position: node.position
+        position: node.position,
+        width: node.data.width,
+        height: node.data.height,
+        area: node.data.area
       })),
       currentRelationships: edges.map(edge => ({
         id: edge.id,

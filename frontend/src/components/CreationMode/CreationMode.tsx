@@ -686,8 +686,8 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad, 
         // Try to find matching template
         const matchingTemplate = templates.find(
           t => t.name === node.name ||
-               t.category === node.category ||
-               (t.id && t.id.includes(node.name.toLowerCase().replace(/\s+/g, '-')))
+            t.category === node.category ||
+            (t.id && t.id.includes(node.name.toLowerCase().replace(/\s+/g, '-')))
         );
 
         const position = positions.get(node.id) || { x: 100, y: 100 };
@@ -977,8 +977,7 @@ const CreationModeInner: React.FC<CreationModeProps> = ({ mode, onSave, onLoad, 
         onTemplateApplied={handleTemplateApplied}
       />
 
-      {/* Cost Estimation Panel */}
-      <CostEstimationPanel nodes={nodes} />
+
     </Box>
   );
 };

@@ -30,6 +30,7 @@ import {
   InfoOutlined as InfoIcon
 } from '@mui/icons-material';
 import apiService from '../../services/api';
+import { useDraggable } from '../../hooks/useDraggable';
 
 interface RelationshipSuggestion {
   id: string;
@@ -71,6 +72,11 @@ const SuggestionSidebar: React.FC<SuggestionSidebarProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'assign' | 'suggest'>('assign'); // Two modes: assign node or suggest relationships
+
+  // Draggable functionality
+  const { position, isDragging, dragHandleProps } = useDraggable({
+    initialPosition: { x: 16, y: 80 }
+  });
 
   useEffect(() => {
     console.log('🎯 SuggestionSidebar: Effect triggered', {
@@ -182,17 +188,29 @@ const SuggestionSidebar: React.FC<SuggestionSidebarProps> = ({
     <Paper
       elevation={3}
       sx={{
-        position: 'absolute',
-        left: 16,
-        top: 80,
+        position: 'fixed',
+        left: position.x,
+        top: position.y,
         width: 320,
         maxHeight: 'calc(100vh - 120px)',
         overflow: 'auto',
         zIndex: 1000,
-        backgroundColor: 'background.paper'
+        backgroundColor: 'background.paper',
+        cursor: isDragging ? 'grabbing' : 'default'
       }}
     >
-      <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+      <Box
+        {...dragHandleProps}
+        sx={{
+          p: 2,
+          borderBottom: 1,
+          borderColor: 'divider',
+          cursor: 'grab',
+          '&:active': {
+            cursor: 'grabbing'
+          }
+        }}
+      >
         <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <RoomIcon />
           {mode === 'assign' ? 'Assign Functional Area' : 'Suggestions'}

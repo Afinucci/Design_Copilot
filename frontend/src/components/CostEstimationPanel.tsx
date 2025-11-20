@@ -40,13 +40,25 @@ import {
   CostEstimationSettings,
   CostBreakdown,
 } from '../../../shared/types';
+import { useDraggable } from '../hooks/useDraggable';
+
+interface CostEstimationItem {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  cleanroomClass?: string;
+  type?: string;
+  equipment?: string[];
+  area?: number; // Optional pre-calculated area in square meters
+}
 
 interface CostEstimationPanelProps {
-  nodes: Node[];
+  items: CostEstimationItem[];
   onSettingsChange?: (settings: CostEstimationSettings) => void;
 }
 
-const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ nodes, onSettingsChange }) => {
+const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ items, onSettingsChange }) => {
   const [expanded, setExpanded] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,17 +75,22 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ nodes, onSett
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [projectName, setProjectName] = useState('');
 
+  // Draggable functionality
+  const { position, isDragging, dragHandleProps } = useDraggable({
+    initialPosition: { x: window.innerWidth - 420, y: window.innerHeight - 500 }
+  });
+
   // Load initial settings and data
   useEffect(() => {
     loadInitialData();
   }, []);
 
-  // Recalculate when nodes change
+  // Recalculate when items change
   useEffect(() => {
-    if (nodes.length > 0) {
+    if (items.length > 0) {
       calculateEstimate();
     }
-  }, [nodes, settings]);
+  }, [items, settings]);
 
   const loadInitialData = async () => {
     try {
@@ -100,24 +117,34 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ nodes, onSett
     setError(null);
 
     try {
-      // Convert nodes to rooms data for cost calculation
-      const rooms = nodes
-        .filter(node => node.data && node.data.cleanroomClass) // Only nodes with cleanroom data
-        .map(node => {
-          // Calculate area from node dimensions (assuming dimensions are in pixels, convert to m²)
+      // Convert items to rooms data for cost calculation
+      const rooms = items
+        .filter(item => item.cleanroomClass) // Only items with cleanroom data
+        .map(item => {
+          // Calculate area from dimensions (assuming dimensions are in pixels, convert to m²)
           // Typical conversion: 1 pixel = 0.1 m² (adjust as needed)
-          const pixelToSqmRatio = 0.01; // 100 pixels = 1 m²
-          const width = node.width || node.data.defaultSize?.width || 100;
-          const height = node.height || node.data.defaultSize?.height || 100;
-          const area = width * height * pixelToSqmRatio;
+          // Note: In LayoutDesigner, 20px = 1m usually, so 1px = 0.05m. Area: 1px² = 0.0025m²
+          // But let's stick to a reasonable conversion or check if we can get real area.
+          // For now using the previous ratio 0.01 (100px = 1m -> 10000px² = 1m²) wait, 0.01 ratio means 100px * 100px * 0.01 = 100m²? No.
+          // If ratio is 0.01, then area = w * h * 0.01.
+          // If w=100, h=100, area = 10000 * 0.01 = 100.
+          // Let's keep the previous logic for consistency unless we know better.
+          const pixelToSqmRatio = 0.01;
+          const width = item.width || 100;
+          const height = item.height || 100;
+
+          // Use provided area (in sqm) or calculate from dimensions
+          const area = item.area !== undefined
+            ? item.area
+            : (width * height * pixelToSqmRatio);
 
           return {
-            id: node.id,
-            name: node.data.name || node.data.label || node.id,
-            area: Math.max(area, 10), // Minimum 10 m²
-            cleanroomClass: node.data.cleanroomClass || 'CNC',
-            roomType: node.data.id || node.type || 'generic',
-            equipment: node.data.typicalEquipment || [],
+            id: item.id,
+            name: item.name,
+            area: area, // Use exact area, no minimum constraint
+            cleanroomClass: item.cleanroomClass || 'CNC',
+            roomType: item.type || 'generic',
+            equipment: item.equipment || [],
           };
         });
 
@@ -134,7 +161,7 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ nodes, onSett
     } finally {
       setLoading(false);
     }
-  }, [nodes, settings]);
+  }, [items, settings]);
 
   const handleSettingsSave = async () => {
     try {
@@ -186,7 +213,6 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ nodes, onSett
       { label: 'Validation', value: breakdown.validationCost },
       { label: 'Other', value: breakdown.otherCosts },
     ];
-
     return items.filter(item => item.value > 0);
   };
 
@@ -194,20 +220,22 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ nodes, onSett
     <>
       <Paper
         sx={{
-          position: 'absolute',
-          right: 16,
-          bottom: 16,
+          position: 'fixed',
+          left: position.x,
+          top: position.y,
           width: expanded ? 400 : 200,
           maxHeight: '60vh',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          zIndex: 1000,
+          zIndex: 1400,
+          cursor: isDragging ? 'grabbing' : 'default',
         }}
         elevation={3}
       >
-        {/* Header */}
+        {/* Header - Draggable */}
         <Box
+          {...dragHandleProps}
           sx={{
             display: 'flex',
             alignItems: 'center',
@@ -215,6 +243,10 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ nodes, onSett
             p: 1.5,
             backgroundColor: 'primary.main',
             color: 'primary.contrastText',
+            cursor: 'grab',
+            '&:active': {
+              cursor: 'grabbing'
+            }
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -318,7 +350,7 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ nodes, onSett
                       {estimate.rooms.slice(0, 5).map((room) => (
                         <TableRow key={room.roomId}>
                           <TableCell>{room.roomName}</TableCell>
-                          <TableCell align="right">{room.area.toFixed(0)}</TableCell>
+                          <TableCell align="right">{room.area.toFixed(1)}</TableCell>
                           <TableCell align="right">
                             {costService.formatLargeNumber(room.costBreakdown.totalCost)}
                           </TableCell>

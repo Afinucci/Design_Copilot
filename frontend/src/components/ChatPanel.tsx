@@ -21,6 +21,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChatMessage, ChatAction } from '../types';
+import { useDraggable } from '../hooks/useDraggable';
 
 interface ChatPanelProps {
   open: boolean;
@@ -44,6 +45,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Draggable functionality
+  const { position, isDragging, dragHandleProps, panelProps } = useDraggable({
+    initialPosition: { x: window.innerWidth - 450, y: 0 }
+  });
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -66,21 +72,36 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     <Paper
       sx={{
         position: 'fixed',
-        top: 0,
-        right: open ? 0 : '-450px',
+        left: open ? position.x : position.x + 450,
+        top: position.y,
         width: '450px',
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
         zIndex: 1300,
-        transition: 'right 0.3s ease-in-out',
+        transition: open ? 'none' : 'left 0.3s ease-in-out',
         boxShadow: open ? '0 0 20px rgba(0,0,0,0.2)' : 'none',
         borderLeft: '1px solid',
-        borderColor: 'divider'
+        borderColor: 'divider',
+        cursor: isDragging ? 'grabbing' : 'default'
       }}
     >
-      {/* Header */}
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider' }}>
+      {/* Header - Draggable */}
+      <Box
+        {...dragHandleProps}
+        sx={{
+          p: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          cursor: 'grab',
+          '&:active': {
+            cursor: 'grabbing'
+          }
+        }}
+      >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <BotIcon color="primary" />
           <Typography variant="h6">AI Layout Assistant</Typography>

@@ -242,7 +242,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     secondShapeId: null,
     edgePoint: null,
   });
-  
+
   // New door placement state (Hypar-style)
   const [doorPlacements, setDoorPlacements] = useState<DoorPlacement[]>([]);
   const [selectedDoorPlacementId, setSelectedDoorPlacementId] = useState<string | null>(null);
@@ -252,7 +252,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     position: { x: number; y: number };
     normalizedPosition: number;
   } | null>(null);
-  
+
   const [showDoorDialog, setShowDoorDialog] = useState(false);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [selectedDoorConnectionId, setSelectedDoorConnectionId] = useState<string | null>(null);
@@ -273,15 +273,32 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Convert shapes to nodes for chat context - create empty arrays as placeholders
-  const chatNodes = shapes.map(shape => ({
-    id: shape.id,
-    type: 'custom',
-    position: { x: shape.x, y: shape.y },
-    data: {
-      ...shape,
-      label: shape.name
+  const chatNodes = shapes.map(shape => {
+    // Calculate area in square meters using the same logic as CostEstimationPanel
+    const pixelArea = shape.area || (shape.width * shape.height);
+    const config = unitConverter.getConfig();
+    let pixelsPerMeter = config.pixelsPerUnit;
+
+    if (config.unit === 'feet') {
+      pixelsPerMeter = config.pixelsPerUnit / 0.3048;
+    } else if (config.unit === 'pixels') {
+      pixelsPerMeter = 100; // Default assumption if using pixels
     }
-  })) as any[];
+
+    const areaInSqm = pixelArea / (pixelsPerMeter * pixelsPerMeter);
+
+    return {
+      id: shape.id,
+      type: 'custom',
+      position: { x: shape.x, y: shape.y },
+      data: {
+        ...shape,
+        label: shape.name,
+        // Override area with calculated m² value
+        area: areaInSqm
+      }
+    };
+  }) as any[];
 
   // Convert door connections to edges for chat context
   const chatEdges = doorConnections.map(conn => ({
@@ -671,7 +688,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     setShowPropertiesPanel(true);
   }, [generateShapeId, addToHistory, runValidation]);
 
-  
+
 
   // Handle shape updates
   const handleShapeUpdate = useCallback((id: string, updates: Partial<ShapeProperties>) => {
@@ -1533,7 +1550,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       }
 
       const result = await response.json();
-      
+
       // Update current layout info
       setCurrentLayoutId(result.id || layoutData.id);
       setCurrentLayoutName(name);
@@ -1564,7 +1581,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
 
     try {
       const response = await fetch(`http://localhost:5000/api/layouts/${layoutId}`);
-      
+
       if (!response.ok) {
         throw new Error('Failed to load layout');
       }
@@ -1577,7 +1594,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       setConnections(data.connections || []);
       setDoorConnections(data.doorConnections || []);
       setDoorPlacements(data.doorPlacements || []);
-      
+
       // Load canvas settings
       if (data.canvasSettings) {
         setCanvasSettings({
@@ -1618,7 +1635,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
   const handleFetchLayouts = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:5000/api/layouts');
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch layouts');
       }
@@ -2359,42 +2376,42 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                 })();
 
                 return (
-                <Box
-                  key={shape.id}
-                  data-shape-overlay="true"
-                  sx={{
-                    position: 'absolute',
-                    left: shape.x,
-                    top: shape.y,
-                    width: shape.width,
-                    height: shape.height,
-                    backgroundColor:
-                      isValidating
-                        ? validationColor + '40'
-                        : polygonRenderTypes.has(shape.shapeType)
-                        ? 'transparent'
-                        : shape.fillColor + '40',
-                    border: polygonRenderTypes.has(shape.shapeType)
-                      ? (isValidating ? `${validationBorderWidth}px solid ${validationColor}` : 'none')
-                      : `${isValidating ? validationBorderWidth : shape.borderWidth}px solid ${isValidating ? validationColor : shape.borderColor}`,
-                    borderRadius: shape.shapeType === 'circle' ? '50%' : 1,
-                    opacity: shape.opacity,
-                    cursor: 'grab',
-                    pointerEvents: 'all',
-                    // Remove flexbox centering for polygon shapes
-                    display: polygonRenderTypes.has(shape.shapeType) ? 'block' : 'flex',
-                    alignItems: polygonRenderTypes.has(shape.shapeType) ? undefined : 'center',
-                    justifyContent: polygonRenderTypes.has(shape.shapeType) ? undefined : 'center',
-                    transition: 'all 0.2s',
-                    transform: `rotate(${shape.rotation || 0}deg)`,
-                    transformOrigin: 'center center',
-                    ...(polygonRenderTypes.has(shape.shapeType)
-                      ? {
+                  <Box
+                    key={shape.id}
+                    data-shape-overlay="true"
+                    sx={{
+                      position: 'absolute',
+                      left: shape.x,
+                      top: shape.y,
+                      width: shape.width,
+                      height: shape.height,
+                      backgroundColor:
+                        isValidating
+                          ? validationColor + '40'
+                          : polygonRenderTypes.has(shape.shapeType)
+                            ? 'transparent'
+                            : shape.fillColor + '40',
+                      border: polygonRenderTypes.has(shape.shapeType)
+                        ? (isValidating ? `${validationBorderWidth}px solid ${validationColor}` : 'none')
+                        : `${isValidating ? validationBorderWidth : shape.borderWidth}px solid ${isValidating ? validationColor : shape.borderColor}`,
+                      borderRadius: shape.shapeType === 'circle' ? '50%' : 1,
+                      opacity: shape.opacity,
+                      cursor: 'grab',
+                      pointerEvents: 'all',
+                      // Remove flexbox centering for polygon shapes
+                      display: polygonRenderTypes.has(shape.shapeType) ? 'block' : 'flex',
+                      alignItems: polygonRenderTypes.has(shape.shapeType) ? undefined : 'center',
+                      justifyContent: polygonRenderTypes.has(shape.shapeType) ? undefined : 'center',
+                      transition: 'all 0.2s',
+                      transform: `rotate(${shape.rotation || 0}deg)`,
+                      transformOrigin: 'center center',
+                      ...(polygonRenderTypes.has(shape.shapeType)
+                        ? {
                           '&:hover': {
                             backgroundColor: 'transparent',
                           },
                         }
-                      : {
+                        : {
                           '&:hover': {
                             backgroundColor: shape.fillColor + '60',
                             transform: `rotate(${shape.rotation || 0}deg) scale(1.02)`,
@@ -2424,154 +2441,154 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                             },
                           }),
                         }),
-                  }}
-                  onClick={(e) => {
-                    if (drawingMode === 'door') {
-                      handleDoorConnectionClick(e, shape.id);
-                    } else if (e.shiftKey) {
-                      // Shift+Click: Add/remove from merge queue
-                      setMergeQueue(prev => {
-                        if (prev.includes(shape.id)) {
-                          return prev.filter(id => id !== shape.id);
-                        } else {
-                          return [...prev, shape.id];
-                        }
-                      });
-                    } else {
-                      setDrawingState(prev => ({
-                        ...prev,
-                        selectedShapeId: shape.id,
-                      }));
-                      setShowPropertiesPanel(true);
-                    }
-                  }}
-                  onMouseEnter={() => {
-                    setDrawingState(prev => ({ ...prev, hoveredShapeId: shape.id }));
-                  }}
-                  onMouseLeave={() => {
-                    setDrawingState(prev => ({ ...prev, hoveredShapeId: null }));
-                  }}
-                  onMouseDown={(e) => {
-                    startShapeDrag(e, shape);
-                  }}
-                >
-                  {/* SVG for polygonal shapes */}
-                  {polygonRenderTypes.has(shape.shapeType) && (
-                    <svg
-                      width={shape.width}
-                      height={shape.height}
-                      style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
-                      data-testid={`polygon-path-${shape.id}`}
-                    >
-                      <g transform={`rotate(${shape.rotation || 0} ${shape.width / 2} ${shape.height / 2})`}>
-                        {(drawingState.selectedShapeId === shape.id || isValidating) && (
-                          <path
-                            d={`M ${computePointsRelative(shape).map((p, i) => `${i === 0 ? '' : 'L '}${p.x} ${p.y}`).join(' ')} Z`}
-                            fill="none"
-                            stroke={isValidating ? validationColor : shape.fillColor}
-                            strokeOpacity={0.5}
-                            strokeWidth={isValidating ? validationBorderWidth : 4}
-                          />
-                        )}
-                        <path
-                          d={`M ${computePointsRelative(shape).map((p, i) => `${i === 0 ? '' : 'L '}${p.x} ${p.y}`).join(' ')} Z`}
-                          fill={isValidating ? validationColor + '40' : shape.fillColor + '40'}
-                          stroke={isValidating ? validationColor : shape.borderColor}
-                          strokeWidth={isValidating ? validationBorderWidth : shape.borderWidth}
-                        />
-                      </g>
-                    </svg>
-                  )}
-                  <Box
-                    sx={{
-                      // Position at centroid for polygon shapes, or use default for simple shapes
-                      ...(polygonRenderTypes.has(shape.shapeType) && {
-                        position: 'absolute',
-                        left: labelPosition.x,
-                        top: labelPosition.y,
-                        transform: 'translate(-50%, -50%)',
-                        pointerEvents: 'none',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 0.3,
-                        maxWidth: Math.min(180, shape.width * 0.6), // Constrain to reasonable width
-                      }),
+                    }}
+                    onClick={(e) => {
+                      if (drawingMode === 'door') {
+                        handleDoorConnectionClick(e, shape.id);
+                      } else if (e.shiftKey) {
+                        // Shift+Click: Add/remove from merge queue
+                        setMergeQueue(prev => {
+                          if (prev.includes(shape.id)) {
+                            return prev.filter(id => id !== shape.id);
+                          } else {
+                            return [...prev, shape.id];
+                          }
+                        });
+                      } else {
+                        setDrawingState(prev => ({
+                          ...prev,
+                          selectedShapeId: shape.id,
+                        }));
+                        setShowPropertiesPanel(true);
+                      }
+                    }}
+                    onMouseEnter={() => {
+                      setDrawingState(prev => ({ ...prev, hoveredShapeId: shape.id }));
+                    }}
+                    onMouseLeave={() => {
+                      setDrawingState(prev => ({ ...prev, hoveredShapeId: null }));
+                    }}
+                    onMouseDown={(e) => {
+                      startShapeDrag(e, shape);
                     }}
                   >
-                    <Typography
-                      variant="caption"
-                      fontWeight="bold"
-                      color="text.primary"
-                      textAlign="center"
+                    {/* SVG for polygonal shapes */}
+                    {polygonRenderTypes.has(shape.shapeType) && (
+                      <svg
+                        width={shape.width}
+                        height={shape.height}
+                        style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+                        data-testid={`polygon-path-${shape.id}`}
+                      >
+                        <g transform={`rotate(${shape.rotation || 0} ${shape.width / 2} ${shape.height / 2})`}>
+                          {(drawingState.selectedShapeId === shape.id || isValidating) && (
+                            <path
+                              d={`M ${computePointsRelative(shape).map((p, i) => `${i === 0 ? '' : 'L '}${p.x} ${p.y}`).join(' ')} Z`}
+                              fill="none"
+                              stroke={isValidating ? validationColor : shape.fillColor}
+                              strokeOpacity={0.5}
+                              strokeWidth={isValidating ? validationBorderWidth : 4}
+                            />
+                          )}
+                          <path
+                            d={`M ${computePointsRelative(shape).map((p, i) => `${i === 0 ? '' : 'L '}${p.x} ${p.y}`).join(' ')} Z`}
+                            fill={isValidating ? validationColor + '40' : shape.fillColor + '40'}
+                            stroke={isValidating ? validationColor : shape.borderColor}
+                            strokeWidth={isValidating ? validationBorderWidth : shape.borderWidth}
+                          />
+                        </g>
+                      </svg>
+                    )}
+                    <Box
                       sx={{
-                        wordBreak: 'break-word',
-                        // Conditional padding
-                        px: polygonRenderTypes.has(shape.shapeType) ? 0 : 1,
-                        // Allow wrapping for polygon shapes to fit text
+                        // Position at centroid for polygon shapes, or use default for simple shapes
                         ...(polygonRenderTypes.has(shape.shapeType) && {
-                          lineHeight: 1.2,
-                          fontSize: '0.75rem', // Slightly smaller for better fit
+                          position: 'absolute',
+                          left: labelPosition.x,
+                          top: labelPosition.y,
+                          transform: 'translate(-50%, -50%)',
+                          pointerEvents: 'none',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 0.3,
+                          maxWidth: Math.min(180, shape.width * 0.6), // Constrain to reasonable width
                         }),
                       }}
                     >
-                      {shape.name}
-                    </Typography>
-
-                    {/* Cleanroom Class Badge */}
-                    {shape.cleanroomClass && shape.cleanroomClass !== 'CNC' && (
-                      <Box
-                        component="span"
+                      <Typography
+                        variant="caption"
+                        fontWeight="bold"
+                        color="text.primary"
+                        textAlign="center"
                         sx={{
-                          display: 'inline-block',
-                          ml: polygonRenderTypes.has(shape.shapeType) ? 0 : 0.5,
-                          px: 0.8,
-                          py: 0.2,
-                          borderRadius: 1,
-                          fontSize: '0.65rem',
-                          fontWeight: 'bold',
-                          backgroundColor: getCleanroomColor(shape.cleanroomClass),
-                          color: '#fff',
-                          textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                          wordBreak: 'break-word',
+                          // Conditional padding
+                          px: polygonRenderTypes.has(shape.shapeType) ? 0 : 1,
+                          // Allow wrapping for polygon shapes to fit text
+                          ...(polygonRenderTypes.has(shape.shapeType) && {
+                            lineHeight: 1.2,
+                            fontSize: '0.75rem', // Slightly smaller for better fit
+                          }),
                         }}
                       >
-                        Class {shape.cleanroomClass}
-                      </Box>
-                    )}
+                        {shape.name}
+                      </Typography>
 
-                    {/* Area Display */}
-                    {shape.area && (
-                      <Box component="span" sx={{ display: 'block', fontSize: '0.7rem', opacity: 0.8, mt: 0.5 }}>
-                        📏 {unitConverter.formatArea(shape.area)}
-                      </Box>
-                    )}
+                      {/* Cleanroom Class Badge */}
+                      {shape.cleanroomClass && shape.cleanroomClass !== 'CNC' && (
+                        <Box
+                          component="span"
+                          sx={{
+                            display: 'inline-block',
+                            ml: polygonRenderTypes.has(shape.shapeType) ? 0 : 0.5,
+                            px: 0.8,
+                            py: 0.2,
+                            borderRadius: 1,
+                            fontSize: '0.65rem',
+                            fontWeight: 'bold',
+                            backgroundColor: getCleanroomColor(shape.cleanroomClass),
+                            color: '#fff',
+                            textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                          }}
+                        >
+                          Class {shape.cleanroomClass}
+                        </Box>
+                      )}
 
-                    {/* Wall Dimensions */}
-                    {(shape.shapeType === 'rectangle' || shape.shapeType === 'custom') && (
-                      <Box component="span" sx={{ display: 'block', fontSize: '0.65rem', opacity: 0.7, mt: 0.3, fontStyle: 'italic' }}>
-                        {unitConverter.formatPixels(shape.width)} × {unitConverter.formatPixels(shape.height)}
-                      </Box>
+                      {/* Area Display */}
+                      {shape.area && (
+                        <Box component="span" sx={{ display: 'block', fontSize: '0.7rem', opacity: 0.8, mt: 0.5 }}>
+                          📏 {unitConverter.formatArea(shape.area)}
+                        </Box>
+                      )}
+
+                      {/* Wall Dimensions */}
+                      {(shape.shapeType === 'rectangle' || shape.shapeType === 'custom') && (
+                        <Box component="span" sx={{ display: 'block', fontSize: '0.65rem', opacity: 0.7, mt: 0.3, fontStyle: 'italic' }}>
+                          {unitConverter.formatPixels(shape.width)} × {unitConverter.formatPixels(shape.height)}
+                        </Box>
+                      )}
+                    </Box>
+
+                    {/* Resize handles - show only for selected shape */}
+                    {drawingState.selectedShapeId === shape.id && (
+                      <>
+                        {/* Corner handles */}
+                        <Box onMouseDown={(e) => startShapeResize(e, shape, 'tl')} sx={{ position: 'absolute', left: -6, top: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'nw-resize' }} />
+                        <Box onMouseDown={(e) => startShapeResize(e, shape, 'tr')} sx={{ position: 'absolute', right: -6, top: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'ne-resize' }} />
+                        <Box onMouseDown={(e) => startShapeResize(e, shape, 'bl')} sx={{ position: 'absolute', left: -6, bottom: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'sw-resize' }} />
+                        <Box onMouseDown={(e) => startShapeResize(e, shape, 'br')} sx={{ position: 'absolute', right: -6, bottom: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'se-resize' }} />
+
+                        {/* Edge handles */}
+                        <Box onMouseDown={(e) => startShapeResize(e, shape, 't')} sx={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 'n-resize' }} />
+                        <Box onMouseDown={(e) => startShapeResize(e, shape, 'b')} sx={{ position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 's-resize' }} />
+                        <Box onMouseDown={(e) => startShapeResize(e, shape, 'l')} sx={{ position: 'absolute', left: -6, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 'w-resize' }} />
+                        <Box onMouseDown={(e) => startShapeResize(e, shape, 'r')} sx={{ position: 'absolute', right: -6, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 'e-resize' }} />
+                      </>
                     )}
                   </Box>
-
-                  {/* Resize handles - show only for selected shape */}
-                  {drawingState.selectedShapeId === shape.id && (
-                    <>
-                      {/* Corner handles */}
-                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'tl')} sx={{ position: 'absolute', left: -6, top: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'nw-resize' }} />
-                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'tr')} sx={{ position: 'absolute', right: -6, top: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'ne-resize' }} />
-                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'bl')} sx={{ position: 'absolute', left: -6, bottom: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'sw-resize' }} />
-                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'br')} sx={{ position: 'absolute', right: -6, bottom: -6, width: 12, height: 12, backgroundColor: '#1976d2', border: '2px solid #fff', borderRadius: 2, cursor: 'se-resize' }} />
-
-                      {/* Edge handles */}
-                      <Box onMouseDown={(e) => startShapeResize(e, shape, 't')} sx={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 'n-resize' }} />
-                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'b')} sx={{ position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 's-resize' }} />
-                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'l')} sx={{ position: 'absolute', left: -6, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 'w-resize' }} />
-                      <Box onMouseDown={(e) => startShapeResize(e, shape, 'r')} sx={{ position: 'absolute', right: -6, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, backgroundColor: '#ff9800', border: '2px solid #fff', borderRadius: '50%', cursor: 'e-resize' }} />
-                    </>
-                  )}
-                </Box>
-              );
+                );
               })}
             </Box>
           </Box>
@@ -2708,16 +2725,16 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
               Close
             </Button>
           </Box>
-          
+
           {(() => {
             const selectedDoor = doorPlacements.find(d => d.id === selectedDoorPlacementId);
             if (!selectedDoor) return null;
 
-            const flowTypeColor = selectedDoor.flowType === 'material' 
-              ? '#2196F3' 
-              : selectedDoor.flowType === 'personnel' 
-              ? '#4CAF50' 
-              : '#F44336';
+            const flowTypeColor = selectedDoor.flowType === 'material'
+              ? '#2196F3'
+              : selectedDoor.flowType === 'personnel'
+                ? '#4CAF50'
+                : '#F44336';
 
             return (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -2757,7 +2774,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                     {selectedDoor.width}px
                   </Typography>
                 </Paper>
-                
+
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
                   <Button
                     variant="contained"
@@ -2778,7 +2795,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                   >
                     Edit Properties
                   </Button>
-                  
+
                   <Button
                     variant="outlined"
                     color="error"
@@ -2973,29 +2990,36 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       />
 
       {/* Cost Estimation Panel */}
-      {shapes.length > 0 && (
-        <CostEstimationPanel
-          nodes={shapes.map(shape => ({
-            id: shape.id,
-            type: 'customShape',
-            position: { x: shape.x, y: shape.y },
-            width: shape.width,
-            height: shape.height,
-            data: {
-              id: shape.nodeId || shape.id,
-              name: shape.name || shape.label,
-              label: shape.label,
-              category: shape.category,
-              cleanroomClass: shape.cleanroomClass,
-              defaultSize: { width: shape.width, height: shape.height },
-              typicalEquipment: shape.equipment || [],
-              color: shape.fillColor,
-              area: (shape.width * shape.height * 0.01), // Convert pixels to m² (100px = 1m²)
-              costFactors: shape.costFactors,
+      <CostEstimationPanel
+        items={shapes.map(shape => ({
+          id: shape.id,
+          name: shape.name || shape.label || 'Unnamed Room',
+          width: shape.width,
+          height: shape.height,
+          cleanroomClass: shape.cleanroomClass,
+          type: shape.shapeType,
+          equipment: shape.equipment || [],
+          // Calculate area in square meters for cost estimation
+          // We use the raw pixel area (width * height or shape.area) and convert to m²
+          // Note: shape.area is in square pixels
+          area: (() => {
+            const pixelArea = shape.area || (shape.width * shape.height);
+            // Get pixels per meter from current config
+            // If unit is meters, pixelsPerUnit is pixels per meter
+            // If unit is feet, we need to convert
+            const config = unitConverter.getConfig();
+            let pixelsPerMeter = config.pixelsPerUnit;
+
+            if (config.unit === 'feet') {
+              pixelsPerMeter = config.pixelsPerUnit / 0.3048;
+            } else if (config.unit === 'pixels') {
+              pixelsPerMeter = 100; // Default assumption if using pixels
             }
-          }))}
-        />
-      )}
+
+            return pixelArea / (pixelsPerMeter * pixelsPerMeter);
+          })()
+        }))}
+      />
     </Box>
   );
 };

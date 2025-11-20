@@ -4,6 +4,12 @@ import { ChatRequest, ChatResponse, ChatAction, NodeTemplate, SpatialRelationshi
 import { v4 as uuidv4 } from 'uuid';
 import GenerativeLayoutService from './generativeLayoutService';
 import FacilityTemplatesService from './facilityTemplatesService';
+import {
+  calculateRoomCost,
+  calculateProjectCost,
+  DEFAULT_COST_SETTINGS
+} from '../config/costConfiguration';
+import { ProjectCostEstimate } from '../../../shared/types';
 
 export class AIChatService {
   private openai: OpenAI;
@@ -130,26 +136,26 @@ export class AIChatService {
    * Query Neo4j to get relationships for a specific node
    */
   private async getNodeRelationships(
-    nodeName: string, 
+    nodeName: string,
     nodeId?: string,
     cleanroomClass?: string
   ): Promise<{
-    outgoing: Array<{ 
-      relationshipType: string; 
+    outgoing: Array<{
+      relationshipType: string;
       toNode: string;
       toNodeId: string;
       toNodeCleanroomClass?: string;
       toNodeCategory?: string;
-      reason?: string; 
+      reason?: string;
       priority?: number;
     }>;
-    incoming: Array<{ 
-      relationshipType: string; 
+    incoming: Array<{
+      relationshipType: string;
       fromNode: string;
       fromNodeId: string;
       fromNodeCleanroomClass?: string;
       fromNodeCategory?: string;
-      reason?: string; 
+      reason?: string;
       priority?: number;
     }>;
   }> {
@@ -157,10 +163,10 @@ export class AIChatService {
     try {
       // Build WHERE clause that includes cleanroom class filtering
       // Use case-insensitive matching with toLower() for node names
-      const whereClause = cleanroomClass 
+      const whereClause = cleanroomClass
         ? `(toLower(from.name) = toLower($nodeName) OR from.id = $nodeName OR from.id = $nodeId) AND from.cleanroomClass = $cleanroomClass`
         : `toLower(from.name) = toLower($nodeName) OR from.id = $nodeName OR from.id = $nodeId`;
-      
+
       const whereClauseIncoming = cleanroomClass
         ? `(toLower(to.name) = toLower($nodeName) OR to.id = $nodeName OR to.id = $nodeId) AND to.cleanroomClass = $cleanroomClass`
         : `toLower(to.name) = toLower($nodeName) OR to.id = $nodeName OR to.id = $nodeId`;
@@ -246,9 +252,9 @@ You MUST ONLY suggest rooms from the "Available Room Types" list below.
 ✅ When suggesting a room, use the EXACT name and cleanroom class from the list.
 
 **Available Room Types (Node Templates):**
-${nodeTemplates.length > 0 
-  ? nodeTemplates.map(t => `- ${t.name} (${t.category}, Cleanroom Class: ${t.cleanroomClass || 'N/A'})`).join('\n')
-  : '⚠️ WARNING: No functional areas found in Neo4j database. Cannot make room suggestions.'}
+${nodeTemplates.length > 0
+        ? nodeTemplates.map(t => `- ${t.name} (${t.category}, Cleanroom Class: ${t.cleanroomClass || 'N/A'})`).join('\n')
+        : '⚠️ WARNING: No functional areas found in Neo4j database. Cannot make room suggestions.'}
 
 **Your Capabilities:**
 1. Answer questions about pharmaceutical facility design
@@ -410,7 +416,7 @@ When suggesting actions, use this JSON structure in your response:
               break;
             }
           }
-          
+
           try {
             // CRITICAL: Pass cleanroom class to filter Neo4j query for exact node match
             const cleanroomClass = targetNode?.cleanroomClass;
@@ -422,14 +428,14 @@ When suggesting actions, use this JSON structure in your response:
               const displayName = targetNode ?
                 `${targetNode.name} (${targetNode.category}, Cleanroom Class ${targetNode.cleanroomClass || 'N/A'})` :
                 nodeName;
-              
+
               specificNodeContext = `\n\n**━━━ ACTUAL NEO4J KNOWLEDGE GRAPH DATA ━━━**\n`;
               specificNodeContext += `**Queried Node:** ${displayName}\n`;
-              
+
               if (relationships.outgoing.length > 0) {
                 specificNodeContext += `\n**✓ OUTGOING CONNECTIONS** (what this node CAN connect to):\n`;
                 specificNodeContext += relationships.outgoing.map(r => {
-                  const targetDesc = r.toNodeCleanroomClass ? 
+                  const targetDesc = r.toNodeCleanroomClass ?
                     `${r.toNode} (${r.toNodeCategory}, Class ${r.toNodeCleanroomClass})` :
                     `${r.toNode} (${r.toNodeCategory})`;
                   return `  • ${r.relationshipType} → **${targetDesc}**${r.reason ? `\n    Reason: ${r.reason}` : ''}`;
@@ -437,11 +443,11 @@ When suggesting actions, use this JSON structure in your response:
               } else {
                 specificNodeContext += `\n**✗ OUTGOING CONNECTIONS:** None found in Neo4j database\n`;
               }
-              
+
               if (relationships.incoming.length > 0) {
                 specificNodeContext += `\n\n**✓ INCOMING CONNECTIONS** (what CAN connect to this node):\n`;
                 specificNodeContext += relationships.incoming.map(r => {
-                  const sourceDesc = r.fromNodeCleanroomClass ? 
+                  const sourceDesc = r.fromNodeCleanroomClass ?
                     `${r.fromNode} (${r.fromNodeCategory}, Class ${r.fromNodeCleanroomClass})` :
                     `${r.fromNode} (${r.fromNodeCategory})`;
                   return `  • **${sourceDesc}** → ${r.relationshipType}${r.reason ? `\n    Reason: ${r.reason}` : ''}`;
@@ -449,7 +455,7 @@ When suggesting actions, use this JSON structure in your response:
               } else {
                 specificNodeContext += `\n**✗ INCOMING CONNECTIONS:** None found in Neo4j database\n`;
               }
-              
+
               specificNodeContext += `\n\n⚠️  **CRITICAL INSTRUCTION:**`;
               specificNodeContext += `\nYou MUST answer ONLY based on the connections listed above from the Neo4j knowledge graph.`;
               specificNodeContext += `\nDo NOT suggest additional connections based on general GMP rules.`;
@@ -457,8 +463,8 @@ When suggesting actions, use this JSON structure in your response:
               specificNodeContext += `\nIf the user asks "what can I connect?", list ONLY the specific nodes shown above with their exact cleanroom classes.\n`;
               specificNodeContext += `**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n`;
             } else {
-              const displayName = targetNode ? 
-                `"${targetNode.name}" (${targetNode.category}, Cleanroom Class ${targetNode.cleanroomClass || 'N/A'})` : 
+              const displayName = targetNode ?
+                `"${targetNode.name}" (${targetNode.category}, Cleanroom Class ${targetNode.cleanroomClass || 'N/A'})` :
                 `"${nodeName}"`;
               specificNodeContext = `\n\n**IMPORTANT:** No existing relationships found in the Neo4j knowledge graph for ${displayName}. This node type currently has no predefined connections in the database.\n`;
             }
@@ -466,7 +472,7 @@ When suggesting actions, use this JSON structure in your response:
             console.error(`Error querying relationships for ${nodeName}:`, error);
             specificNodeContext = `\n\n**Note:** Could not retrieve specific relationship data for "${nodeName}" from Neo4j. ${error}\n`;
           }
-          
+
           break;
         }
       }
@@ -513,6 +519,23 @@ ${request.message}
               required: ['cypher', 'explanation']
             }
           }
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'calculate_cost',
+            description: 'Calculate the estimated cost of the current facility layout based on room types, areas, and cleanroom classes. Use this when the user asks about costs, budget, or price.',
+            parameters: {
+              type: 'object',
+              properties: {
+                currency: {
+                  type: 'string',
+                  description: 'Currency code (e.g., USD, EUR). Defaults to USD.',
+                  enum: ['USD', 'EUR', 'GBP']
+                }
+              }
+            }
+          }
         }
       ];
 
@@ -532,7 +555,7 @@ ${request.message}
 
       if (toolCalls && toolCalls.length > 0) {
         console.log(`🔧 AI requested ${toolCalls.length} function call(s)`);
-        
+
         // Execute each function call
         const toolMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
@@ -587,20 +610,111 @@ ${request.message}
               });
             }
           }
+
+          if (toolCall.type === 'function' && toolCall.function.name === 'calculate_cost') {
+            try {
+              console.log('💰 Calculating project cost...');
+              const args = JSON.parse(toolCall.function.arguments);
+
+              // Map context nodes to room format expected by calculateProjectCost
+              // Use the area already calculated on the frontend (in square meters)
+              const rooms = request.context.currentNodes.map((node: any) => ({
+                id: node.id,
+                name: node.name,
+                roomType: node.category ? node.category.toLowerCase().replace(/\s+/g, '-') : 'production',
+                cleanroomClass: node.cleanroomClass || 'D',
+                area: node.area || 15, // Use the area sent from frontend (already in m²), default to 15m² if not provided
+                equipment: [] // Equipment not yet tracked in nodes
+              }));
+
+              const settings = { ...DEFAULT_COST_SETTINGS };
+              if (args.currency) settings.currency = args.currency;
+
+              // Calculate detailed cost breakdown
+              const estimate: ProjectCostEstimate = {
+                rooms: [],
+                equipment: [],
+                settings,
+                subtotal: 0,
+                contingency: 0,
+                grandTotal: 0,
+                currency: settings.currency,
+                estimatedDate: new Date()
+              };
+
+              for (const room of rooms) {
+                const roomCostData = calculateRoomCost(room.area, room.cleanroomClass, room.roomType, settings);
+
+                const costBreakdown = {
+                  constructionCost: roomCostData.constructionCost,
+                  hvacCost: roomCostData.hvacCost,
+                  equipmentPurchaseCost: 0,
+                  equipmentInstallationCost: 0,
+                  validationCost: roomCostData.validationCost,
+                  otherCosts: 0,
+                  totalCost: roomCostData.totalCost
+                };
+
+                estimate.rooms.push({
+                  roomId: room.id,
+                  roomName: room.name,
+                  area: room.area,
+                  costBreakdown
+                });
+
+                estimate.subtotal += costBreakdown.totalCost;
+              }
+
+              estimate.contingency = estimate.subtotal * (settings.contingencyPercentage / 100);
+              estimate.grandTotal = estimate.subtotal + estimate.contingency;
+
+              toolMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify({
+                  success: true,
+                  estimate: {
+                    total: estimate.grandTotal,
+                    currency: estimate.currency,
+                    breakdown: estimate.rooms.map(r => ({
+                      room: r.roomName,
+                      area: `${r.area.toFixed(1)} m²`,
+                      class: rooms.find(rm => rm.id === r.roomId)?.cleanroomClass,
+                      cost: r.costBreakdown.totalCost
+                    })),
+                    subtotal: estimate.subtotal,
+                    contingency: estimate.contingency,
+                    explanation: "Cost calculated based on room area, cleanroom class, and type. Equipment costs are not included as equipment data is not available on nodes."
+                  }
+                })
+              });
+              console.log(`✅ Cost calculated: ${estimate.grandTotal} ${estimate.currency}`);
+            } catch (error: any) {
+              console.error('❌ Cost calculation error:', error);
+              toolMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify({
+                  success: false,
+                  error: error.message || 'Cost calculation failed'
+                })
+              });
+            }
+          }
         }
 
         // If we executed functions, call OpenAI again with the results
         if (toolMessages.length > 0) {
           messages.push(completion.choices[0].message as OpenAI.Chat.ChatCompletionMessageParam);
           messages.push(...toolMessages);
-          
+
           completion = await this.openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages,
             temperature: 0.7,
             max_tokens: 2000
           });
-          
+
           responseContent = completion.choices[0]?.message?.content || 'I apologize, I could not generate a response after querying the database.';
         }
       }
