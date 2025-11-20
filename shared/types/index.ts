@@ -190,7 +190,7 @@ export interface EquipmentCatalogItem {
   linkedRoomTypes: string[];
 }
 
-export type NodeCategory = 
+export type NodeCategory =
   | 'Production'
   | 'Quality Control'
   | 'Warehouse'
@@ -315,7 +315,7 @@ export interface ChatMessage {
 
 export interface ChatAction {
   id: string;
-  type: 'add_node' | 'highlight_node' | 'add_relationship' | 'suggest_layout';
+  type: 'add_node' | 'highlight_node' | 'add_relationship' | 'suggest_layout' | 'generate_layout';
   label: string;
   data: {
     nodeId?: string;
@@ -327,6 +327,7 @@ export interface ChatAction {
       nodes: Array<{ template: NodeTemplate; position: { x: number; y: number } }>;
       relationships: SpatialRelationship[];
     };
+    generatedLayout?: any; // Layout data from text-to-layout generation
   };
 }
 
@@ -614,7 +615,7 @@ export interface ComplianceReport {
  */
 export interface LayoutModification {
   type: 'add_node' | 'remove_node' | 'move_node' | 'add_relationship' |
-        'remove_relationship' | 'modify_room_size' | 'add_zone';
+  'remove_relationship' | 'modify_room_size' | 'add_zone';
   nodeId?: string;
   node?: FunctionalArea;
   newPosition?: { x: number; y: number };
@@ -631,8 +632,8 @@ export interface LayoutModification {
  */
 export interface OptimizationObjective {
   type: 'minimize_distance' | 'minimize_area' | 'maximize_throughput' |
-        'minimize_contamination_risk' | 'minimize_construction_cost' |
-        'maximize_cleanroom_clustering' | 'balance_flow_separation';
+  'minimize_contamination_risk' | 'minimize_construction_cost' |
+  'maximize_cleanroom_clustering' | 'balance_flow_separation';
   weight: number; // 0-1 (relative importance)
   target?: number; // Optional target value
 }

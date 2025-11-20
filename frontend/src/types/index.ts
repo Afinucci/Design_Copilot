@@ -67,7 +67,7 @@ export interface SpatialRelationship {
   maxDistance?: number;
   flowDirection?: 'bidirectional' | 'unidirectional';
   flowType?: 'raw_material' | 'finished_product' | 'waste' | 'personnel' | 'equipment';
-  
+
   // Enhanced properties for mode-aware rendering
   mode?: 'creation' | 'guided';
   visualization?: {
@@ -117,7 +117,7 @@ export interface Suggestion {
   confidence: number;
 }
 
-export type NodeCategory = 
+export type NodeCategory =
   | 'Production'
   | 'Quality Control'
   | 'Warehouse'
@@ -345,14 +345,14 @@ export const NodeIdUtils = {
       /^node-([a-zA-Z]+(?:-[a-zA-Z]+)*?)(?:-\d+)+$/,       // node-coating-123 (single prefix)  
       /^([a-zA-Z]+(?:-[a-zA-Z]+)*)(?:-\d+)*$/,             // coating or coating-123 (no prefix)
     ];
-    
+
     for (const pattern of patterns) {
       const match = nodeId.match(pattern);
       if (match && match[1]) {
         return match[1];
       }
     }
-    
+
     // Fallback: return original ID if no pattern matches
     return nodeId;
   },
@@ -367,7 +367,7 @@ export const NodeIdUtils = {
       /^node-[a-zA-Z]+(?:-[a-zA-Z]+)*-\d+$/,  // node-coating-123
       /^[a-zA-Z]+(?:-[a-zA-Z]+)*$/,           // coating (template ID)
     ];
-    
+
     return validPatterns.some(pattern => pattern.test(nodeId));
   },
 
@@ -466,6 +466,7 @@ export interface ChatAction {
     constraints?: any; // For generate_layout
     templateId?: string; // For instantiate_template
     parameters?: Record<string, any>; // For instantiate_template
+    generatedLayout?: any; // NEW: Layout data from text-to-layout generation
   };
 }
 

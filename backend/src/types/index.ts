@@ -165,7 +165,7 @@ export interface Suggestion {
   confidence: number;
 }
 
-export type NodeCategory = 
+export type NodeCategory =
   | 'Production'
   | 'Quality Control'
   | 'Warehouse'
@@ -207,7 +207,7 @@ export interface ChatMessage {
 
 export interface ChatAction {
   id: string;
-  type: 'add_node' | 'highlight_node' | 'add_relationship' | 'suggest_layout';
+  type: 'add_node' | 'highlight_node' | 'add_relationship' | 'suggest_layout' | 'generate_layout';
   label: string;
   data: {
     nodeId?: string;
@@ -219,6 +219,7 @@ export interface ChatAction {
       nodes: Array<{ template: NodeTemplate; position: { x: number; y: number } }>;
       relationships: SpatialRelationship[];
     };
+    generatedLayout?: GeneratedShapeLayout;
   };
 }
 
@@ -252,6 +253,112 @@ export interface ChatHistory {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// ============================================
+// TEXT-TO-LAYOUT GENERATION TYPES
+// ============================================
+
+/**
+ * Room size data from pharmaceutical room size database
+ */
+export interface RoomSizeData {
+  roomType: string;
+  aliases: string[];
+  category: NodeCategory;
+  cleanroomClass?: 'A' | 'B' | 'C' | 'D' | 'CNC';
+  typicalDimensions: {
+    width: number; // meters
+    height: number; // meters
+    area: number; // square meters
+  };
+  sizeRange: {
+    minArea: number;
+    maxArea: number;
+  };
+  scalingFactors?: {
+    perBatchLiter?: number;
+    perThroughputUnit?: number;
+  };
+  equipmentFootprint?: number;
+  shapeType?: string;
+  description?: string;
+}
+
+/**
+ * Parameters for layout generation from natural language
+ */
+export interface LayoutGenerationParams {
+  description: string; // Natural language input
+  requiredRooms?: string[]; // Explicit room list
+  capacity?: {
+    batchSize?: number; // liters
+    throughput?: number; // units/day
+  };
+  constraints?: {
+    maxArea?: number;
+    layoutStyle?: 'linear' | 'clustered' | 'compact' | 'modular';
+    prioritizeFlow?: 'material' | 'personnel' | 'balanced';
+  };
+}
+
+/**
+ * Generated shape-based layout for Layout Designer mode
+ */
+export interface GeneratedShapeLayout {
+  shapes: Array<{
+    id: string;
+    name: string;
+    shapeType: string;
+    category: NodeCategory;
+    cleanroomClass?: 'A' | 'B' | 'C' | 'D' | 'CNC';
+    width: number; // pixels
+    height: number; // pixels
+    area: number; // pixels
+    x: number; // canvas position
+    y: number; // canvas position
+    rotation?: number;
+    pressureRegime: 'positive' | 'negative' | 'neutral';
+    temperatureRange: { min: number; max: number; unit: 'C' | 'F' };
+    humidityRange: { min: number; max: number };
+    fillColor: string;
+    borderColor: string;
+    borderWidth: number;
+    opacity: number;
+    isCompliant: boolean;
+    complianceIssues: string[];
+    assignedNodeName?: string;
+    assignedNodeId?: string;
+    customProperties: Record<string, any>;
+  }>;
+  doorConnections: Array<{
+    id: string;
+    fromShape: {
+      shapeId: string;
+      x: number;
+      y: number;
+      edgeIndex: number;
+      normalizedPosition: number;
+    };
+    toShape: {
+      shapeId: string;
+      x: number;
+      y: number;
+      edgeIndex: number;
+      normalizedPosition: number;
+    };
+    flowType: 'material' | 'personnel' | 'waste';
+    flowDirection: 'unidirectional' | 'bidirectional';
+    doorType?: DoorType;
+  }>;
+  metadata: {
+    totalArea: number; // square meters
+    complianceScore: number; // 0-100
+    warnings: string[];
+    suggestions: string[];
+    rationale: string; // AI explanation of layout decisions
+  };
+}
+
 
 /**
  * Get color for cleanroom classification

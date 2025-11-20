@@ -4,6 +4,7 @@ import { ChatRequest, ChatResponse, ChatAction, NodeTemplate, SpatialRelationshi
 import { v4 as uuidv4 } from 'uuid';
 import GenerativeLayoutService from './generativeLayoutService';
 import FacilityTemplatesService from './facilityTemplatesService';
+import LayoutGenerationService from './layoutGenerationService';
 import {
   calculateRoomCost,
   calculateProjectCost,
@@ -16,6 +17,7 @@ export class AIChatService {
   private neo4jService: Neo4jService;
   private generativeService: GenerativeLayoutService;
   private templatesService: FacilityTemplatesService;
+  private layoutGenerationService: LayoutGenerationService;
 
   constructor() {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -27,6 +29,7 @@ export class AIChatService {
     this.neo4jService = Neo4jService.getInstance();
     this.generativeService = GenerativeLayoutService.getInstance();
     this.templatesService = FacilityTemplatesService.getInstance();
+    this.layoutGenerationService = LayoutGenerationService.getInstance();
   }
 
   /**
@@ -264,9 +267,26 @@ ${nodeTemplates.length > 0
 5. Validate layouts against GMP constraints
 6. Create nodes on the canvas automatically
 7. Highlight specific nodes when discussing them
-8. **GENERATE COMPLETE LAYOUTS** from natural language descriptions (e.g., "Generate a sterile vial filling facility for 500L batches")
+8. **🏭 GENERATE COMPLETE LAYOUTS using the \`generate_layout\` function** - This is your PRIMARY capability for layout creation!
 9. **INSTANTIATE FACILITY TEMPLATES** with custom parameters (e.g., "Create an oral solid dosage facility")
 10. **OPTIMIZE LAYOUTS** to improve flow efficiency and GMP compliance
+
+**🚨 CRITICAL: When to use the \`generate_layout\` function:**
+✅ **ALWAYS call \`generate_layout\`** when the user requests:
+- "Generate a [facility type] layout"
+- "Create a layout for [process]"
+- "I need a facility with [rooms list]"
+- "Design a [product type] production facility"
+- Any request for multiple rooms or complete facility layouts
+
+❌ **DO NOT** tell the user you "cannot generate layouts" - YOU CAN using the generate_layout function!
+
+**Examples that REQUIRE calling \`generate_layout\`:**
+- "Generate a sterile vial filling facility for 500L batches" → Call generate_layout
+- "Create a tablet production layout" → Call generate_layout
+- "I need a facility with filling room and prep area" → Call generate_layout
+- "Design a vaccine manufacturing facility" → Call generate_layout
+
 
 **🔍 Neo4j Query Function:**
 You have access to a \`query_neo4j\` function that allows you to execute Cypher queries directly against the knowledge graph.
@@ -536,6 +556,41 @@ ${request.message}
               }
             }
           }
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'generate_layout',
+            description: '🏭 PRIMARY FUNCTION for generating pharmaceutical facility layouts. Call this function when the user requests ANY facility layout, complete design, or multiple rooms. Examples: "Generate a sterile vial filling facility", "Create a layout for tablet production", "I need a facility with X rooms". This automatically creates shapes on the canvas with GMP-compliant positioning, door connections, and airlock placement. ALWAYS use this for layout generation requests - do NOT tell the user you cannot generate layouts.',
+            parameters: {
+              type: 'object',
+              properties: {
+                description: {
+                  type: 'string',
+                  description: 'Natural language description of the facility (e.g., \"Sterile vial filling facility for 500L batches with material airlocks\")'
+                },
+                requiredRooms: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Optional explicit list of room names (e.g., [\"Sterile Filling Room\", \"Grade B Prep Area\"])'
+                },
+                batchSize: {
+                  type: 'number',
+                  description: 'Optional batch size in liters for scaling room sizes'
+                },
+                throughput: {
+                  type: 'number',
+                  description: 'Optional production throughput in units/day for scaling'
+                },
+                layoutStyle: {
+                  type: 'string',
+                  enum: ['linear', 'clustered', 'compact', 'modular'],
+                  description: 'Optional layout style preference'
+                }
+              },
+              required: ['description']
+            }
+          }
         }
       ];
 
@@ -552,6 +607,7 @@ ${request.message}
       // Handle function calls
       let responseContent = completion.choices[0]?.message?.content || '';
       const toolCalls = completion.choices[0]?.message?.tool_calls;
+      let generatedLayoutData: any = null; // Track generated layout for action extraction
 
       if (toolCalls && toolCalls.length > 0) {
         console.log(`🔧 AI requested ${toolCalls.length} function call(s)`);
@@ -701,6 +757,62 @@ ${request.message}
               });
             }
           }
+
+          if (toolCall.type === 'function' && toolCall.function.name === 'generate_layout') {
+            try {
+              console.log('🏭 Generating pharmaceutical facility layout...');
+              const args = JSON.parse(toolCall.function.arguments);
+
+              // Prepare layout generation parameters
+              const params = {
+                description: args.description,
+                requiredRooms: args.requiredRooms,
+                capacity: {
+                  batchSize: args.batchSize,
+                  throughput: args.throughput
+                },
+                constraints: {
+                  layoutStyle: args.layoutStyle,
+                  prioritizeFlow: args.prioritizeFlow || 'balanced'
+                }
+              };
+
+              // Call layout generation service
+              const generatedLayout = await this.layoutGenerationService.generateLayout(params);
+
+              // Store for action extraction
+              generatedLayoutData = generatedLayout;
+
+              toolMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify({
+                  success: true,
+                  layout: {
+                    roomCount: generatedLayout.shapes.length,
+                    doorCount: generatedLayout.doorConnections.length,
+                    totalArea: generatedLayout.metadata.totalArea,
+                    complianceScore: generatedLayout.metadata.complianceScore,
+                    warnings: generatedLayout.metadata.warnings,
+                    suggestions: generatedLayout.metadata.suggestions,
+                    rationale: generatedLayout.metadata.rationale
+                  }
+                })
+              });
+
+              console.log(`✅ Layout generated: ${generatedLayout.shapes.length} rooms, ${generatedLayout.doorConnections.length} doors`);
+            } catch (error: any) {
+              console.error('❌ Layout generation error:', error);
+              toolMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify({
+                  success: false,
+                  error: error.message || 'Layout generation failed'
+                })
+              });
+            }
+          }
         }
 
         // If we executed functions, call OpenAI again with the results
@@ -724,7 +836,7 @@ ${request.message}
       }
 
       // Extract actions from response
-      const actions = this.extractActionsFromResponse(responseContent, request.context);
+      const actions = this.extractActionsFromResponse(responseContent, request.context, generatedLayoutData);
 
       return {
         message: responseContent,
@@ -739,8 +851,20 @@ ${request.message}
   /**
    * Extract action suggestions from AI response
    */
-  private extractActionsFromResponse(response: string, context: any): ChatAction[] {
+  private extractActionsFromResponse(response: string, context: any, generatedLayout?: any): ChatAction[] {
     const actions: ChatAction[] = [];
+
+    // If we have a generated layout, create a generate_layout action
+    if (generatedLayout) {
+      actions.push({
+        id: uuidv4(),
+        type: 'generate_layout',
+        label: `Apply Generated Layout (${generatedLayout.shapes.length} rooms)`,
+        data: {
+          generatedLayout
+        }
+      });
+    }
 
     // Try to extract JSON from code blocks
     const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/);
@@ -748,10 +872,13 @@ ${request.message}
       try {
         const parsed = JSON.parse(jsonMatch[1]);
         if (parsed.actions && Array.isArray(parsed.actions)) {
-          return parsed.actions.map((action: any) => ({
-            id: uuidv4(),
-            ...action
-          }));
+          return [
+            ...actions, // Prepend generated layout action
+            ...parsed.actions.map((action: any) => ({
+              id: uuidv4(),
+              ...action
+            }))
+          ];
         }
       } catch (e) {
         console.warn('Failed to parse JSON from response:', e);

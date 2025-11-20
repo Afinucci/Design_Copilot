@@ -1032,58 +1032,81 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         break;
 
       case 'generate_layout':
-        if (action.data.description) {
-          // Generate layout from natural language description
-          (async () => {
-            try {
-              setSnackbarMessage('Generating layout...');
-              setSnackbarSeverity('info');
-              setSnackbarOpen(true);
+        // NEW: Handle text-to-layout generation from AI chat
+        console.log('🔍 generate_layout action received:', action);
+        console.log('🔍 action.data:', action.data);
+        console.log('🔍 action.data.generatedLayout:', action.data.generatedLayout);
 
-              const generatedLayout = await GenerativeApiService.generateLayout({
-                description: action.data.description!,
-                constraints: action.data.constraints || {},
-                mode: 'detailed'
+        if (action.data.generatedLayout) {
+          const layout = action.data.generatedLayout;
+
+          console.log('🏭 Applying generated layout:', layout);
+
+          try {
+            // Apply shapes to canvas
+            const newShapes = layout.shapes.map((shape: any) => ({
+              ...shape,
+              // Ensure all required ShapeProperties fields are present
+              shapeType: shape.shapeType || 'rectangle',
+              rotation: shape.rotation || 0,
+              isCompliant: shape.isCompliant ?? true,
+              complianceIssues: shape.complianceIssues || [],
+              customProperties: shape.customProperties || {},
+            }));
+
+            setShapes(prevShapes => [...prevShapes, ...newShapes]);
+
+            // Apply door connections if present
+            if (layout.doorConnections && layout.doorConnections.length > 0) {
+              setDoorConnections(prevConns => [
+                ...prevConns,
+                ...layout.doorConnections
+              ]);
+            }
+
+            // Show success notification with metadata
+            const complianceScore = layout.metadata?.complianceScore ?? 100;
+            const warnings = layout.metadata?.warnings || [];
+
+            let message = `✓ Layout generated: ${newShapes.length} rooms`;
+            if (layout.doorConnections?.length > 0) {
+              message += `, ${layout.doorConnections.length} doors`;
+            }
+            message += ` | Compliance: ${complianceScore}%`;
+
+            setSnackbarMessage(message);
+            setSnackbarSeverity(warnings.length > 0 ? 'warning' : 'success');
+            setSnackbarOpen(true);
+
+            // Log metadata for user reference
+            if (layout.metadata) {
+              console.log('📊 Layout Metadata:', {
+                totalArea: layout.metadata.totalArea,
+                complianceScore: layout.metadata.complianceScore,
+                warnings: layout.metadata.warnings,
+                suggestions: layout.metadata.suggestions,
+                rationale: layout.metadata.rationale
               });
 
-              // Convert generated layout to shapes
-              const newShapes: ShapeProperties[] = generatedLayout.nodes.map((node: any) => ({
-                id: `shape-${node.id}-${Date.now()}`,
-                shapeType: 'rectangle' as ShapeType,
-                x: node.x || 0,
-                y: node.y || 0,
-                width: node.width || 150,
-                height: node.height || 100,
-                area: (node.width || 150) * (node.height || 100),
-                fillColor: node.color || getCleanroomColor(node.cleanroomClass),
-                borderColor: '#000',
-                borderWidth: 2,
-                opacity: 1,
-                rotation: 0,
-                name: node.name,
-                category: node.category as NodeCategory,
-                cleanroomClass: (node.cleanroomClass as 'A' | 'B' | 'C' | 'D' | 'CNC') || 'CNC',
-                pressureRegime: 'positive',
-                temperatureRange: { min: 20, max: 25, unit: 'C' },
-                humidityRange: { min: 30, max: 50 },
-                isCompliant: true,
-                complianceIssues: [],
-                assignedNodeName: node.name,
-                assignedNodeId: node.id,
-                customProperties: {}
-              }));
-
-              setShapes(newShapes);
-              setSnackbarMessage(`Generated ${newShapes.length} functional areas. Compliance score: ${generatedLayout.complianceScore}/100`);
-              setSnackbarSeverity('success');
-              setSnackbarOpen(true);
-            } catch (error: any) {
-              console.error('Failed to generate layout:', error);
-              setSnackbarMessage(`Failed to generate layout: ${error.message}`);
-              setSnackbarSeverity('error');
-              setSnackbarOpen(true);
+              // Show warnings if any
+              if (warnings.length > 0) {
+                console.warn('⚠️ Layout Warnings:', warnings);
+              }
             }
-          })();
+
+            // Mark as having unsaved changes
+            setHasUnsavedChanges(true);
+          } catch (error: any) {
+            console.error('Failed to apply generated layout:', error);
+            setSnackbarMessage(`Failed to apply layout: ${error.message}`);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+          }
+        } else {
+          console.error('❌ No generatedLayout found in action.data');
+          setSnackbarMessage('Error: Layout data not found');
+          setSnackbarSeverity('error');
+          setSnackbarOpen(true);
         }
         break;
 
