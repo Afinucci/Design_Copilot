@@ -82,6 +82,7 @@ interface DrawingState {
   activeShapeTool: ShapeType | null;
   isDrawing: boolean;
   selectedShapeId: string | null;
+  selectedShapeIds: string[]; // Multi-selection support
   hoveredShapeId: string | null;
 }
 
@@ -233,6 +234,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     activeShapeTool: null,
     isDrawing: false,
     selectedShapeId: null,
+    selectedShapeIds: [],
     hoveredShapeId: null,
   });
   const [drawingMode, setDrawingMode] = useState<DrawingMode>('select');
@@ -573,6 +575,55 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       issues: [],
       summary: { errors: 0, warnings: 0, infos: 0 },
     });
+  }, []);
+
+  // Multi-selection helpers
+  const handleShapeClick = useCallback((shapeId: string, ctrlKey: boolean, metaKey: boolean) => {
+    const isMultiSelect = ctrlKey || metaKey;
+
+    setDrawingState(prev => {
+      if (isMultiSelect) {
+        // Toggle selection with Ctrl/Cmd key
+        const isAlreadySelected = prev.selectedShapeIds.includes(shapeId);
+        const newSelectedIds = isAlreadySelected
+          ? prev.selectedShapeIds.filter(id => id !== shapeId)
+          : [...prev.selectedShapeIds, shapeId];
+
+        return {
+          ...prev,
+          selectedShapeId: newSelectedIds.length === 1 ? newSelectedIds[0] : null,
+          selectedShapeIds: newSelectedIds,
+        };
+      } else {
+        // Single selection
+        return {
+          ...prev,
+          selectedShapeId: shapeId,
+          selectedShapeIds: [shapeId],
+        };
+      }
+    });
+
+    if (!isMultiSelect) {
+      setShowPropertiesPanel(true);
+    }
+  }, []);
+
+  const selectAllShapes = useCallback(() => {
+    const allShapeIds = shapes.map(s => s.id);
+    setDrawingState(prev => ({
+      ...prev,
+      selectedShapeId: allShapeIds.length === 1 ? allShapeIds[0] : null,
+      selectedShapeIds: allShapeIds,
+    }));
+  }, [shapes]);
+
+  const clearSelection = useCallback(() => {
+    setDrawingState(prev => ({
+      ...prev,
+      selectedShapeId: null,
+      selectedShapeIds: [],
+    }));
   }, []);
 
   // Handle shape creation from template
@@ -1514,6 +1565,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       activeShapeTool: null,
       isDrawing: false,
       selectedShapeId: null,
+      selectedShapeIds: [],
       hoveredShapeId: null,
     });
     setShowPropertiesPanel(false);
@@ -1709,7 +1761,13 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
 
   const handleFitToWindow = useCallback(() => {
     const container = scrollContainerRef.current;
-    if (!container || shapes.length === 0) return;
+
+    if (!container || shapes.length === 0) {
+      console.log('❌ Fit to window: No container or no shapes');
+      return;
+    }
+
+    console.log('🎯 Fit to window: Starting with', shapes.length, 'shapes');
 
     // Calculate bounding box of all shapes
     let minX = Infinity;
@@ -1738,34 +1796,68 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       }
     });
 
-    // Add padding around the content
-    const padding = 50;
+    // Add padding around the content (increased for better margins)
+    const padding = 150;
     const contentWidth = maxX - minX + padding * 2;
     const contentHeight = maxY - minY + padding * 2;
 
-    // Get viewport dimensions
+    // Get viewport dimensions (accounting for the paddingTop: 128px)
+    // The container has paddingTop, so we need to subtract it from available height
     const viewportWidth = container.clientWidth;
-    const viewportHeight = container.clientHeight;
+    const viewportHeight = container.clientHeight - 128; // Subtract the paddingTop
+
+    console.log('🔍 Viewport dimensions:', {
+      clientWidth: container.clientWidth,
+      clientHeight: container.clientHeight,
+      adjustedViewportWidth: viewportWidth,
+      adjustedViewportHeight: viewportHeight
+    });
 
     // Calculate zoom to fit content in viewport
     const zoomX = viewportWidth / contentWidth;
     const zoomY = viewportHeight / contentHeight;
     const newZoom = clampZoom(Math.min(zoomX, zoomY));
 
-    // Calculate scroll position to center content
-    const centerX = (minX + maxX) / 2 - padding;
-    const centerY = (minY + maxY) / 2 - padding;
+    // Calculate the center point of the bounding box
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
 
+    console.log('📊 Fit to window: Calculated', {
+      bounds: { minX, minY, maxX, maxY },
+      contentSize: { width: contentWidth, height: contentHeight },
+      viewport: { width: viewportWidth, height: viewportHeight },
+      center: { x: centerX, y: centerY },
+      zoom: { old: canvasSettings.zoom, new: newZoom }
+    });
+
+    // Update zoom
     setCanvasSettings(prev => ({ ...prev, zoom: newZoom }));
 
-    // Apply scroll position after zoom is applied
+    // Apply scroll position after zoom and layout are fully applied
+    // Use multiple RAF to ensure browser completes layout
     requestAnimationFrame(() => {
-      const scaledCenterX = centerX * newZoom;
-      const scaledCenterY = centerY * newZoom;
-      container.scrollLeft = scaledCenterX - viewportWidth / 2;
-      container.scrollTop = scaledCenterY - viewportHeight / 2;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // After scale transform is applied, calculate scroll position
+          const scaledCenterX = centerX * newZoom;
+          const scaledCenterY = centerY * newZoom;
+
+          // Center the content in the viewport
+          const targetScrollLeft = Math.max(0, scaledCenterX - viewportWidth / 2);
+          const targetScrollTop = Math.max(0, scaledCenterY - viewportHeight / 2);
+
+          container.scrollLeft = targetScrollLeft;
+          container.scrollTop = targetScrollTop;
+
+          console.log('✅ Fit to window: Applied', {
+            scaledCenter: { x: scaledCenterX, y: scaledCenterY },
+            targetScroll: { left: targetScrollLeft, top: targetScrollTop },
+            actualScroll: { left: container.scrollLeft, top: container.scrollTop }
+          });
+        });
+      });
     });
-  }, [shapes, polygonRenderTypes, computePointsRelative]);
+  }, [shapes, polygonRenderTypes, computePointsRelative, canvasSettings.zoom]);
 
   const handleToggleGrid = useCallback(() => {
     setCanvasSettings(prev => ({ ...prev, showGrid: !prev.showGrid }));
@@ -1797,13 +1889,15 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     enabled: true
   });
 
-  // Drag state for moving shapes
+  // Drag state for moving shapes (supports multi-selection)
   const draggingRef = useRef<{
     id: string;
     startClientX: number;
     startClientY: number;
     startX: number;
     startY: number;
+    shapesToDrag: string[];
+    initialPositions: Map<string, { x: number; y: number; width: number; height: number }>;
   } | null>(null);
 
   // Middle-mouse panning state
@@ -1834,10 +1928,34 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     // Prevent starting drag while drawing a shape
     if (drawingState.isDrawing) return;
 
+    // If Ctrl/Cmd is pressed, handle multi-selection instead of dragging
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleShapeClick(shape.id, e.ctrlKey, e.metaKey);
+      return; // Don't start dragging when multi-selecting
+    }
+
     e.preventDefault();
     e.stopPropagation();
 
-    setDrawingState(prev => ({ ...prev, selectedShapeId: shape.id }));
+    // Determine which shapes to drag
+    const isDraggedShapeSelected = drawingState.selectedShapeIds.includes(shape.id);
+    const shapesToDrag = isDraggedShapeSelected && drawingState.selectedShapeIds.length > 1
+      ? drawingState.selectedShapeIds
+      : [shape.id];
+
+    // If clicking on an unselected shape, select it
+    if (!isDraggedShapeSelected) {
+      handleShapeClick(shape.id, false, false);
+    }
+
+    // Store initial positions for all shapes being dragged
+    const initialPositions = new Map(
+      shapes
+        .filter(s => shapesToDrag.includes(s.id))
+        .map(s => [s.id, { x: s.x, y: s.y, width: s.width, height: s.height }])
+    );
 
     draggingRef.current = {
       id: shape.id,
@@ -1845,31 +1963,40 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
       startClientY: e.clientY,
       startX: shape.x,
       startY: shape.y,
+      shapesToDrag,
+      initialPositions,
     };
 
     const handleMouseMove = (me: MouseEvent) => {
       if (!draggingRef.current) return;
-      const { id, startClientX, startClientY, startX, startY } = draggingRef.current;
+      const { startClientX, startClientY, shapesToDrag, initialPositions } = draggingRef.current;
 
       const dx = (me.clientX - startClientX) / (canvasSettings.zoom || 1);
       const dy = (me.clientY - startClientY) / (canvasSettings.zoom || 1);
 
-      let newX = startX + dx;
-      let newY = startY + dy;
+      // Update all selected shapes
+      setShapes(prev => prev.map(s => {
+        if (!shapesToDrag.includes(s.id)) return s;
 
-      // Snap to grid if enabled
-      if (canvasSettings.snapToGrid) {
-        const g = canvasSettings.gridSize || 20;
-        newX = Math.round(newX / g) * g;
-        newY = Math.round(newY / g) * g;
-      }
+        const initial = initialPositions.get(s.id);
+        if (!initial) return s;
 
-      // Clamp within canvas
-      newX = clamp(newX, 0, Math.max(0, canvasSettings.width - shape.width));
-      newY = clamp(newY, 0, Math.max(0, canvasSettings.height - shape.height));
+        let newX = initial.x + dx;
+        let newY = initial.y + dy;
 
-      // Update position without pushing history on every frame
-      setShapes(prev => prev.map(s => (s.id === id ? { ...s, x: newX, y: newY } : s)));
+        // Snap to grid if enabled
+        if (canvasSettings.snapToGrid) {
+          const g = canvasSettings.gridSize || 20;
+          newX = Math.round(newX / g) * g;
+          newY = Math.round(newY / g) * g;
+        }
+
+        // Clamp within canvas
+        newX = clamp(newX, 0, Math.max(0, canvasSettings.width - initial.width));
+        newY = clamp(newY, 0, Math.max(0, canvasSettings.height - initial.height));
+
+        return { ...s, x: newX, y: newY };
+      }));
     };
 
     const handleMouseUp = () => {
@@ -1890,7 +2017,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [drawingState.isDrawing, canvasSettings, addToHistory, runValidation]);
+  }, [drawingState.isDrawing, drawingState.selectedShapeIds, canvasSettings, addToHistory, runValidation, shapes, handleShapeClick]);
 
   // Container mouse handlers - kept for compatibility but panning is now handled by document-level listeners
   const handleContainerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -2078,6 +2205,13 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
     const onKeyDown = (e: KeyboardEvent) => {
       // Global keyboard shortcuts
       if (e.ctrlKey || e.metaKey) {
+        // Ctrl+A or Cmd+A - Select all shapes
+        if (e.key === 'a' && shapes.length > 0) {
+          e.preventDefault();
+          selectAllShapes();
+          return;
+        }
+
         // Ctrl+S or Cmd+S - Save
         if (e.key === 's' || e.key === 'S') {
           e.preventDefault();
@@ -2101,16 +2235,33 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         }
       }
 
-      // Shape-specific keyboard handling
-      const selectedId = drawingState.selectedShapeId;
-      if (!selectedId) return;
-
-      // Handle Delete and Backspace keys
-      if (e.key === 'Delete' || e.key === 'Backspace') {
+      // Escape - Clear selection
+      if (e.key === 'Escape' && drawingState.selectedShapeIds.length > 0) {
         e.preventDefault();
-        handleShapeDelete(selectedId);
+        clearSelection();
         return;
       }
+
+      // Multi-selection keyboard handling
+      if (drawingState.selectedShapeIds.length > 0) {
+        // Handle Delete and Backspace keys for multi-selection
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          // Only delete if not typing in an input field
+          if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+            e.preventDefault();
+            // Delete all selected shapes
+            drawingState.selectedShapeIds.forEach(shapeId => {
+              handleShapeDelete(shapeId);
+            });
+            clearSelection();
+            return;
+          }
+        }
+      }
+
+      // Shape-specific keyboard handling (legacy single selection)
+      const selectedId = drawingState.selectedShapeId;
+      if (!selectedId) return;
 
       let dx = 0;
       let dy = 0;
@@ -2146,7 +2297,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [drawingState.selectedShapeId, canvasSettings, addToHistory, runValidation, handleShapeDelete, setShowSaveDialog, setShowLoadDialog, setCurrentLayoutId]);
+  }, [shapes, drawingState.selectedShapeId, drawingState.selectedShapeIds, canvasSettings, addToHistory, runValidation, handleShapeDelete, selectAllShapes, clearSelection, setShowSaveDialog, setShowLoadDialog, setCurrentLayoutId]);
 
   return (
     <Box sx={{ height: '100vh', position: 'relative' }}>
@@ -2439,8 +2590,10 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                             backgroundColor: shape.fillColor + '60',
                             transform: `rotate(${shape.rotation || 0}deg) scale(1.02)`,
                           },
-                          ...(drawingState.selectedShapeId === shape.id && {
+                          // Multi-selection visual indicator
+                      ...(drawingState.selectedShapeIds.includes(shape.id) && {
                             boxShadow: `0 0 0 3px ${shape.fillColor}`,
+                            backgroundColor: shape.fillColor + '60',
                           }),
                           // Merge queue highlight effect
                           ...(mergeQueue.includes(shape.id) && {
@@ -2478,11 +2631,8 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
                           }
                         });
                       } else {
-                        setDrawingState(prev => ({
-                          ...prev,
-                          selectedShapeId: shape.id,
-                        }));
-                        setShowPropertiesPanel(true);
+                        // Ctrl/Cmd+Click for multi-selection, normal click for single selection
+                        handleShapeClick(shape.id, e.ctrlKey, e.metaKey);
                       }
                     }}
                     onMouseEnter={() => {
@@ -2692,6 +2842,7 @@ const LayoutDesigner: React.FC<LayoutDesignerProps> = ({
         canRedo={historyIndex < history.length - 1}
         isDrawing={drawingState.isDrawing}
         hasSelectedShape={!!drawingState.selectedShapeId}
+        selectedShapesCount={drawingState.selectedShapeIds.length}
         position="bottom"
         onSave={() => setShowSaveDialog(true)}
         onLoad={() => setShowLoadDialog(true)}

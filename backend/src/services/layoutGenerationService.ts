@@ -151,7 +151,8 @@ class LayoutGenerationService {
         }
 
         // Otherwise, use AI to extract rooms from description
-        const systemPrompt = `You are a pharmaceutical facility design expert. Extract required rooms and parameters from natural language descriptions.
+        try {
+            const systemPrompt = `You are a pharmaceutical facility design expert. Extract required rooms and parameters from natural language descriptions.
 
 Available room types:
 ${ROOM_SIZE_DATABASE.map(r => `- ${r.roomType} (${r.category}, ${r.cleanroomClass || 'N/A'})`).join('\n')}
@@ -165,27 +166,31 @@ Return JSON format:
   "prioritizeFlow": "material" | "personnel" | "balanced"
 }`;
 
-        const response = await this.openai.chat.completions.create({
-            model: 'gpt-4',
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: params.description },
-            ],
-            response_format: { type: 'json_object' },
-            temperature: 0.3,
-        });
+            const response = await this.openai.chat.completions.create({
+                model: 'gpt-4o-mini',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: params.description },
+                ],
+                response_format: { type: 'json_object' },
+                temperature: 0.3,
+            });
 
-        const parsed = JSON.parse(response.choices[0].message.content || '{}');
+            const parsed = JSON.parse(response.choices[0].message.content || '{}');
 
-        return {
-            rooms: parsed.rooms || [],
-            capacity: {
-                batchSize: parsed.batchSize,
-                throughput: parsed.throughput,
-            },
-            layoutStyle: parsed.layoutStyle || params.constraints?.layoutStyle,
-            prioritizeFlow: parsed.prioritizeFlow || params.constraints?.prioritizeFlow,
-        };
+            return {
+                rooms: parsed.rooms || [],
+                capacity: {
+                    batchSize: parsed.batchSize,
+                    throughput: parsed.throughput,
+                },
+                layoutStyle: parsed.layoutStyle || params.constraints?.layoutStyle,
+                prioritizeFlow: parsed.prioritizeFlow || params.constraints?.prioritizeFlow,
+            };
+        } catch (error: any) {
+            console.error('❌ Error parsing natural language with OpenAI:', error);
+            throw new Error(`Failed to parse layout requirements: ${error.message || 'OpenAI API error'}`);
+        }
     }
 
     /**
@@ -726,7 +731,7 @@ Explain why this layout is appropriate for GMP compliance.`;
 
         try {
             const response = await this.openai.chat.completions.create({
-                model: 'gpt-4',
+                model: 'gpt-4o-mini',
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userPrompt },

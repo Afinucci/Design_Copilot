@@ -93,6 +93,7 @@ export interface DrawingToolsProps {
   canRedo: boolean;
   isDrawing: boolean;
   hasSelectedShape?: boolean;
+  selectedShapesCount?: number; // Number of currently selected shapes
 
   // Layout
   orientation?: 'horizontal' | 'vertical';
@@ -138,6 +139,7 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
   canRedo,
   isDrawing,
   hasSelectedShape = false,
+  selectedShapesCount = 0,
   orientation = 'horizontal',
   position = 'top',
   onSave,
@@ -458,6 +460,30 @@ const DrawingTools: React.FC<DrawingToolsProps> = ({
                   </IconButton>
                 </span>
               </Tooltip>
+            </Box>
+
+            <Divider orientation={orientation === 'vertical' ? 'horizontal' : 'vertical'} flexItem />
+          </>
+        )}
+
+        {/* Selection Count Indicator */}
+        {selectedShapesCount > 0 && (
+          <>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                px: 1.5,
+                py: 0.5,
+                backgroundColor: 'primary.light',
+                borderRadius: 1,
+                minWidth: 80,
+                justifyContent: 'center',
+              }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                {selectedShapesCount} {selectedShapesCount === 1 ? 'shape' : 'shapes'} selected
+              </Typography>
             </Box>
 
             <Divider orientation={orientation === 'vertical' ? 'horizontal' : 'vertical'} flexItem />
