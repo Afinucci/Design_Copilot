@@ -30,14 +30,15 @@ services:
       - key: ALLOW_SAMPLE_KG
         value: "false"
 
-staticSites:
-  - name: design-copilot-ui
+  - type: static
+    name: design-copilot-ui
+    env: static
     branch: main
     rootDir: frontend
     buildCommand: |
       npm install
       npm run build
-    publishPath: build
+    staticPublishPath: build
     autoDeploy: true
     envVars:
       - key: REACT_APP_API_URL
