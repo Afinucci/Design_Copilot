@@ -11,27 +11,65 @@ import {
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 class ApiService {
+  private baseURL = API_BASE_URL;
+
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-    });
 
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+        ...options,
+      });
+
+      if (!response.ok) {
+        // Try to get error details from response body
+        let errorDetails = `${response.status} ${response.statusText}`;
+        try {
+          const errorBody = await response.json();
+          if (errorBody.error || errorBody.details) {
+            errorDetails = `${errorBody.error || errorDetails}: ${errorBody.details || ''}`;
+          }
+          console.error('🌐 API Error Response:', errorBody);
+        } catch (e) {
+          // Ignore JSON parse errors for error responses
+        }
+        throw new Error(`API request failed: ${errorDetails}`);
+      }
+
+      const data = await response.json();
+
+      // Log the response for debugging (only for import endpoint)
+      if (endpoint.includes('export-all')) {
+        console.log('🌐 API Response received:', {
+          endpoint,
+          dataType: typeof data,
+          hasNodes: 'nodes' in data,
+          hasRelationships: 'relationships' in data,
+          nodesType: data.nodes ? (Array.isArray(data.nodes) ? 'array' : typeof data.nodes) : 'missing',
+          relationshipsType: data.relationships ? (Array.isArray(data.relationships) ? 'array' : typeof data.relationships) : 'missing',
+          fullData: data
+        });
+      }
+
+      return data;
+    } catch (error) {
+      console.error('🌐 API Request Error:', endpoint, error instanceof Error ? error.message : error);
+      throw error;
     }
-
-    return response.json();
   }
 
   // Node Templates
   async getNodeTemplates(): Promise<NodeTemplate[]> {
     return this.request<NodeTemplate[]>('/nodes/templates');
+  }
+
+  // Get FunctionalArea nodes from Neo4j knowledge graph
+  async getNeo4jFunctionalAreas(): Promise<NodeTemplate[]> {
+    return this.request<NodeTemplate[]>('/nodes/neo4j/functional-areas');
   }
 
   async getNodesByCategory(category: string): Promise<FunctionalArea[]> {
@@ -79,8 +117,77 @@ class ApiService {
     return this.request<Suggestion[]>(`/nodes/${nodeId}/suggestions${excludeQuery}`);
   }
 
-  async getRelationshipsForNode(nodeId: string): Promise<SpatialRelationship[]> {
-    return this.request<SpatialRelationship[]>(`/nodes/${nodeId}/relationships`);
+  // Enhanced method with mode-awareness for relationship fetching
+  async getRelationshipsForNode(
+    nodeId: string,
+    options?: {
+      mode?: 'creation' | 'exploration';
+      includeIcons?: boolean;
+      priority?: number;
+    }
+  ): Promise<SpatialRelationship[]> {
+    const queryParams = new URLSearchParams();
+    
+    if (options?.mode) {
+      queryParams.append('mode', options.mode);
+    }
+    if (options?.includeIcons) {
+      queryParams.append('includeIcons', 'true');
+    }
+    if (options?.priority !== undefined) {
+      queryParams.append('priority', options.priority.toString());
+    }
+    
+    const queryString = queryParams.toString();
+    const endpoint = `/nodes/${nodeId}/relationships${queryString ? `?${queryString}` : ''}`;
+    
+    console.log(`🌐 API: Fetching relationships for ${nodeId} with mode: ${options?.mode || 'standard'}`);
+    return this.request<SpatialRelationship[]>(endpoint);
+  }
+
+  // Get node with its relationships and related nodes (for guided mode)
+  async getNodeWithRelationships(nodeId: string): Promise<{
+    node: any;
+    relatedNodes: any[];
+    relationships: any[];
+    totalRelationships: number;
+    totalRelatedNodes: number;
+  }> {
+    return this.request<{
+      node: any;
+      relatedNodes: any[];
+      relationships: any[];
+      totalRelationships: number;
+      totalRelatedNodes: number;
+    }>(`/nodes/${nodeId}/with-relationships`);
+  }
+
+  // Check if nodes of a given type/name can connect (type-based validation)
+  async canNodesConnect(sourceName: string, targetName: string): Promise<{
+    canConnect: boolean;
+    sourceName: string;
+    targetName: string;
+    relationships: Array<{
+      type: string;
+      priority: number;
+      reason: string;
+      doorType: string;
+      flowType: string;
+      sourceName: string;
+      targetName: string;
+      count: number;
+    }>;
+    totalRelationshipTypes?: number;
+    message: string;
+  }> {
+    return this.request<{
+      canConnect: boolean;
+      sourceName: string;
+      targetName: string;
+      relationships: any[];
+      totalRelationshipTypes?: number;
+      message: string;
+    }>(`/nodes/${encodeURIComponent(sourceName)}/can-connect-to/${encodeURIComponent(targetName)}`);
   }
 
   // Diagrams
@@ -169,20 +276,112 @@ class ApiService {
     return this.request<{ nodes: any[]; relationships: any[]; patterns: any[]; metadata: any }>('/nodes/kg/import');
   }
 
-  // Guided Mode: Get suggestions based on current diagram state
-  async getGuidedSuggestions(currentNodes: any[], targetCategory: string): Promise<{ suggestions: any[] }> {
-    return this.request<{ suggestions: any[] }>('/nodes/kg/suggestions', {
-      method: 'POST',
-      body: JSON.stringify({ currentNodes, targetCategory }),
-    });
+  // Import entire Neo4j graph for reverse engineering
+  async importEntireNeo4jGraph(): Promise<{
+    nodes: any[];
+    relationships: any[];
+    metadata: {
+      totalNodes: number;
+      totalRelationships: number;
+      timestamp: string;
+    }
+  }> {
+    console.log('🔄 API Service: Importing entire Neo4j graph...');
+    try {
+      const result = await this.request<{
+        nodes: any[];
+        relationships: any[];
+        metadata: any
+      }>('/knowledge-graph/export-all');
+
+      // Validate response structure
+      if (!result.nodes || !Array.isArray(result.nodes)) {
+        console.error('🔄 API Service: Invalid response - missing or invalid nodes array', result);
+        throw new Error('Invalid response from server: nodes array missing or malformed');
+      }
+
+      if (!result.relationships || !Array.isArray(result.relationships)) {
+        console.error('🔄 API Service: Invalid response - missing or invalid relationships array', result);
+        throw new Error('Invalid response from server: relationships array missing or malformed');
+      }
+
+      console.log('🔄 API Service: ✅ Import successful:', {
+        nodes: result.nodes.length,
+        relationships: result.relationships.length,
+        metadata: result.metadata
+      });
+
+      return result;
+    } catch (error) {
+      console.error('🔄 API Service: ❌ Import failed:', error);
+      throw error;
+    }
   }
 
-  // Creation Mode: Enhanced persistence with knowledge graph integration
-  async persistToKnowledgeGraphEnhanced(diagramData: any): Promise<{ message: string; nodesAdded: number; relationshipsAdded: number }> {
-    return this.request<{ message: string; nodesAdded: number; relationshipsAdded: number }>('/nodes/kg/persist', {
-      method: 'POST',
-      body: JSON.stringify(diagramData),
+  async getNeo4jOverview(): Promise<{
+    connectionStatus: string;
+    database: { name: string; uri: string; user: string };
+    statistics: {
+      totalNodes: number;
+      totalRelationships: number;
+      nodeLabels: Array<{ label: string; count: number }>;
+      relationshipTypes: Array<{ type: string; count: number }>;
+      keyNodeCounts: Record<string, number>;
+    };
+    sampleNodes: Record<string, any[]>;
+    timestamp: string;
+  }> {
+    return this.request('/nodes/neo4j/overview');
+  }
+
+  // Relationship Suggestions for Layout Designer mode
+  async getRelationshipSuggestions(functionalAreaName: string, cleanroomClass?: string): Promise<{
+    functionalArea: string;
+    suggestions: any[];
+    count: number;
+  }> {
+    const url = `/suggestions/relationships/${encodeURIComponent(functionalAreaName)}`;
+    const queryParam = cleanroomClass ? `?cleanroomClass=${encodeURIComponent(cleanroomClass)}` : '';
+    return this.request(`${url}${queryParam}`);
+  }
+
+  // Creation Mode: Enhanced persistence with knowledge graph integration (merge/upsert)
+  async persistToKnowledgeGraphEnhanced(diagramData: any): Promise<{
+    message: string;
+    nodesCreated?: number;
+    nodesUpdated?: number;
+    relationshipsCreated?: number;
+    relationshipsUpdated?: number;
+    nodesAdded: number;
+    relationshipsAdded: number;
+  }> {
+    console.log('🌐 API Service: persistToKnowledgeGraphEnhanced called');
+    console.log('🌐 API Service: Diagram data to persist:', {
+      nodeCount: diagramData.nodes?.length,
+      relationshipCount: diagramData.relationships?.length,
+      hasMetadata: !!diagramData.metadata
     });
+    console.log('🌐 API Service: Full request body:', JSON.stringify(diagramData, null, 2));
+
+    try {
+      const result = await this.request<{
+        message: string;
+        nodesCreated?: number;
+        nodesUpdated?: number;
+        relationshipsCreated?: number;
+        relationshipsUpdated?: number;
+        nodesAdded: number;
+        relationshipsAdded: number;
+      }>('/nodes/kg/persist', {
+        method: 'POST',
+        body: JSON.stringify(diagramData),
+      });
+      console.log('🌐 API Service: ✅ Persist successful:', result);
+      return result;
+    } catch (error) {
+      console.error('🌐 API Service: ❌ Persist failed:', error);
+      throw error;
+    }
   }
 
   // Groups
@@ -285,14 +484,334 @@ class ApiService {
     });
   }
 
+  // ============================================================================
+  // CONSTRAINT ENFORCEMENT API METHODS
+  // ============================================================================
+
+  // Associate a shape with a Neo4j node template
+  async associateShapeWithNode(
+    shapeId: string,
+    nodeTemplateId: string,
+    nodeTemplateName: string,
+    category: string,
+    cleanroomClass?: string,
+    customProperties?: Record<string, any>
+  ): Promise<{
+    success: boolean;
+    message: string;
+    constraintsCount: number;
+    constraints: any[];
+  }> {
+    return this.request<{
+      success: boolean;
+      message: string;
+      constraintsCount: number;
+      constraints: any[];
+    }>(`/nodes/${shapeId}/associate`, {
+      method: 'POST',
+      body: JSON.stringify({
+        nodeTemplateId,
+        nodeTemplateName,
+        category,
+        cleanroomClass,
+        customProperties
+      }),
+    });
+  }
+
+  // Get all constraints that apply to a specific node
+  async getNodeConstraints(nodeId: string): Promise<{
+    nodeId: string;
+    constraintsCount: number;
+    constraints: any[];
+  }> {
+    return this.request<{
+      nodeId: string;
+      constraintsCount: number;
+      constraints: any[];
+    }>(`/nodes/${nodeId}/constraints`);
+  }
+
+  // Validate a connection between two nodes
+  async validateConnection(
+    sourceNodeId: string,
+    targetNodeId: string,
+    relationshipType?: string
+  ): Promise<{
+    sourceNodeId: string;
+    targetNodeId: string;
+    relationshipType?: string;
+    isValid: boolean;
+    violations: Array<{
+      type: 'ERROR' | 'WARNING' | 'INFO';
+      message: string;
+      ruleType: string;
+      priority: number;
+      reason: string;
+    }>;
+    suggestions: string[];
+  }> {
+    return this.request<{
+      sourceNodeId: string;
+      targetNodeId: string;
+      relationshipType?: string;
+      isValid: boolean;
+      violations: Array<{
+        type: 'ERROR' | 'WARNING' | 'INFO';
+        message: string;
+        ruleType: string;
+        priority: number;
+        reason: string;
+      }>;
+      suggestions: string[];
+    }>('/nodes/connections/validate', {
+      method: 'POST',
+      body: JSON.stringify({
+        sourceNodeId,
+        targetNodeId,
+        relationshipType
+      }),
+    });
+  }
+
+  // Get valid connection targets for a node
+  async getValidConnectionTargets(nodeId: string): Promise<{
+    nodeId: string;
+    validTargetsCount: number;
+    validTargets: Array<{
+      nodeId: string;
+      nodeName: string;
+      relationshipTypes: string[];
+      confidence: number;
+      reason: string;
+    }>;
+  }> {
+    return this.request<{
+      nodeId: string;
+      validTargetsCount: number;
+      validTargets: Array<{
+        nodeId: string;
+        nodeName: string;
+        relationshipTypes: string[];
+        confidence: number;
+        reason: string;
+      }>;
+    }>(`/nodes/${nodeId}/valid-targets`);
+  }
+
+  // Knowledge Graph Explorer
+  async getKnowledgeGraphData(nodeId: string, confidence: number = 0.3): Promise<{ nodes: any[]; links: any[] }> {
+    console.log('🔍 API Service: Fetching knowledge graph data for node:', nodeId);
+    const encodedId = encodeURIComponent(nodeId);
+    return this.request<{ nodes: any[]; links: any[] }>(`/nodes/kg/${encodedId}?confidence=${confidence}`);
+  }
+
+  // ============================================================================
+  // RELATIONSHIP POSITIONING API METHODS - Enhanced for Overlapping Scenarios
+  // ============================================================================
+
+  // Get optimal positioning for relationship icons in overlapping scenarios
+  async getOptimalRelationshipPositioning(request: {
+    relationships: SpatialRelationship[];
+    nodeGeometry: Array<{
+      id: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }>;
+    canvasSize?: { width: number; height: number };
+  }): Promise<{
+    iconPositions: Array<{
+      relationshipId: string;
+      optimalPosition: { x: number; y: number };
+      alternativePositions: Array<{ x: number; y: number; score: number }>;
+      collisionRisk: 'none' | 'low' | 'medium' | 'high';
+      connectionPoints: {
+        source: { x: number; y: number; side: 'top' | 'right' | 'bottom' | 'left' };
+        target: { x: number; y: number; side: 'top' | 'right' | 'bottom' | 'left' };
+      };
+    }>;
+    summary: {
+      total: number;
+      noCollision: number;
+      lowRisk: number;
+      mediumRisk: number;
+      highRisk: number;
+    };
+    layoutSuggestions: string[];
+  }> {
+    return this.request('/nodes/relationships/optimal-positioning', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  // Enhanced relationships with positioning metadata for guided mode
+  async getEnhancedRelationshipsForNode(
+    nodeId: string,
+    options?: {
+      mode?: 'creation' | 'guided';
+      includePositioning?: boolean;
+    }
+  ): Promise<SpatialRelationship[]> {
+    const queryParams = new URLSearchParams();
+    
+    if (options?.mode) {
+      queryParams.append('mode', options.mode);
+    }
+    if (options?.includePositioning) {
+      queryParams.append('includePositioning', 'true');
+    }
+    
+    const queryString = queryParams.toString();
+    const endpoint = `/nodes/${nodeId}/relationships/enhanced${queryString ? `?${queryString}` : ''}`;
+    
+    console.log(`🌐 API: Fetching enhanced relationships for ${nodeId} with positioning support`);
+    return this.request<SpatialRelationship[]>(endpoint);
+  }
+
+  // ============================================================================
+  // SHAPE POSITION VALIDATION API METHODS  
+  // ============================================================================
+
+  async validateShapePosition(request: {
+    shapeId: string;
+    position: { x: number; y: number };
+    shapeGeometry: {
+      vertices: Array<{ x: number; y: number }>;
+      boundingBox: {
+        minX: number;
+        maxX: number;
+        minY: number;
+        maxY: number;
+        width: number;
+        height: number;
+      };
+    };
+    assignedNodeId?: string;
+    nearbyShapes: Array<{
+      id: string;
+      assignedNodeId?: string;
+      geometry: {
+        vertices: Array<{ x: number; y: number }>;
+        boundingBox: {
+          minX: number;
+          maxX: number;
+          minY: number;
+          maxY: number;
+          width: number;
+          height: number;
+        };
+      };
+      distance: number;
+    }>;
+  }): Promise<{
+    canPlace: boolean;
+    violations: Array<{
+      shapeId: string;
+      reason: string;
+      severity: 'error' | 'warning';
+      collisionType: 'overlap' | 'edge-touch' | 'near-proximity';
+    }>;
+    warnings: string[];
+    adjacencyChecks: Array<{
+      targetShapeId: string;
+      sourceNodeId: string;
+      targetNodeId: string;
+      canBeAdjacent: boolean;
+      reason: string;
+    }>;
+  }> {
+    return this.request('/shapes/validate-position', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  async checkAdjacency(nodeId1: string, nodeId2: string): Promise<{
+    nodeId1: string;
+    nodeId2: string;
+    canBeAdjacent: boolean;
+    relationshipType?: string;
+    reason: string;
+    confidence: number;
+  }> {
+    return this.request(`/shapes/adjacency/${nodeId1}/${nodeId2}`);
+  }
+
+  async bulkCheckAdjacency(requests: Array<{
+    nodeId1: string;
+    nodeId2: string;
+  }>): Promise<{
+    results: Array<{
+      nodeId1: string;
+      nodeId2: string;
+      canBeAdjacent: boolean;
+      relationshipType?: string;
+      reason: string;
+    }>;
+    total: number;
+    allowed: number;
+    blocked: number;
+  }> {
+    return this.request('/shapes/bulk-adjacency', {
+      method: 'POST',
+      body: JSON.stringify({ requests }),
+    });
+  }
+
+  async getAdjacencyCacheStats(): Promise<{
+    cacheSize: number;
+    cachedPairs: string[];
+    timestamp: string;
+  }> {
+    return this.request('/shapes/cache-stats');
+  }
+
+  async clearAdjacencyCache(): Promise<{
+    message: string;
+    timestamp: string;
+  }> {
+    return this.request('/shapes/clear-cache', {
+      method: 'POST',
+    });
+  }
+
+  async checkShapesServiceHealth(): Promise<{
+    status: 'healthy' | 'unhealthy';
+    service: string;
+    neo4jConnected: boolean;
+    cacheSize: number;
+    timestamp: string;
+    testQuery: {
+      executed: boolean;
+      result: string;
+    };
+  }> {
+    return this.request('/shapes/health');
+  }
+
   // Health Check
   async healthCheck(): Promise<{ status: string; timestamp: string; database: string }> {
     const url = `${API_BASE_URL.replace('/api', '')}/health`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Health check failed: ${response.status} ${response.statusText}`);
+    console.log('🩺 Frontend health check - URL:', url);
+    
+    try {
+      const response = await fetch(url);
+      console.log('🩺 Frontend health check - Response status:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`Health check failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('🩺 Frontend health check - Result:', result);
+      return result;
+    } catch (error) {
+      console.error('🩺 Frontend health check - Error:', error);
+      throw error;
     }
-    return response.json();
   }
 }
 

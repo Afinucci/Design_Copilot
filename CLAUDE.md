@@ -2,193 +2,300 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+# Pharmaceutical Facility Design Copilot
+
 ## Project Overview
 
-The Pharmaceutical Facility Design Copilot is a specialized web application for designing adjacency diagrams for pharmaceutical facilities. It provides intelligent compliance checking and suggestions based on GMP (Good Manufacturing Practice) requirements and cleanroom standards.
+A React/Node.js web application for designing GMP-compliant pharmaceutical facility layouts. The system uses Neo4j to store design knowledge (room types, adjacency rules, flow patterns) as reusable templates, enabling users to create validated facility adjacency diagrams with real-time compliance checking.
 
-## Architecture
+## Tech Stack
 
-### Frontend (React + TypeScript)
-- **Main Component**: `DiagramEditor.tsx` - Central editing interface with dual-mode operation
-- **Canvas System**: ReactFlow-based drag-and-drop interface for facility layout design
-- **Node System**: Custom pharmaceutical functional area nodes with cleanroom classification
-- **Validation System**: Real-time GMP compliance checking and violation highlighting
-- **Two Operation Modes**:
-  - **Creation Mode**: Design new facilities using template library
-  - **Exploration Mode**: Query and visualize existing knowledge graph data
-
-### Backend (Node.js + Express + TypeScript)
-- **Database**: Neo4j graph database for storing spatial relationships and compliance rules
-- **API Routes**: RESTful endpoints for diagrams, nodes, and validation
-- **Singleton Pattern**: `Neo4jService` for database connection management
-- **Health Check**: `/health` endpoint for database connectivity status
-
-### Database Schema (Neo4j)
-- **Node Types**: `NodeTemplate`, `FunctionalArea`, `Diagram`
-- **Relationship Types**: `ADJACENT_TO`, `PROHIBITED_NEAR`, `REQUIRES_ACCESS`, `SHARES_UTILITY`
-- **Graph Structure**: Pharmaceutical facility relationships with GMP compliance rules
+- **Frontend**: React 19 + TypeScript, Material-UI, ReactFlow (diagram canvas)
+- **Backend**: Node.js + Express + TypeScript
+- **Database**: Neo4j Aura (graph database for design logic)
+- **Architecture**: Monorepo with workspace structure
 
 ## Development Commands
 
-### Backend Development
+### Running the Application
+
 ```bash
-cd backend
-npm run dev     # Start with nodemon hot reload
-npm run build   # Compile TypeScript to JavaScript
-npm start       # Start production server
+# Start both frontend and backend concurrently (from root)
+npm start
+
+# Or start individually:
+npm run start:backend    # Backend on port 5000
+npm run start:frontend   # Frontend on port 3000
+
+# Backend only (from backend/)
+cd backend && npm run dev
+
+# Frontend only (from frontend/)
+cd frontend && npm start
 ```
 
-### Frontend Development
+### Building
+
 ```bash
-cd frontend
-npm start       # Start development server (port 3000)
-npm run build   # Build for production
-npm test        # Run React tests
+# Build both frontend and backend
+npm run build
+
+# Build backend only (TypeScript compilation)
+cd backend && npm run build
+
+# Build frontend only (production build)
+cd frontend && npm run build
 ```
 
-### Database Setup
+### Testing
+
 ```bash
-# Initialize pharmaceutical templates
-curl -X POST http://localhost:5000/api/nodes/initialize
+# Frontend tests
+cd frontend && npm test
+
+# Playwright E2E tests (from root)
+npx playwright test
+
+# Specific test suites
+npx playwright test tests/constraint-system.spec.ts
+npx playwright test frontend/tests/polygon.spec.ts
 ```
 
-## Key Domain Concepts
+### Installation
 
-### Pharmaceutical Functional Areas
-- **Production**: Weighing, Granulation, Compression, Coating, Packaging
-- **Quality Control**: Analytical Lab, Microbiology Lab, Stability Chamber
-- **Warehouse**: Raw Materials, Finished Goods, Quarantine, Cold Storage
-- **Utilities**: HVAC, Purified Water, Compressed Air, Electrical
-- **Personnel**: Gowning Area, Break Room, Offices, Training
-- **Support**: Waste Disposal, Maintenance, Receiving, Shipping
-
-### Cleanroom Classifications
-- **Class A-D**: Cleanroom air quality standards
-- **Transitions**: Compliance rules for cleanroom-to-cleanroom connections
-- **Contamination Control**: Automatic cross-contamination risk detection
-
-### Spatial Relationships
-- **Adjacency Requirements**: Must be positioned next to each other
-- **Prohibition Rules**: Cannot be placed near each other
-- **Access Control**: Controlled entry/exit requirements
-- **Utility Sharing**: Shared infrastructure connections
-
-## API Endpoints
-
-### Node Management
-- `GET /api/nodes/templates` - Get all pharmaceutical area templates
-- `GET /api/nodes/category/:category` - Get templates by category
-- `POST /api/nodes/initialize` - Initialize database with pharmaceutical templates
-
-### Diagram Operations
-- `GET /api/diagrams` - List all saved diagrams
-- `POST /api/diagrams` - Create new diagram
-- `PUT /api/diagrams/:id` - Update existing diagram
-- `DELETE /api/diagrams/:id` - Delete diagram
-
-### Validation
-- `POST /api/validation` - Validate diagram against GMP compliance
-- `GET /api/validation/requirements/:nodeType` - Get compliance requirements for area type
-
-## File Structure Patterns
-
-### Component Organization
-- `DiagramEditor.tsx` - Main editor with dual-mode operation
-- `NodePalette.tsx` - Draggable template/existing node library
-- `PropertyPanel.tsx` - Selected node property editing
-- `ValidationPanel.tsx` - Compliance violation display
-- `CustomNode.tsx` - Pharmaceutical area node rendering
-
-### Type Definitions
-- `shared/types/index.ts` - Core interfaces shared between frontend/backend
-- Key types: `FunctionalArea`, `SpatialRelationship`, `Diagram`, `ValidationResult`
-
-### Backend Structure
-- `routes/` - API endpoint handlers
-- `models/` - Data model definitions
-- `config/database.ts` - Neo4j connection singleton
-- `index.ts` - Express server setup with middleware
-
-## Development Patterns
-
-### State Management
-- ReactFlow hooks for node/edge state management
-- Custom hooks for API service integration
-- Dual-mode operation switching (Creation vs Exploration)
-
-### Error Handling
-- Offline mode fallback when Neo4j unavailable
-- Connection status monitoring with health checks
-- Graceful degradation with local storage backup
-
-### Validation Flow
-1. Extract functional areas and relationships from canvas
-2. Send to validation service with pharmaceutical context
-3. Display violations with color-coded severity
-4. Provide suggestions for compliance improvements
-
-## Testing Strategy
-
-### Unit Tests
-- React component rendering and interaction
-- API service method functionality
-- Validation logic accuracy
-
-### Integration Tests
-- Full diagram creation and validation workflow
-- Database connectivity and data persistence
-- Cross-component communication
-
-### Business Logic Tests
-- GMP compliance rule validation
-- Spatial relationship constraint checking
-- Pharmaceutical area classification rules
-
-## Environment Configuration
-
-### Backend Environment Variables
 ```bash
-NEO4J_URI=bolt://localhost:7687
+# Install all dependencies (root + workspaces)
+npm run install:all
+
+# Or individually
+npm install && cd backend && npm install && cd ../frontend && npm install
+```
+
+### Environment Setup
+
+Backend requires `.env` file (see [backend/.env.example](backend/.env.example)):
+```
+NEO4J_URI=neo4j+s://your-instance.databases.neo4j.io
 NEO4J_USER=neo4j
-NEO4J_PASSWORD=password
+NEO4J_PASSWORD=your_password
 PORT=5000
 NODE_ENV=development
 ```
 
-### Database Requirements
-- Neo4j 5.x database instance
-- Graph data model for pharmaceutical relationships
-- Initialized with pharmaceutical area templates
+## Architecture Overview
 
-## Common Issues
+### Data Flow Architecture
 
-### Connection Problems
-- Check Neo4j database connectivity via `/health` endpoint
-- Verify environment variables are properly configured
-- Application runs in offline mode with local fallback data
+The application uses a **dual-mode data architecture**:
 
-### Validation Issues
-- Ensure all functional areas have required properties
-- Check spatial relationships are properly defined
-- Verify cleanroom classification compatibility
+1. **Static Templates Mode** (Default): Uses in-memory `StaticNodeTemplatesService` with 28 pre-defined pharmaceutical room templates across 6 categories (Production, Quality Control, Warehouse, Utilities, Personnel, Support). No Neo4j connection required.
 
-### Performance Considerations
-- ReactFlow optimization for large diagrams
-- Neo4j query optimization for complex relationships
-- Memory management for real-time validation
+2. **Knowledge Graph Mode**: Connects to Neo4j to store/retrieve design patterns, adjacency rules, and learned relationships from saved diagrams. Used for ghost suggestions and constraint enforcement.
 
-## Pharmaceutical Compliance Notes
+### Key Architectural Patterns
 
-### GMP Requirements
-- Good Manufacturing Practice validation rules
-- Cleanroom air quality standards (Class A-D)
-- Personnel and material flow optimization
-- Cross-contamination prevention
+**Backend Services Layer**:
+- `staticNodeTemplatesService.ts` - Singleton managing in-memory room templates
+- `ghostSuggestions.ts` - AI-powered placement recommendations based on Neo4j patterns
+- `constraintEnforcement.ts` - Real-time validation of spatial constraints
+- `adjacencyValidation.ts` - GMP compliance checking
+- `relationshipPositioning.ts` - Optimal node positioning algorithms
 
-### Industry Standards
-- FDA pharmaceutical facility guidelines
-- European EMA manufacturing requirements
-- ICH quality guidelines implementation
-- Risk-based approach to facility design
+**Frontend Component Hierarchy**:
+```
+App.tsx (Theme, Mode Management)
+└── DiagramEditor.tsx (Main canvas orchestrator)
+    ├── NodePalette.tsx (Draggable room templates)
+    ├── SnapCanvas.tsx (ReactFlow wrapper with snap-to-grid)
+    ├── PropertyPanel.tsx (Node/relationship editing)
+    ├── ValidationPanel.tsx (GMP compliance feedback)
+    ├── KnowledgeGraphPanel.tsx (Neo4j connectivity)
+    ├── CustomShapeNode.tsx (Freeform shapes with Neo4j assignment)
+    ├── MultiRelationshipEdge.tsx (Multiple connections between nodes)
+    └── GhostNode.tsx / GhostEdge.tsx (AI suggestions)
+```
 
-This application serves pharmaceutical engineers and regulatory professionals who require precise compliance checking and evidence-based facility design recommendations.
+### Application Modes
+
+The app supports 3 modes (controlled by `AppMode` type):
+
+1. **creation** - Build diagrams from scratch using static templates
+2. **exploration** - View and interact with Neo4j knowledge graph patterns
+3. **layoutDesigner** - Advanced freeform shape drawing with Neo4j node assignment
+
+Mode switching affects:
+- Data source (templates vs. knowledge graph)
+- Available features (ghost suggestions, constraints)
+- UI elements (palette visibility, toolbar options)
+
+### Key Data Models
+
+**Shared Types** ([shared/types/index.ts](shared/types/index.ts)):
+- `FunctionalArea` - Represents a pharmaceutical room/area
+- `SpatialRelationship` - Adjacency rules between areas (ADJACENT_TO, REQUIRES_ACCESS, PROHIBITED_NEAR, MATERIAL_FLOW, PERSONNEL_FLOW, etc.)
+- `NodeTemplate` - Template definition for room types
+
+**Frontend Extensions** ([frontend/src/types/index.ts](frontend/src/types/index.ts)):
+- Extends shared types with React-specific properties
+- `GhostSuggestion` / `GhostState` - AI placement suggestions
+- `CustomShapeData` - Freeform shapes with optional Neo4j node assignment
+- `NodeIdUtils` - Utilities for managing node ID prefixes (handles "node-node-" double-prefix edge cases)
+
+### Neo4j Integration Points
+
+**Database Connection**:
+- Singleton pattern in [backend/src/config/database.ts](backend/src/config/database.ts)
+- Auto-retry with configurable timeouts for Neo4j Aura
+- Connection verification on startup with fallback to offline mode
+
+**Key Neo4j Queries** (in route handlers):
+- Relationship discovery: Find all adjacent/prohibited connections for a node
+- Ghost suggestions: Query historical patterns to suggest next nodes
+- Constraint queries: Validate cleanroom transitions, flow rules
+- Learning: Persist user-created diagrams back to Neo4j as patterns
+
+**API Endpoints**:
+```
+/api/nodes/templates              GET    - Static templates
+/api/nodes/:id/relationships      GET    - Neo4j relationships
+/api/nodes/:id/suggestions        GET    - Ghost suggestions
+/api/knowledge-graph/persist      POST   - Save diagram to Neo4j
+/api/validation                   POST   - Validate diagram compliance
+/api/relationships                POST   - Create/update relationships
+/api/diagrams                     GET/POST/PUT/DELETE - CRUD operations
+```
+
+## Critical Implementation Details
+
+### Node ID Management
+
+The codebase has **node ID normalization utilities** ([frontend/src/types/index.ts:338-400](frontend/src/types/index.ts)) to handle edge cases:
+- Prevents double-prefixing ("node-node-coating-123-456")
+- Extracts base names from various ID formats
+- Always use `NodeIdUtils.generateNodeId()` when creating nodes
+
+### Ghost Suggestions System
+
+**Flow**:
+1. User places a node on canvas
+2. `useGhostSuggestions` hook triggers debounced API call
+3. Backend queries Neo4j for frequently adjacent nodes
+4. Frontend renders semi-transparent "ghost" nodes with confidence scores
+5. User clicks ghost to materialize it with pre-configured relationships
+
+**Key Files**:
+- [frontend/src/hooks/useGhostSuggestions.ts](frontend/src/hooks/useGhostSuggestions.ts)
+- [backend/src/services/ghostSuggestions.ts](backend/src/services/ghostSuggestions.ts)
+- [backend/src/routes/nodes.ts](backend/src/routes/nodes.ts) (`/kg/ghost-suggestions` endpoint)
+
+### Constraint Enforcement
+
+When Neo4j node is assigned to a custom shape:
+- `constraintEnforcement.ts` validates all Neo4j relationships
+- Checks for CANNOT_CONNECT_TO rules
+- Enforces cleanroom class transitions (A→B→C→D progression)
+- Shows real-time feedback via `ConstraintFeedback.tsx`
+
+### Multi-Relationship Edges
+
+Nodes can have **multiple simultaneous relationships** (e.g., ADJACENT_TO + MATERIAL_FLOW):
+- Rendered using `MultiRelationshipEdge.tsx` with stacked icons
+- Each relationship has priority, type, reason
+- Inline editing via `InlineRelationshipEditDialog.tsx`
+
+### Shape Drawing System
+
+**Layout Designer Mode** features:
+- Freeform polygon/shape drawing on canvas
+- Shape templates (L-shape, U-shape, T-shape, etc.)
+- Resize handles with 8-point manipulation
+- **Neo4j Node Assignment**: Shapes can be linked to Neo4j functional areas, inheriting relationships and constraints
+- See [frontend/src/components/LayoutDesigner/](frontend/src/components/LayoutDesigner/)
+
+## Common Development Patterns
+
+### Adding a New Node Template
+
+Edit [backend/src/services/staticNodeTemplatesService.ts](backend/src/services/staticNodeTemplatesService.ts):
+```typescript
+private readonly templates: NodeTemplate[] = [
+  {
+    id: 'my-new-area',
+    name: 'My New Area',
+    category: 'Production',
+    cleanroomClass: 'C',
+    color: '#3498db',
+    defaultSize: { width: 150, height: 100 }
+  },
+  // ... existing templates
+];
+```
+
+No database migration needed - templates are in-memory.
+
+### Adding a New Relationship Type
+
+1. Update type in [shared/types/index.ts](shared/types/index.ts):
+```typescript
+export interface SpatialRelationship {
+  type: 'ADJACENT_TO' | 'NEW_TYPE' | ...;
+  // ...
+}
+```
+
+2. Add validation logic in [backend/src/services/adjacencyValidation.ts](backend/src/services/adjacencyValidation.ts)
+
+3. Add visual representation in [frontend/src/components/MultiRelationshipEdge.tsx](frontend/src/components/MultiRelationshipEdge.tsx)
+
+### Adding Neo4j Queries
+
+Use the Neo4j service singleton:
+```typescript
+import Neo4jService from '../config/database';
+
+const neo4jService = Neo4jService.getInstance();
+const session = neo4jService.getSession();
+
+try {
+  const result = await session.run(
+    'MATCH (n:FunctionalArea {id: $id}) RETURN n',
+    { id: nodeId }
+  );
+  // Process results
+} finally {
+  await session.close();
+}
+```
+
+Always close sessions in finally blocks.
+
+## Testing Strategy
+
+- **Frontend Unit Tests**: React Testing Library for components
+- **E2E Tests**: Playwright for full user workflows
+- **Shape Drawing Tests**: Specialized Playwright tests in `frontend/tests/` for polygon collision, L-shapes, triangles
+
+## Performance Considerations
+
+- **Query Caching**: [backend/src/services/queryCache.ts](backend/src/services/queryCache.ts) caches Neo4j results
+- **Debounced Ghost Suggestions**: 500ms delay to avoid excessive API calls
+- **Static Templates**: In-memory service avoids database overhead for common operations
+- **Viewport Optimization**: ReactFlow only renders visible nodes
+
+## Deployment Notes
+
+- Backend uses environment variables for Neo4j connection
+- Frontend proxies API requests to backend (port 3000 → 5000)
+- Neo4j Aura requires `neo4j+s://` URI scheme (TLS enabled)
+- Build artifacts: `backend/dist/` and `frontend/build/`
+
+## GMP Pharmaceutical Context
+
+The application is **domain-specific** for pharmaceutical facility design:
+- Cleanroom classifications (Class A/B/C/D) with validation rules
+- Material flow vs. personnel flow separation
+- Contamination control (PROHIBITED_NEAR relationships)
+- Equipment rooms, gowning areas, airlocks, waste disposal
+- Regulatory compliance checking (GMP, cleanroom standards)
+
+When adding features, consider pharmaceutical engineering requirements and GMP best practices.

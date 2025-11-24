@@ -12,16 +12,35 @@ router.get('/', async (req, res) => {
   try {
     const result = await session.run(
       `MATCH (d:Diagram)
-       RETURN d.id as id, d.name as name, d.createdAt as createdAt, d.updatedAt as updatedAt
+       OPTIONAL MATCH (d)-[:CONTAINS]->(fa:FunctionalArea)
+       WITH d, collect(fa) as nodes
+       UNWIND CASE WHEN nodes = [] THEN [null] ELSE nodes END as node
+       OPTIONAL MATCH (node)-[r]-(other:FunctionalArea)
+       WHERE other IN nodes
+       WITH d, nodes, collect(DISTINCT r) as relationships
+       RETURN d.id as id, d.name as name, d.createdAt as createdAt, d.updatedAt as updatedAt,
+              size(nodes) as nodeCount, size(relationships)/2 as relationshipCount,
+              [n IN nodes | {id: n.id, name: n.name, category: n.category, cleanroomClass: n.cleanroomClass, x: n.x, y: n.y, width: n.width, height: n.height}] as nodeList
        ORDER BY d.updatedAt DESC`
     );
     
-    const diagrams = result.records.map(record => ({
-      id: record.get('id'),
-      name: record.get('name'),
-      createdAt: record.get('createdAt'),
-      updatedAt: record.get('updatedAt')
-    }));
+    const diagrams = result.records.map(record => {
+      const createdAt = record.get('createdAt');
+      const updatedAt = record.get('updatedAt');
+      
+      return {
+        id: record.get('id'),
+        name: record.get('name'),
+        createdAt: createdAt ? new Date(createdAt.toString()).toISOString() : null,
+        updatedAt: updatedAt ? new Date(updatedAt.toString()).toISOString() : null,
+        nodes: record.get('nodeList') || [],
+        relationships: [], // We'll get these when loading individual diagrams
+        nodeCount: record.get('nodeCount'),
+        relationshipCount: record.get('relationshipCount')
+      };
+    });
+    
+    console.log('🔍 Retrieved diagrams:', diagrams.map(d => ({ id: d.id, name: d.name, nodeCount: d.nodeCount, relationshipCount: d.relationshipCount })));
     
     res.json(diagrams);
   } catch (error) {
@@ -153,7 +172,9 @@ router.get('/:id', async (req, res) => {
        RETURN r, fa1.id as fromId, fa2.id as toId, type(r) as relType`,
       { id }
     );
-    
+
+    console.log('🔍 Found relationships:', relationshipsResult.records.length);
+
     const relationships = relationshipsResult.records.map(record => ({
       id: record.get('r').properties.id,
       type: record.get('relType'),
@@ -163,16 +184,20 @@ router.get('/:id', async (req, res) => {
       reason: record.get('r').properties.reason,
       doorType: record.get('r').properties.doorType,
       minDistance: record.get('r').properties.minDistance,
-      maxDistance: record.get('r').properties.maxDistance
+      maxDistance: record.get('r').properties.maxDistance,
+      flowDirection: record.get('r').properties.flowDirection,
+      flowType: record.get('r').properties.flowType
     }));
+
+    console.log('🔍 Returning diagram with:', { nodeCount: nodes.length, relationshipCount: relationships.length });
     
     const fullDiagram: Diagram = {
       id: diagram.id,
       name: diagram.name,
       nodes,
       relationships,
-      createdAt: diagram.createdAt,
-      updatedAt: diagram.updatedAt
+      createdAt: diagram.createdAt ? new Date(diagram.createdAt.toString()).toISOString() : null,
+      updatedAt: diagram.updatedAt ? new Date(diagram.updatedAt.toString()).toISOString() : null
     };
     
     res.json(fullDiagram);
@@ -193,85 +218,139 @@ router.post('/', async (req, res) => {
     
     // Debug: Log what we're actually saving
     console.log('🔍 Saving diagram:', { name, nodeCount: nodes.length, relationshipCount: relationships.length });
-    console.log('🔍 Nodes being saved:', nodes.map((n: any) => ({ id: n.id, name: n.name, category: n.category })));
+    console.log('🔍 Nodes being saved:', nodes.map((n: any) => ({ id: n.id, name: n.name, category: n.category, color: n.color })));
+    console.log('🔍 Relationships being saved:', relationships.map((r: any) => ({ id: r.id, type: r.type, fromId: r.fromId, toId: r.toId })));
     
     const tx = session.beginTransaction();
     
     try {
-      // Use MERGE to avoid creating duplicate nodes
-      for (const node of nodes) {
+      // First, create the Diagram entity
+      const diagramResult = await tx.run(
+        `CREATE (d:Diagram {
+          id: randomUUID(),
+          name: $name,
+          createdAt: datetime(),
+          updatedAt: datetime()
+        })
+        RETURN d.id as id`,
+        { name }
+      );
+      
+      const diagramId = diagramResult.records[0].get('id');
+      console.log('🔍 Created diagram with ID:', diagramId);
+
+      // Create functional area nodes and link them to the diagram (BATCH OPERATION)
+      if (nodes.length > 0) {
         await tx.run(
-          `MERGE (fa:FunctionalArea {id: $nodeId})
+          `UNWIND $nodes AS node
+           MERGE (fa:FunctionalArea {id: node.id})
            ON CREATE SET
-             fa.name = $name,
-             fa.category = $category,
-             fa.cleanroomClass = $cleanroomClass,
-             fa.x = $x,
-             fa.y = $y,
-             fa.width = $width,
-             fa.height = $height,
+             fa.name = node.name,
+             fa.category = node.category,
+             fa.cleanroomClass = node.cleanroomClass,
+             fa.x = node.x,
+             fa.y = node.y,
+             fa.width = node.width,
+             fa.height = node.height,
+             fa.color = node.color,
+             fa.equipment = node.equipment,
              fa.createdAt = datetime(),
              fa.updatedAt = datetime()
            ON MATCH SET
-             fa.name = $name,
-             fa.category = $category,
-             fa.cleanroomClass = $cleanroomClass,
-             fa.x = $x,
-             fa.y = $y,
-             fa.width = $width,
-             fa.height = $height,
-             fa.updatedAt = datetime()`,
+             fa.name = node.name,
+             fa.category = node.category,
+             fa.cleanroomClass = node.cleanroomClass,
+             fa.x = node.x,
+             fa.y = node.y,
+             fa.width = node.width,
+             fa.height = node.height,
+             fa.color = node.color,
+             fa.equipment = node.equipment,
+             fa.updatedAt = datetime()
+           WITH fa
+           MATCH (d:Diagram {id: $diagramId})
+           MERGE (d)-[:CONTAINS]->(fa)`,
           {
-            nodeId: node.id,
-            name: node.name,
-            category: node.category,
-            cleanroomClass: node.cleanroomClass,
-            x: node.x,
-            y: node.y,
-            width: node.width,
-            height: node.height
+            nodes: nodes.map((node: any) => ({
+              id: node.id,
+              name: node.name,
+              category: node.category,
+              cleanroomClass: node.cleanroomClass,
+              x: node.x,
+              y: node.y,
+              width: node.width,
+              height: node.height,
+              color: node.color,
+              equipment: node.equipment || []
+            })),
+            diagramId
           }
         );
+        console.log(`🚀 Batch created ${nodes.length} nodes in single query`);
       }
       
-      // Use MERGE to avoid creating duplicate relationships
-      for (const rel of relationships) {
-        const relationshipQuery = `MATCH (from:FunctionalArea {id: $fromId})
-           MATCH (to:FunctionalArea {id: $toId})
-           MERGE (from)-[r:${rel.type} {id: $relId}]->(to)
-           ON CREATE SET
-             r.priority = $priority,
-             r.reason = $reason,
-             r.doorType = $doorType,
-             r.minDistance = $minDistance,
-             r.maxDistance = $maxDistance,
-             r.createdAt = datetime(),
-             r.updatedAt = datetime()
-           ON MATCH SET
-             r.priority = $priority,
-             r.reason = $reason,
-             r.doorType = $doorType,
-             r.minDistance = $minDistance,
-             r.maxDistance = $maxDistance,
-             r.updatedAt = datetime()`;
-        
-        await tx.run(relationshipQuery,
-          {
+      // Create relationships between functional areas (BATCH OPERATION by type)
+      if (relationships.length > 0) {
+        // Group relationships by type for batch processing
+        const relsByType = relationships.reduce((acc: any, rel: any) => {
+          const type = rel.type || 'RELATED_TO';
+          if (!acc[type]) acc[type] = [];
+          acc[type].push({
+            id: rel.id,
             fromId: rel.fromId,
             toId: rel.toId,
-            relId: rel.id,
             priority: rel.priority || 5,
             reason: rel.reason || 'User-defined relationship',
             doorType: rel.doorType || null,
             minDistance: rel.minDistance || null,
-            maxDistance: rel.maxDistance || null
-          }
-        );
+            maxDistance: rel.maxDistance || null,
+            flowDirection: rel.flowDirection || null,
+            flowType: rel.flowType || null
+          });
+          return acc;
+        }, {} as Record<string, any[]>);
+
+        // Batch create relationships for each type
+        for (const [relType, rels] of Object.entries(relsByType)) {
+          await tx.run(
+            `UNWIND $rels AS rel
+             MATCH (from:FunctionalArea {id: rel.fromId})
+             MATCH (to:FunctionalArea {id: rel.toId})
+             MERGE (from)-[r:${relType} {id: rel.id}]->(to)
+             ON CREATE SET
+               r.priority = rel.priority,
+               r.reason = rel.reason,
+               r.doorType = rel.doorType,
+               r.minDistance = rel.minDistance,
+               r.maxDistance = rel.maxDistance,
+               r.flowDirection = rel.flowDirection,
+               r.flowType = rel.flowType,
+               r.createdAt = datetime(),
+               r.updatedAt = datetime()
+             ON MATCH SET
+               r.priority = rel.priority,
+               r.reason = rel.reason,
+               r.doorType = rel.doorType,
+               r.minDistance = rel.minDistance,
+               r.maxDistance = rel.maxDistance,
+               r.flowDirection = rel.flowDirection,
+               r.flowType = rel.flowType,
+               r.updatedAt = datetime()`,
+            { rels }
+          );
+        }
+        console.log(`🚀 Batch created ${relationships.length} relationships in ${Object.keys(relsByType).length} queries`);
       }
       
       await tx.commit();
       
-      res.status(201).json({ message: 'Functional areas saved successfully', nodeCount: nodes.length, relationshipCount: relationships.length });
+      console.log('🔍 Diagram saved successfully with ID:', diagramId);
+      res.status(201).json({ 
+        id: diagramId, 
+        message: 'Diagram saved successfully', 
+        nodeCount: nodes.length, 
+        relationshipCount: relationships.length 
+      });
     } catch (error) {
       await tx.rollback();
       throw error;
@@ -295,75 +374,103 @@ router.put('/:id', async (req, res) => {
     const tx = session.beginTransaction();
     
     try {
-      // Use MERGE to update existing nodes instead of clearing all
-      for (const node of nodes) {
+      // Use MERGE to update existing nodes instead of clearing all (BATCH OPERATION)
+      if (nodes.length > 0) {
         await tx.run(
-          `MERGE (fa:FunctionalArea {id: $nodeId})
+          `UNWIND $nodes AS node
+           MERGE (fa:FunctionalArea {id: node.id})
            ON CREATE SET
-             fa.name = $name,
-             fa.category = $category,
-             fa.cleanroomClass = $cleanroomClass,
-             fa.x = $x,
-             fa.y = $y,
-             fa.width = $width,
-             fa.height = $height,
+             fa.name = node.name,
+             fa.category = node.category,
+             fa.cleanroomClass = node.cleanroomClass,
+             fa.x = node.x,
+             fa.y = node.y,
+             fa.width = node.width,
+             fa.height = node.height,
+             fa.color = node.color,
+             fa.equipment = node.equipment,
              fa.createdAt = datetime(),
              fa.updatedAt = datetime()
            ON MATCH SET
-             fa.name = $name,
-             fa.category = $category,
-             fa.cleanroomClass = $cleanroomClass,
-             fa.x = $x,
-             fa.y = $y,
-             fa.width = $width,
-             fa.height = $height,
+             fa.name = node.name,
+             fa.category = node.category,
+             fa.cleanroomClass = node.cleanroomClass,
+             fa.x = node.x,
+             fa.y = node.y,
+             fa.width = node.width,
+             fa.height = node.height,
+             fa.color = node.color,
+             fa.equipment = node.equipment,
              fa.updatedAt = datetime()`,
           {
-            nodeId: node.id,
-            name: node.name,
-            category: node.category,
-            cleanroomClass: node.cleanroomClass,
-            x: node.x,
-            y: node.y,
-            width: node.width,
-            height: node.height
+            nodes: nodes.map((node: any) => ({
+              id: node.id,
+              name: node.name,
+              category: node.category,
+              cleanroomClass: node.cleanroomClass,
+              x: node.x,
+              y: node.y,
+              width: node.width,
+              height: node.height,
+              color: node.color,
+              equipment: node.equipment || []
+            }))
           }
         );
+        console.log(`🚀 Batch updated ${nodes.length} nodes in single query`);
       }
       
-      // Use MERGE to update existing relationships instead of creating duplicates
-      for (const rel of relationships) {
-        const updateRelationshipQuery = `MATCH (from:FunctionalArea {id: $fromId})
-           MATCH (to:FunctionalArea {id: $toId})
-           MERGE (from)-[r:${rel.type} {id: $relId}]->(to)
-           ON CREATE SET
-             r.priority = $priority,
-             r.reason = $reason,
-             r.doorType = $doorType,
-             r.minDistance = $minDistance,
-             r.maxDistance = $maxDistance,
-             r.createdAt = datetime(),
-             r.updatedAt = datetime()
-           ON MATCH SET
-             r.priority = $priority,
-             r.reason = $reason,
-             r.doorType = $doorType,
-             r.minDistance = $minDistance,
-             r.maxDistance = $maxDistance,
-             r.updatedAt = datetime()`;
-        
-        await tx.run(updateRelationshipQuery,
-          {
+      // Use MERGE to update existing relationships instead of creating duplicates (BATCH OPERATION)
+      if (relationships.length > 0) {
+        // Group relationships by type for batch processing
+        const relsByType = relationships.reduce((acc: any, rel: any) => {
+          const type = rel.type || 'RELATED_TO';
+          if (!acc[type]) acc[type] = [];
+          acc[type].push({
+            id: rel.id,
             fromId: rel.fromId,
             toId: rel.toId,
-            relId: rel.id,
             priority: rel.priority || 5,
             reason: rel.reason || 'User-defined relationship',
             doorType: rel.doorType || null,
             minDistance: rel.minDistance || null,
-            maxDistance: rel.maxDistance || null
-          }
-        );
+            maxDistance: rel.maxDistance || null,
+            flowDirection: rel.flowDirection || null,
+            flowType: rel.flowType || null
+          });
+          return acc;
+        }, {} as Record<string, any[]>);
+
+        // Batch update relationships for each type
+        for (const [relType, rels] of Object.entries(relsByType)) {
+          await tx.run(
+            `UNWIND $rels AS rel
+             MATCH (from:FunctionalArea {id: rel.fromId})
+             MATCH (to:FunctionalArea {id: rel.toId})
+             MERGE (from)-[r:${relType} {id: rel.id}]->(to)
+             ON CREATE SET
+               r.priority = rel.priority,
+               r.reason = rel.reason,
+               r.doorType = rel.doorType,
+               r.minDistance = rel.minDistance,
+               r.maxDistance = rel.maxDistance,
+               r.flowDirection = rel.flowDirection,
+               r.flowType = rel.flowType,
+               r.createdAt = datetime(),
+               r.updatedAt = datetime()
+             ON MATCH SET
+               r.priority = rel.priority,
+               r.reason = rel.reason,
+               r.doorType = rel.doorType,
+               r.minDistance = rel.minDistance,
+               r.maxDistance = rel.maxDistance,
+               r.flowDirection = rel.flowDirection,
+               r.flowType = rel.flowType,
+               r.updatedAt = datetime()`,
+            { rels }
+          );
+        }
+        console.log(`🚀 Batch updated ${relationships.length} relationships in ${Object.keys(relsByType).length} queries`);
       }
       
       await tx.commit();

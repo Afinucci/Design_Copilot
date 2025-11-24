@@ -1,0 +1,245 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e7]
+        - heading "Pharmaceutical Facility Design Copilot" [level=6] [ref=e9]
+        - group [ref=e10]:
+          - button "creation mode" [ref=e11] [cursor=pointer]:
+            - img [ref=e12] [cursor=pointer]
+            - text: Creation
+          - button "exploration mode" [ref=e14] [cursor=pointer]:
+            - img [ref=e15] [cursor=pointer]
+            - text: Exploration
+          - button "layout designer" [pressed] [ref=e17] [cursor=pointer]:
+            - img [ref=e18] [cursor=pointer]
+            - text: Layout Designer
+    - generic [ref=e21]:
+      - generic [ref=e22]:
+        - heading "Untitled Layout" [level=2] [ref=e24]
+        - generic [ref=e25]:
+          - button "Save Layout" [ref=e26] [cursor=pointer]:
+            - img [ref=e27] [cursor=pointer]
+            - generic [ref=e29] [cursor=pointer]: Save Layout
+          - button "Load Layout" [ref=e30] [cursor=pointer]:
+            - img [ref=e31] [cursor=pointer]
+            - generic [ref=e33] [cursor=pointer]: Load Layout
+      - generic [ref=e36]:
+        - generic [ref=e37]:
+          - img
+        - generic:
+          - img:
+            - generic: "0"
+            - generic: "5"
+            - generic: "10"
+            - generic: "15"
+            - generic: "20"
+            - generic: "25"
+            - generic: "30"
+            - generic: "35"
+            - generic: "40"
+            - generic: "45"
+            - generic: "50"
+            - generic: "55"
+            - generic: "60"
+            - generic: "65"
+            - generic: "70"
+            - generic: "75"
+            - generic: "80"
+            - generic: "85"
+            - generic: "90"
+            - generic: "95"
+            - generic: "100"
+            - generic: "105"
+            - generic: "110"
+            - generic: "115"
+            - generic: "120"
+            - generic: "125"
+            - generic: "130"
+            - generic: "135"
+            - generic: "140"
+            - generic: "145"
+            - generic: "150"
+            - generic: "155"
+            - generic: "160"
+            - generic: "165"
+            - generic: "170"
+            - generic: "175"
+            - generic: "180"
+            - generic: "185"
+            - generic: "190"
+            - generic: "195"
+            - generic: "200"
+            - generic: "205"
+            - generic: (m)
+          - img:
+            - generic: "0"
+            - generic: "5"
+            - generic: "10"
+            - generic: "15"
+            - generic: "20"
+            - generic: "25"
+            - generic: "30"
+            - generic: "35"
+            - generic: "40"
+            - generic: "45"
+            - generic: "50"
+            - generic: "55"
+            - generic: "60"
+            - generic: "65"
+            - generic: "70"
+            - generic: "75"
+            - generic: "80"
+            - generic: "85"
+            - generic: "90"
+            - generic: "95"
+            - generic: "100"
+            - generic: "105"
+            - generic: "110"
+            - generic: "115"
+            - generic: "120"
+            - generic: "125"
+            - generic: "130"
+            - generic: "135"
+            - generic: "140"
+            - generic: "145"
+            - generic: "150"
+            - generic: "155"
+            - generic: "160"
+            - generic: "165"
+            - generic: "170"
+            - generic: "175"
+            - generic: "180"
+            - generic: "185"
+            - generic: "190"
+            - generic: "195"
+            - generic: "200"
+            - generic: "205"
+            - generic: (m)
+          - generic:
+            - img
+        - img
+        - img
+        - img
+        - img
+      - generic [ref=e38]:
+        - generic [ref=e39]:
+          - button "Save Layout (Ctrl+S)" [ref=e40] [cursor=pointer]:
+            - img [ref=e41] [cursor=pointer]
+          - button "Load Layout (Ctrl+O)" [ref=e43] [cursor=pointer]:
+            - img [ref=e44] [cursor=pointer]
+        - separator [ref=e46]
+        - button "Show Shape Library" [ref=e47] [cursor=pointer]:
+          - img [ref=e48] [cursor=pointer]
+        - separator [ref=e50]
+        - button "Door Connection Mode" [ref=e51] [cursor=pointer]:
+          - img [ref=e52] [cursor=pointer]
+        - button "Wall Drawing Mode" [ref=e54] [cursor=pointer]:
+          - img [ref=e55] [cursor=pointer]
+        - button "Measurement Mode" [ref=e57] [cursor=pointer]:
+          - img [ref=e58] [cursor=pointer]
+        - separator [ref=e60]
+        - generic [ref=e61]:
+          - 'button "Tool: Rectangle" [ref=e63] [cursor=pointer]':
+            - img [ref=e64] [cursor=pointer]
+          - 'button "Tool: Circle" [ref=e67] [cursor=pointer]':
+            - img [ref=e68] [cursor=pointer]
+          - 'button "Tool: Triangle" [ref=e71] [cursor=pointer]':
+            - img [ref=e72] [cursor=pointer]
+          - 'button "Tool: Polygon" [ref=e75] [cursor=pointer]':
+            - img [ref=e76] [cursor=pointer]
+        - separator [ref=e78]
+        - generic [ref=e79]:
+          - button "Hide Grid" [ref=e80] [cursor=pointer]:
+            - img [ref=e81] [cursor=pointer]
+          - button [ref=e84] [cursor=pointer]:
+            - img [ref=e85] [cursor=pointer]
+        - separator [ref=e87]
+        - generic [ref=e88]:
+          - generic "Undo" [ref=e89]:
+            - button [disabled]:
+              - img
+          - generic "Redo" [ref=e90]:
+            - button [disabled]:
+              - img
+          - button [ref=e92] [cursor=pointer]:
+            - img [ref=e93] [cursor=pointer]
+        - separator [ref=e95]
+        - generic [ref=e96]:
+          - generic "Rotate Left (-15°)" [ref=e97]:
+            - button [disabled]:
+              - img
+          - generic "Rotate Right (+15°)" [ref=e98]:
+            - button [disabled]:
+              - img
+        - separator [ref=e99]
+        - generic "Merge Shapes (Shift+Click to add shapes, 0 selected)" [ref=e101]:
+          - button "0" [disabled]:
+            - img
+            - text: "0"
+        - separator [ref=e102]
+        - generic [ref=e103]:
+          - button "Zoom Out" [ref=e104] [cursor=pointer]:
+            - img [ref=e105] [cursor=pointer]
+          - paragraph [ref=e107]: 100%
+          - button "Zoom In" [ref=e108] [cursor=pointer]:
+            - img [ref=e109] [cursor=pointer]
+          - button "Fit to Window" [active] [ref=e112] [cursor=pointer]:
+            - img [ref=e113] [cursor=pointer]
+        - separator [ref=e115]
+        - generic [ref=e116]:
+          - button "Hide Rulers" [ref=e117] [cursor=pointer]:
+            - img [ref=e118] [cursor=pointer]
+          - button "Scale & Unit Settings - Configure measurement units" [ref=e120] [cursor=pointer]:
+            - img [ref=e121] [cursor=pointer]
+        - separator [ref=e123]
+        - button "Settings" [ref=e124] [cursor=pointer]:
+          - img [ref=e125] [cursor=pointer]
+      - button "open ai chat" [ref=e127] [cursor=pointer]:
+        - img [ref=e128] [cursor=pointer]
+      - generic [ref=e130]:
+        - generic [ref=e131]:
+          - generic [ref=e132]:
+            - img [ref=e133]
+            - heading "AI Layout Assistant" [level=6] [ref=e135]
+          - generic [ref=e136]:
+            - button "Clear History" [ref=e137] [cursor=pointer]:
+              - img [ref=e138] [cursor=pointer]
+            - button [ref=e140] [cursor=pointer]:
+              - img [ref=e141] [cursor=pointer]
+        - generic [ref=e144]:
+          - img [ref=e145]
+          - heading "Welcome!" [level=6] [ref=e147]
+          - paragraph [ref=e148]: Ask me anything about pharmaceutical facility design, room types, adjacency rules, or GMP compliance. I can help you plan your layout!
+          - generic [ref=e149]:
+            - generic [ref=e150]: "Try asking:"
+            - generic [ref=e151]: 🏗️ "Generate a sterile vial filling facility for 500L batches"
+            - generic [ref=e152]: 📋 "Create an oral solid dosage facility from template"
+            - generic [ref=e153]: 🔍 "What can be connected to the Process Suite?"
+            - generic [ref=e154]: ➕ "Add a quality control area"
+            - generic [ref=e155]: ⚡ "Optimize this layout for material flow"
+        - generic [ref=e157]:
+          - generic [ref=e159]:
+            - textbox "Ask me about layout design..." [ref=e160]
+            - group
+          - button [disabled]:
+            - img
+      - generic [ref=e161]:
+        - generic [ref=e162]:
+          - generic [ref=e163]:
+            - img [ref=e164]
+            - heading "Cost Estimation" [level=6] [ref=e166]
+          - generic [ref=e167]:
+            - button [ref=e168] [cursor=pointer]:
+              - img [ref=e169] [cursor=pointer]
+            - button [ref=e171] [cursor=pointer]:
+              - img [ref=e172] [cursor=pointer]
+            - button [ref=e174] [cursor=pointer]:
+              - img [ref=e175] [cursor=pointer]
+        - paragraph [ref=e181]: Add rooms to the diagram to see cost estimates
+  - tooltip "Fit to Window" [ref=e182]:
+    - generic [ref=e183]: Fit to Window
+```

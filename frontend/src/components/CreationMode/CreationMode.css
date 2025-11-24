@@ -1,0 +1,16 @@
+/* Ensure ReactFlow pane accepts drag and drop */
+.react-flow-wrapper .react-flow__pane {
+  pointer-events: all !important;
+}
+
+.react-flow-wrapper .react-flow__renderer {
+  pointer-events: all !important;
+}
+
+/* Make sure the canvas accepts drops */
+.react-flow-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+

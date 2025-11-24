@@ -26,10 +26,12 @@ interface CustomNodeData {
   groupId?: string;
   isSelected?: boolean;
   equipment?: Equipment[];
+  width?: number;
+  height?: number;
 }
 
 const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => {
-  const { label, category, cleanroomClass, color, highlighted, icon, groupId, isSelected, equipment } = data;
+  const { label, category, cleanroomClass, color, highlighted, icon, groupId, isSelected, equipment, width, height } = data;
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -77,102 +79,126 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
         alignItems: 'center',
         justifyContent: 'center',
         cursor: 'pointer',
-        transition: 'all 0.2s ease-in-out',
         position: 'relative',
         '&:hover': {
           boxShadow: 3,
-          transform: 'translateY(-2px)',
         },
       }}
     >
       {/* Left handle - bidirectional (centered) */}
-      <Handle 
-        type="source" 
-        position={Position.Left} 
+      <Handle
+        type="source"
+        position={Position.Left}
         id="left"
         isConnectable={true}
-        style={{ 
+        style={{
           background: '#555',
-          width: 14,
-          height: 14,
-          border: '2px solid #fff',
+          width: 5,
+          height: 5,
+          border: '0.5px solid #fff',
           borderRadius: '50%',
           pointerEvents: 'all',
           cursor: 'crosshair',
           top: '50%',
           transform: 'translateY(-50%)',
-          transition: 'all 0.2s ease-in-out',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+          boxShadow: '0 0.5px 1px rgba(0,0,0,0.1)',
         }}
         className="custom-handle"
       />
-      
+
       {/* Right handle - bidirectional (centered) */}
-      <Handle 
-        type="source" 
-        position={Position.Right} 
+      <Handle
+        type="source"
+        position={Position.Right}
         id="right"
         isConnectable={true}
-        style={{ 
+        style={{
           background: '#555',
-          width: 14,
-          height: 14,
-          border: '2px solid #fff',
+          width: 5,
+          height: 5,
+          border: '0.5px solid #fff',
           borderRadius: '50%',
           pointerEvents: 'all',
           cursor: 'crosshair',
           top: '50%',
           transform: 'translateY(-50%)',
-          transition: 'all 0.2s ease-in-out',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+          boxShadow: '0 0.5px 1px rgba(0,0,0,0.1)',
         }}
         className="custom-handle"
       />
-      
+
       {/* Top handle - bidirectional (centered) */}
-      <Handle 
-        type="source" 
-        position={Position.Top} 
+      <Handle
+        type="source"
+        position={Position.Top}
         id="top"
         isConnectable={true}
-        style={{ 
+        style={{
           background: '#555',
-          width: 14,
-          height: 14,
-          border: '2px solid #fff',
+          width: 5,
+          height: 5,
+          border: '0.5px solid #fff',
           borderRadius: '50%',
           pointerEvents: 'all',
           cursor: 'crosshair',
           left: '50%',
           transform: 'translateX(-50%)',
-          transition: 'all 0.2s ease-in-out',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+          boxShadow: '0 0.5px 1px rgba(0,0,0,0.1)',
         }}
         className="custom-handle"
       />
-      
+
       {/* Bottom handle - bidirectional (centered) */}
-      <Handle 
-        type="source" 
-        position={Position.Bottom} 
+      <Handle
+        type="source"
+        position={Position.Bottom}
         id="bottom"
         isConnectable={true}
-        style={{ 
+        style={{
           background: '#555',
-          width: 14,
-          height: 14,
-          border: '2px solid #fff',
+          width: 5,
+          height: 5,
+          border: '0.5px solid #fff',
           borderRadius: '50%',
           pointerEvents: 'all',
           cursor: 'crosshair',
           left: '50%',
           transform: 'translateX(-50%)',
-          transition: 'all 0.2s ease-in-out',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+          boxShadow: '0 0.5px 1px rgba(0,0,0,0.1)',
         }}
         className="custom-handle"
       />
-      
+
+      {/* Target handles for accepting incoming connections */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left-target"
+        isConnectable={true}
+        style={{ opacity: 0 }}
+      />
+      <Handle
+        type="target"
+        position={Position.Right}
+        id="right-target"
+        isConnectable={true}
+        style={{ opacity: 0 }}
+      />
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="top-target"
+        isConnectable={true}
+        style={{ opacity: 0 }}
+      />
+      <Handle
+        type="target"
+        position={Position.Bottom}
+        id="bottom-target"
+        isConnectable={true}
+        style={{ opacity: 0 }}
+      />
+
       {/* Group indicator */}
       {groupId && (
         <Box
@@ -214,7 +240,8 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
         </Typography>
       </Box>
       
-      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'center' }}>
+      {/* Primary Info Row: Category + Cleanroom Class */}
+      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'center', mb: 0.5 }}>
         <Chip
           label={category}
           size="small"
@@ -225,7 +252,7 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
             color: '#333',
           }}
         />
-        
+
         {cleanroomClass && (
           <Chip
             label={`Class ${cleanroomClass}`}
@@ -234,6 +261,19 @@ const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({ data, selected }) => 
               fontSize: '0.65rem',
               height: 20,
               backgroundColor: 'rgba(33,150,243,0.8)',
+              color: 'white',
+            }}
+          />
+        )}
+
+        {equipment && equipment.length > 0 && (
+          <Chip
+            label={`${equipment.length} eq.`}
+            size="small"
+            sx={{
+              fontSize: '0.6rem',
+              height: 18,
+              backgroundColor: 'rgba(123,31,162,0.8)',
               color: 'white',
             }}
           />

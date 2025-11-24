@@ -2,6 +2,7 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://localhost:5000",
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
@@ -15,10 +16,15 @@
     "@types/node": "^16.18.126",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "axios": "^1.13.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-force-graph-2d": "^1.28.0",
+    "react-markdown": "^10.1.0",
     "react-scripts": "5.0.1",
     "reactflow": "^11.11.4",
+    "remark-gfm": "^4.0.1",
+    "resize-observer-polyfill": "^1.5.1",
     "typescript": "^4.9.5",
     "web-vitals": "^2.1.4"
   },
@@ -45,5 +51,10 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@craco/craco": "^7.1.0",
+    "@playwright/test": "^1.54.1",
+    "playwright": "^1.54.1"
   }
 }

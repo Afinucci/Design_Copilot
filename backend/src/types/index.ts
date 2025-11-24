@@ -26,14 +26,17 @@ export interface FunctionalArea {
   equipment?: Equipment[];
 }
 
+// Import DoorType and cost types from shared (type-only to avoid rootDir issues)
+import type { DoorType, RoomCostFactors } from '../../../shared/types';
+
 export interface SpatialRelationship {
   id: string;
-  type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW';
+  type: 'ADJACENT_TO' | 'REQUIRES_ACCESS' | 'PROHIBITED_NEAR' | 'SHARES_UTILITY' | 'MATERIAL_FLOW' | 'PERSONNEL_FLOW' | 'WORKFLOW_SUGGESTION';
   fromId: string;
   toId: string;
   priority: number;
   reason: string;
-  doorType?: string;
+  doorType?: DoorType;
   minDistance?: number;
   maxDistance?: number;
   flowDirection?: 'bidirectional' | 'unidirectional';
@@ -45,8 +48,99 @@ export interface Diagram {
   name: string;
   nodes: FunctionalArea[];
   relationships: SpatialRelationship[];
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+// Layout Designer Types (for freeform shape-based layouts)
+export interface ShapeProperties {
+  id: string;
+  name: string;
+  shapeType: string;
+  category: NodeCategory;
+  cleanroomClass?: 'A' | 'B' | 'C' | 'D' | 'CNC';
+  width: number;
+  height: number;
+  area: number;
+  x: number;
+  y: number;
+  rotation?: number;
+  pressureRegime: 'positive' | 'negative' | 'neutral';
+  temperatureRange: {
+    min: number;
+    max: number;
+    unit: 'C' | 'F';
+  };
+  humidityRange: {
+    min: number;
+    max: number;
+  };
+  fillColor: string;
+  borderColor: string;
+  borderWidth: number;
+  opacity: number;
+  isCompliant: boolean;
+  complianceIssues: string[];
+  assignedNodeName?: string;
+  assignedNodeId?: string;
+  customProperties: Record<string, any>;
+  // Cost properties
+  equipment?: string[]; // Equipment IDs
+  costFactors?: RoomCostFactors;
+}
+
+export interface Connection {
+  id: string;
+  fromShapeId: string;
+  toShapeId: string;
+  type: 'personnel' | 'material';
+  direction: 'unidirectional' | 'bidirectional';
   createdAt: Date;
-  updatedAt: Date;
+  label?: string;
+}
+
+export interface DoorPlacement {
+  id: string;
+  sharedWallId: string;
+  shape1Id: string;
+  shape2Id: string;
+  position: { x: number; y: number };
+  normalizedPosition: number;
+  width: number;
+  flowType: 'material' | 'personnel' | 'waste';
+  flowDirection: 'unidirectional' | 'bidirectional';
+  unidirectionalDirection?: 'fromFirstToSecond' | 'fromSecondToFirst';
+}
+
+export interface LayoutData {
+  id: string;
+  name: string;
+  shapes: ShapeProperties[];
+  connections: Connection[];
+  doorConnections: DoorConnection[];
+  doorPlacements: DoorPlacement[];
+  canvasSettings: {
+    width: number;
+    height: number;
+    backgroundColor: string;
+    showGrid: boolean;
+    snapToGrid: boolean;
+    gridSize: number;
+    zoom: number;
+  };
+  metadata: {
+    createdAt: Date;
+    modifiedAt: Date;
+    version: string;
+  };
+}
+
+export interface Layout {
+  id: string;
+  name: string;
+  data: LayoutData;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface ValidationResult {
@@ -71,7 +165,7 @@ export interface Suggestion {
   confidence: number;
 }
 
-export type NodeCategory = 
+export type NodeCategory =
   | 'Production'
   | 'Quality Control'
   | 'Warehouse'
@@ -87,6 +181,9 @@ export interface NodeTemplate {
   color: string;
   icon?: string;
   defaultSize: { width: number; height: number };
+  // Cost factors
+  costFactors?: RoomCostFactors;
+  typicalEquipment?: string[]; // IDs of typical equipment for this room type
 }
 
 export interface NodeGroup {
@@ -98,3 +195,276 @@ export interface NodeGroup {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// AI Assistant Chat Types
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
+  actions?: ChatAction[];
+}
+
+export interface ChatAction {
+  id: string;
+  type: 'add_node' | 'highlight_node' | 'add_relationship' | 'suggest_layout' | 'generate_layout';
+  label: string;
+  data: {
+    nodeId?: string;
+    nodeTemplate?: NodeTemplate;
+    position?: { x: number; y: number };
+    relationship?: SpatialRelationship;
+    highlightNodeIds?: string[];
+    layoutSuggestion?: {
+      nodes: Array<{ template: NodeTemplate; position: { x: number; y: number } }>;
+      relationships: SpatialRelationship[];
+    };
+    generatedLayout?: GeneratedShapeLayout;
+  };
+}
+
+export interface ChatContext {
+  diagramId?: string;
+  currentNodes: Array<{
+    id: string;
+    name: string;
+    templateId?: string;  // Neo4j node ID for querying relationships
+    category: NodeCategory;
+    cleanroomClass?: string;
+    position: { x: number; y: number };
+  }>;
+  currentRelationships: SpatialRelationship[];
+}
+
+export interface ChatRequest {
+  message: string;
+  context: ChatContext;
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
+}
+
+export interface ChatResponse {
+  message: string;
+  actions: ChatAction[];
+}
+
+export interface ChatHistory {
+  diagramId: string;
+  messages: ChatMessage[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ============================================
+// TEXT-TO-LAYOUT GENERATION TYPES
+// ============================================
+
+/**
+ * Room size data from pharmaceutical room size database
+ */
+export interface RoomSizeData {
+  roomType: string;
+  aliases: string[];
+  category: NodeCategory;
+  cleanroomClass?: 'A' | 'B' | 'C' | 'D' | 'CNC';
+  typicalDimensions: {
+    width: number; // meters
+    height: number; // meters
+    area: number; // square meters
+  };
+  sizeRange: {
+    minArea: number;
+    maxArea: number;
+  };
+  scalingFactors?: {
+    perBatchLiter?: number;
+    perThroughputUnit?: number;
+  };
+  equipmentFootprint?: number;
+  shapeType?: string;
+  description?: string;
+}
+
+/**
+ * Parameters for layout generation from natural language
+ */
+export interface LayoutGenerationParams {
+  description: string; // Natural language input
+  requiredRooms?: string[]; // Explicit room list
+  capacity?: {
+    batchSize?: number; // liters
+    throughput?: number; // units/day
+  };
+  constraints?: {
+    maxArea?: number;
+    layoutStyle?: 'linear' | 'clustered' | 'compact' | 'modular';
+    prioritizeFlow?: 'material' | 'personnel' | 'balanced';
+  };
+}
+
+/**
+ * Generated shape-based layout for Layout Designer mode
+ */
+export interface GeneratedShapeLayout {
+  shapes: Array<{
+    id: string;
+    name: string;
+    shapeType: string;
+    category: NodeCategory;
+    cleanroomClass?: 'A' | 'B' | 'C' | 'D' | 'CNC';
+    width: number; // pixels
+    height: number; // pixels
+    area: number; // pixels
+    x: number; // canvas position
+    y: number; // canvas position
+    rotation?: number;
+    pressureRegime: 'positive' | 'negative' | 'neutral';
+    temperatureRange: { min: number; max: number; unit: 'C' | 'F' };
+    humidityRange: { min: number; max: number };
+    fillColor: string;
+    borderColor: string;
+    borderWidth: number;
+    opacity: number;
+    isCompliant: boolean;
+    complianceIssues: string[];
+    assignedNodeName?: string;
+    assignedNodeId?: string;
+    customProperties: Record<string, any>;
+  }>;
+  doorConnections: Array<{
+    id: string;
+    fromShape: {
+      shapeId: string;
+      x: number;
+      y: number;
+      edgeIndex: number;
+      normalizedPosition: number;
+    };
+    toShape: {
+      shapeId: string;
+      x: number;
+      y: number;
+      edgeIndex: number;
+      normalizedPosition: number;
+    };
+    flowType: 'material' | 'personnel' | 'waste';
+    flowDirection: 'unidirectional' | 'bidirectional';
+    doorType?: DoorType;
+  }>;
+  metadata: {
+    totalArea: number; // square meters
+    complianceScore: number; // 0-100
+    warnings: string[];
+    suggestions: string[];
+    rationale: string; // AI explanation of layout decisions
+  };
+}
+
+
+/**
+ * Get color for cleanroom classification
+ * Based on pharmaceutical industry standards for GMP facility design
+ *
+ * Color scheme:
+ * - Grade A (ISO 5): Crimson Red - Highest sterility, critical operations
+ * - Grade B (ISO 5/7): Orange - Aseptic preparation, supports Grade A
+ * - Grade C (ISO 7/8): Sky Blue - Less critical manufacturing
+ * - Grade D (ISO 8): Light Green - General manufacturing, lowest GMP grade
+ * - CNC: Light Gray - Controlled Not Classified, support areas
+ *
+ * @param cleanroomClass - Cleanroom classification (A, B, C, D, CNC)
+ * @returns Hex color code
+ */
+export function getCleanroomColor(cleanroomClass?: string): string {
+  if (!cleanroomClass) {
+    return '#D3D3D3'; // Default light gray for unclassified
+  }
+
+  const normalizedClass = cleanroomClass.toUpperCase().trim();
+
+  switch (normalizedClass) {
+    case 'A':
+    case 'GRADE A':
+    case 'CLASS A':
+      return '#DC143C'; // Crimson Red - Most critical
+
+    case 'B':
+    case 'GRADE B':
+    case 'CLASS B':
+      return '#FFA500'; // Orange - Aseptic preparation
+
+    case 'C':
+    case 'GRADE C':
+    case 'CLASS C':
+      return '#4A90E2'; // Sky Blue - Less critical
+
+    case 'D':
+    case 'GRADE D':
+    case 'CLASS D':
+      return '#90EE90'; // Light Green - General manufacturing
+
+    case 'CNC':
+    case 'CONTROLLED NOT CLASSIFIED':
+    case 'N/A':
+      return '#D3D3D3'; // Light Gray - Non-classified
+
+    default:
+      return '#D3D3D3'; // Default light gray for unknown
+  }
+}
+
+// Re-export Door types as well
+export type { DoorType, DoorFlowType, DoorFlowDirection, DoorConnection, DoorConnectionPoint };
+
+// Re-export generative AI types from shared (use type-only exports to avoid rootDir issues)
+export type {
+  LayoutGenerationRequest,
+  LayoutConstraints,
+  LayoutPreferences,
+  GeneratedLayout,
+  ZoneDefinition,
+  OptimizationMetrics,
+  SpatialPlacement,
+  PlacementConstraint,
+  SmartGhostSuggestion,
+  GhostSuggestion,
+  FacilityTemplate,
+  TemplateParameter,
+  TemplateInstantiationRequest,
+  RegulatoryRule,
+  ComplianceCheckResult,
+  ComplianceReport,
+  LayoutModification,
+  OptimizationObjective,
+  OptimizationResult,
+  PredictiveInsight,
+  DesignHealthScore
+};
+
+// Import from shared for type safety
+import type {
+  LayoutGenerationRequest,
+  LayoutConstraints,
+  LayoutPreferences,
+  GeneratedLayout,
+  ZoneDefinition,
+  OptimizationMetrics,
+  SpatialPlacement,
+  PlacementConstraint,
+  SmartGhostSuggestion,
+  GhostSuggestion,
+  FacilityTemplate,
+  TemplateParameter,
+  TemplateInstantiationRequest,
+  RegulatoryRule,
+  ComplianceCheckResult,
+  ComplianceReport,
+  LayoutModification,
+  OptimizationObjective,
+  OptimizationResult,
+  PredictiveInsight,
+  DesignHealthScore,
+  DoorFlowType,
+  DoorFlowDirection,
+  DoorConnection,
+  DoorConnectionPoint
+} from '../../../shared/types';

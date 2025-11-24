@@ -19,12 +19,15 @@
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "morgan": "^1.10.0",
-    "neo4j-driver": "^5.28.1"
+    "neo4j-driver": "^5.28.1",
+    "openai": "^6.8.1",
+    "uuid": "^8.3.2"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/morgan": "^1.9.10",
+    "@types/uuid": "^10.0.0",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"

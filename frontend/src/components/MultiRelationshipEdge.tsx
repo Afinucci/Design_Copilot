@@ -1,13 +1,25 @@
-import React from 'react';
-import { 
-  EdgeProps, 
+import React, { useMemo } from 'react';
+import {
+  EdgeProps,
   EdgeLabelRenderer,
   BaseEdge,
   getStraightPath,
+  getBezierPath,
   useStore,
   Node,
   Edge
 } from 'reactflow';
+import { shallow } from 'zustand/shallow';
+import PersonnelFlowIcon from './PersonnelFlowIcon';
+import {
+  EDGE_SPACING,
+  DEFAULT_NODE_WIDTH,
+  DEFAULT_NODE_HEIGHT,
+  ARROW_SIZE,
+  EDGE_FONT_SIZE,
+  EDGE_FONT_WEIGHT,
+  EDGE_BORDER_RADIUS
+} from '../constants/edgeConstants';
 
 interface MultiRelationshipEdgeData {
   relationshipType: string;
@@ -20,19 +32,14 @@ interface MultiRelationshipEdgeData {
   flowDirection?: string;
   flowType?: string;
   creationDirection?: 'source-to-target' | 'target-to-source';
+  // When true, render this edge as an icon-only indicator (used in guided mode)
+  renderAsIcon?: boolean;
+  // Mode information passed through edge data
+  mode?: 'creation' | 'guided';
+  // Edge style: straight or curved
+  edgeStyle?: 'straight' | 'curved';
 }
 
-// Helper function to get node dimensions from store
-const getNodeDimensions = (nodeId: string, nodes: Node[]): { width: number; height: number } => {
-  const node = nodes.find((n: Node) => n.id === nodeId);
-  if (!node) return { width: 120, height: 80 }; // Default size
-  
-  const nodeData = node.data;
-  return {
-    width: nodeData?.width || 120,
-    height: nodeData?.height || 80
-  };
-};
 
 // Helper function to calculate intersection point on node boundary
 const getNodeIntersectionPoint = (
@@ -88,12 +95,23 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   source,
   target,
 }) => {
-  // Remove unused variable warning
-  // const relationshipIndex = data?.relationshipIndex ?? 0;
-  
-  // Get all nodes and edges from the store
-  const nodes = useStore((state) => state.getNodes());
-  const edges = useStore((state) => state.edges);
+  // Always call hooks at the top level (required by React)
+  // Get individual nodes directly - more efficient than complex selector
+  const sourceNode = useStore((state) => state.nodeInternals.get(source));
+  const targetNode = useStore((state) => state.nodeInternals.get(target));
+
+  // Get edges between the same nodes for parallel edge calculation
+  // Optimized: Use memoized selector with shallow comparison
+  const edgeSelector = useMemo(
+    () => (state: any) =>
+      state.edges.filter((edge: Edge) =>
+        (edge.source === source && edge.target === target) ||
+        (edge.source === target && edge.target === source)
+      ),
+    [source, target]
+  );
+
+  const parallelEdges = useStore(edgeSelector, shallow);
   
   // Ensure we have valid data before rendering
   if (!data || data.relationshipIndex === undefined) {
@@ -103,25 +121,30 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   
   if (sourceX === targetX && sourceY === targetY) return null;
   
-  // Get node dimensions
-  const sourceDimensions = getNodeDimensions(source, nodes);
-  const targetDimensions = getNodeDimensions(target, nodes);
   
-  // Find all edges between the same nodes (bidirectional)
-  const parallelEdges = edges.filter((edge: Edge) => 
-    (edge.source === source && edge.target === target) ||
-    (edge.source === target && edge.target === source)
-  );
+  // For creation mode, continue with original line-based rendering below
+  
+  // Get node dimensions directly from nodes
+  const sourceDimensions = sourceNode ? {
+    width: sourceNode.data?.width || DEFAULT_NODE_WIDTH,
+    height: sourceNode.data?.height || DEFAULT_NODE_HEIGHT
+  } : { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT };
+  
+  const targetDimensions = targetNode ? {
+    width: targetNode.data?.width || DEFAULT_NODE_WIDTH,
+    height: targetNode.data?.height || DEFAULT_NODE_HEIGHT
+  } : { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT };
+  
+  // parallelEdges already calculated above with useStore
   
   // Calculate proper offset for multiple relationships
   const edgeCount = parallelEdges.length;
   const edgeIndex = parallelEdges.findIndex((edge: Edge) => edge.id === id);
   
   // Calculate offset: center multiple lines around the direct line
-  const offsetAmount = 15; // 15px spacing between parallel lines
   const offset = edgeCount > 1 ? 
-    (edgeIndex - Math.floor(edgeCount / 2)) * offsetAmount + 
-    (edgeCount % 2 === 0 ? offsetAmount / 2 : 0) : 0;
+    (edgeIndex - Math.floor(edgeCount / 2)) * EDGE_SPACING + 
+    (edgeCount % 2 === 0 ? EDGE_SPACING / 2 : 0) : 0;
   
   // Calculate direction vector
   const dx = targetX - sourceX;
@@ -138,54 +161,54 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   const perpUx = -uy;
   const perpUy = ux;
   
-  // Calculate node boundary intersection points
-  const sourceNode = nodes.find((n: Node) => n.id === source);
-  const targetNode = nodes.find((n: Node) => n.id === target);
-  
+  // Validate nodes exist before proceeding
+
   if (!sourceNode || !targetNode) return null;
-  
-  // Get actual node positions and dimensions
-  const sourceNodeX = sourceNode.position.x;
-  const sourceNodeY = sourceNode.position.y;
-  const targetNodeX = targetNode.position.x;
-  const targetNodeY = targetNode.position.y;
-  
-  // Calculate intersection points on node boundaries
-  const sourceIntersection = getNodeIntersectionPoint(
-    sourceNodeX, 
-    sourceNodeY, 
-    sourceDimensions.width, 
-    sourceDimensions.height, 
-    targetX, 
-    targetY
-  );
-  
-  const targetIntersection = getNodeIntersectionPoint(
-    targetNodeX, 
-    targetNodeY, 
-    targetDimensions.width, 
-    targetDimensions.height, 
-    sourceX, 
-    sourceY
-  );
-  
-  // Apply offset to intersection points
-  const offsetSourceX = sourceIntersection.x + perpUx * offset;
-  const offsetSourceY = sourceIntersection.y + perpUy * offset;
-  const offsetTargetX = targetIntersection.x + perpUx * offset;
-  const offsetTargetY = targetIntersection.y + perpUy * offset;
-  
-  // Create straight line path using ReactFlow's getStraightPath
-  const [edgePath] = getStraightPath({
-    sourceX: offsetSourceX,
-    sourceY: offsetSourceY,
-    targetX: offsetTargetX,
-    targetY: offsetTargetY,
-  });
-  
-  // Label position at center of line
-  const labelX = offsetSourceX + (offsetTargetX - offsetSourceX) * 0.5;
-  const labelY = offsetSourceY + (offsetTargetY - offsetSourceY) * 0.5;
+
+  // ReactFlow already provides sourceX, sourceY, targetX, targetY as the handle positions
+  // So we can use them directly instead of recalculating intersection points
+  // This fixes the issue where edges don't connect to handle points
+
+  // Apply offset to handle positions for multiple parallel edges
+  const offsetSourceX = sourceX + perpUx * offset;
+  const offsetSourceY = sourceY + perpUy * offset;
+  const offsetTargetX = targetX + perpUx * offset;
+  const offsetTargetY = targetY + perpUy * offset;
+
+  // Determine edge style (default to straight if not specified)
+  const currentEdgeStyle = data.edgeStyle || 'straight';
+
+  // Create edge path based on style
+  let edgePath: string;
+  let labelX: number;
+  let labelY: number;
+
+  if (currentEdgeStyle === 'curved') {
+    // Use Bezier curve for curved edges
+    const [bezierPath, labelXPos, labelYPos] = getBezierPath({
+      sourceX: offsetSourceX,
+      sourceY: offsetSourceY,
+      sourcePosition,
+      targetX: offsetTargetX,
+      targetY: offsetTargetY,
+      targetPosition,
+    });
+    edgePath = bezierPath;
+    labelX = labelXPos;
+    labelY = labelYPos;
+  } else {
+    // Use straight line for straight edges
+    const [straightPath] = getStraightPath({
+      sourceX: offsetSourceX,
+      sourceY: offsetSourceY,
+      targetX: offsetTargetX,
+      targetY: offsetTargetY,
+    });
+    edgePath = straightPath;
+    // Label position at center of line
+    labelX = offsetSourceX + (offsetTargetX - offsetSourceX) * 0.5;
+    labelY = offsetSourceY + (offsetTargetY - offsetSourceY) * 0.5;
+  }
   
   // Helper function to determine if arrows should be shown
   const shouldShowArrows = () => {
@@ -210,24 +233,23 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
   
   // Helper function to create arrow marker
   const createArrowMarker = (direction: 'source' | 'target') => {
-    const arrowSize = 8;
     const arrowId = `arrow-${direction}-${id}`;
     
     return (
       <defs>
         <marker
           id={arrowId}
-          markerWidth={arrowSize}
-          markerHeight={arrowSize}
-          refX={direction === 'target' ? arrowSize - 1 : 1}
-          refY={arrowSize / 2}
+          markerWidth={ARROW_SIZE}
+          markerHeight={ARROW_SIZE}
+          refX={direction === 'target' ? ARROW_SIZE - 1 : 1}
+          refY={ARROW_SIZE / 2}
           orient="auto"
           markerUnits="strokeWidth"
         >
           <path
             d={direction === 'target' ? 
-              `M0,0 L0,${arrowSize} L${arrowSize},${arrowSize/2} z` : 
-              `M${arrowSize},0 L${arrowSize},${arrowSize} L0,${arrowSize/2} z`}
+              `M0,0 L0,${ARROW_SIZE} L${ARROW_SIZE},${ARROW_SIZE/2} z` : 
+              `M${ARROW_SIZE},0 L${ARROW_SIZE},${ARROW_SIZE} L0,${ARROW_SIZE/2} z`}
             fill={style.stroke || '#000'}
             stroke={style.stroke || '#000'}
           />
@@ -236,24 +258,30 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
     );
   };
   
-  const { showSourceArrow, showTargetArrow } = getArrowConfig();
-  
+  const { showSourceArrow, showTargetArrow } = data?.renderAsIcon
+    ? { showSourceArrow: false, showTargetArrow: false }
+    : getArrowConfig();
+
   return (
     <>
-      <svg>
-        {showSourceArrow && createArrowMarker('source')}
-        {showTargetArrow && createArrowMarker('target')}
-      </svg>
-      <BaseEdge
-        id={id}
-        path={edgePath}
-        style={{
-          ...style,
-          markerStart: showSourceArrow ? `url(#arrow-source-${id})` : undefined,
-          markerEnd: showTargetArrow ? `url(#arrow-target-${id})` : undefined,
-          cursor: 'pointer',
-        }}
-      />
+      {!data?.renderAsIcon && (
+        <>
+          <svg>
+            {showSourceArrow && createArrowMarker('source')}
+            {showTargetArrow && createArrowMarker('target')}
+          </svg>
+          <BaseEdge
+            id={id}
+            path={edgePath}
+            style={{
+              ...style,
+              markerStart: showSourceArrow ? `url(#arrow-source-${id})` : undefined,
+              markerEnd: showTargetArrow ? `url(#arrow-target-${id})` : undefined,
+              cursor: 'pointer',
+            }}
+          />
+        </>
+      )}
       {/* Invisible wider path for easier clicking */}
       <path
         d={edgePath}
@@ -263,18 +291,48 @@ const MultiRelationshipEdge: React.FC<EdgeProps<MultiRelationshipEdgeData>> = ({
         style={{ cursor: 'pointer' }}
         className="react-flow__edge-interaction"
       />
-      {label && (
+      {data?.renderAsIcon && data?.relationshipType === 'PERSONNEL_FLOW' ? (
         <EdgeLabelRenderer>
           <div
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              fontSize: 12,
-              fontWeight: 500,
+              pointerEvents: 'all',
+              zIndex: 1000,
+            }}
+            className="nodrag nopan"
+            aria-label="personnel flow"
+            title="Personnel movement"
+          >
+            <svg width="60" height="40" style={{ overflow: 'visible' }}>
+              <PersonnelFlowIcon
+                x={30}
+                y={20}
+                direction={
+                  data.flowDirection === 'bidirectional' 
+                    ? 'bidirectional' 
+                    : data.creationDirection === 'target-to-source' 
+                      ? 'backward' 
+                      : 'forward'
+                }
+                size={20}
+                color={style.stroke || '#ff9800'}
+              />
+            </svg>
+          </div>
+        </EdgeLabelRenderer>
+      ) : label && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              fontSize: EDGE_FONT_SIZE,
+              fontWeight: EDGE_FONT_WEIGHT,
               color: style.stroke || '#000',
               background: labelShowBg ? (labelBgStyle?.fill || '#fff') : 'transparent',
               padding: labelBgPadding ? `${labelBgPadding[1]}px ${labelBgPadding[0]}px` : '2px 4px',
-              borderRadius: labelBgBorderRadius || 2,
+              borderRadius: labelBgBorderRadius || EDGE_BORDER_RADIUS,
               border: labelShowBg ? `1px solid ${style.stroke || '#000'}` : 'none',
               pointerEvents: 'all',
               ...labelStyle,

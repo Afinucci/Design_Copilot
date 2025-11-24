@@ -56,15 +56,27 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
   useEffect(() => {
     if (edge && edge.data) {
       const edgeData = edge.data as any;
+      const relType = edgeData.relationshipType || 'ADJACENT_TO';
+
+      // Set default flowType based on relationship type if not already set
+      let defaultFlowType = edgeData.flowType;
+      if (!defaultFlowType) {
+        if (relType === 'MATERIAL_FLOW') {
+          defaultFlowType = 'raw_material';
+        } else if (relType === 'PERSONNEL_FLOW') {
+          defaultFlowType = 'personnel';
+        }
+      }
+
       setFormData({
-        type: edgeData.relationshipType || 'ADJACENT_TO',
+        type: relType,
         priority: edgeData.priority || 5,
         reason: edgeData.reason || '',
         doorType: edgeData.doorType,
         minDistance: edgeData.minDistance,
         maxDistance: edgeData.maxDistance,
-        flowDirection: edgeData.flowDirection,
-        flowType: edgeData.flowType,
+        flowDirection: edgeData.flowDirection || 'bidirectional',
+        flowType: defaultFlowType,
       });
     }
     setEditMode(false);
@@ -128,15 +140,27 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
   const handleCancel = () => {
     if (edge && edge.data) {
       const edgeData = edge.data as any;
+      const relType = edgeData.relationshipType || 'ADJACENT_TO';
+
+      // Set default flowType based on relationship type if not already set
+      let defaultFlowType = edgeData.flowType;
+      if (!defaultFlowType) {
+        if (relType === 'MATERIAL_FLOW') {
+          defaultFlowType = 'raw_material';
+        } else if (relType === 'PERSONNEL_FLOW') {
+          defaultFlowType = 'personnel';
+        }
+      }
+
       setFormData({
-        type: edgeData.relationshipType || 'ADJACENT_TO',
+        type: relType,
         priority: edgeData.priority || 5,
         reason: edgeData.reason || '',
         doorType: edgeData.doorType,
         minDistance: edgeData.minDistance,
         maxDistance: edgeData.maxDistance,
-        flowDirection: edgeData.flowDirection,
-        flowType: edgeData.flowType,
+        flowDirection: edgeData.flowDirection || 'bidirectional',
+        flowType: defaultFlowType,
       });
     }
     setEditMode(false);
@@ -159,8 +183,10 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
       onClose={onClose}
       maxWidth="sm"
       fullWidth
+      disableEscapeKeyDown={false}
       slotProps={{
-        paper: { sx: { borderRadius: 2 } }
+        paper: { sx: { borderRadius: 2, zIndex: 1300 } },
+        backdrop: { sx: { pointerEvents: 'none' } }
       }}
     >
       <DialogTitle>
@@ -192,6 +218,13 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
                 <Select
                   value={formData.type || 'ADJACENT_TO'}
                   onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as any }))}
+                  MenuProps={{
+                    disablePortal: false,
+                    disableScrollLock: true,
+                    PaperProps: {
+                      sx: { zIndex: 9999 }
+                    }
+                  }}
                 >
                   {relationshipTypes.map(type => (
                     <MenuItem key={type} value={type}>
@@ -270,17 +303,44 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
                 Door Type
               </Typography>
               {editMode ? (
-                <TextField
-                  fullWidth
-                  size="small"
-                  value={formData.doorType || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, doorType: e.target.value }))}
-                  placeholder="e.g., airlock, pass-through, standard"
-                />
+                <FormControl fullWidth size="small">
+                  <Select
+                    value={formData.doorType || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, doorType: e.target.value as string }))}
+                    displayEmpty
+                    MenuProps={{
+                      disablePortal: false,
+                      disableScrollLock: true,
+                      PaperProps: {
+                        sx: { zIndex: 9999 }
+                      }
+                    }}
+                  >
+                    <MenuItem value="">
+                      <em>No door specified</em>
+                    </MenuItem>
+                    <MenuItem value="standard">Standard - Regular hinged door</MenuItem>
+                    <MenuItem value="double">Double - Wide material/equipment transfer</MenuItem>
+                    <MenuItem value="sliding">Sliding - Space-efficient personnel access</MenuItem>
+                    <MenuItem value="airlock">Airlock - GMP critical interlocked doors</MenuItem>
+                    <MenuItem value="pass-through">Pass-Through - Small material transfer hatch</MenuItem>
+                    <MenuItem value="emergency">Emergency - Fire-rated exit door</MenuItem>
+                    <MenuItem value="roll-up">Roll-Up - Overhead for large equipment</MenuItem>
+                    <MenuItem value="automatic">Automatic - Sensor-activated sliding</MenuItem>
+                    <MenuItem value="cleanroom-rated">Cleanroom-Rated - Airtight seal door</MenuItem>
+                  </Select>
+                </FormControl>
               ) : (
-                <Typography variant="body2" color="text.secondary">
-                  {formData.doorType || 'Not specified'}
-                </Typography>
+                <Box>
+                  <Typography variant="body2" fontWeight="medium">
+                    {formData.doorType ? formData.doorType.replace('-', ' ').toUpperCase() : 'Not specified'}
+                  </Typography>
+                  {formData.doorType && (
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                      {formData.doorType}
+                    </Typography>
+                  )}
+                </Box>
               )}
             </Box>
           )}
@@ -329,6 +389,13 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
                     <Select
                       value={formData.flowDirection || 'bidirectional'}
                       onChange={(e) => setFormData(prev => ({ ...prev, flowDirection: e.target.value as any }))}
+                      MenuProps={{
+                        disablePortal: false,
+                        disableScrollLock: true,
+                        PaperProps: {
+                          sx: { zIndex: 9999 }
+                        }
+                      }}
                     >
                       <MenuItem value="bidirectional">Bidirectional</MenuItem>
                       <MenuItem value="unidirectional">Unidirectional</MenuItem>
@@ -345,32 +412,43 @@ const InlineRelationshipEditDialog: React.FC<InlineRelationshipEditDialogProps> 
 
               <Box sx={{ mb: 2 }}>
                 <Typography variant="subtitle2" gutterBottom>
-                  Flow Type
+                  Flow Type (Current: {formData.flowType || 'none'})
                 </Typography>
                 {editMode ? (
                   <FormControl fullWidth size="small">
                     <Select
-                      value={formData.flowType || 'raw_material'}
-                      onChange={(e) => setFormData(prev => ({ ...prev, flowType: e.target.value as any }))}
+                      value={formData.flowType || (formData.type === 'MATERIAL_FLOW' ? 'raw_material' : 'personnel')}
+                      onChange={(e) => {
+                        console.log('🔄 Flow Type onChange triggered, value:', e.target.value);
+                        const newValue = e.target.value;
+                        setFormData(prev => {
+                          const updated = { ...prev, flowType: newValue as any };
+                          console.log('✅ Updated formData:', updated);
+                          return updated;
+                        });
+                      }}
+                      MenuProps={{
+                        disablePortal: false,
+                        disableScrollLock: true,
+                        PaperProps: {
+                          sx: { zIndex: 9999 }
+                        }
+                      }}
                     >
-                      {formData.type === 'MATERIAL_FLOW' ? (
-                        <>
-                          <MenuItem value="raw_material">Raw Material</MenuItem>
-                          <MenuItem value="finished_product">Finished Product</MenuItem>
-                          <MenuItem value="waste">Waste</MenuItem>
-                          <MenuItem value="equipment">Equipment</MenuItem>
-                        </>
-                      ) : (
-                        <>
-                          <MenuItem value="personnel">Personnel</MenuItem>
-                          <MenuItem value="equipment">Equipment Movement</MenuItem>
-                        </>
-                      )}
+                      {formData.type === 'MATERIAL_FLOW' ? [
+                        <MenuItem key="raw_material" value="raw_material">Raw Material</MenuItem>,
+                        <MenuItem key="finished_product" value="finished_product">Finished Product</MenuItem>,
+                        <MenuItem key="waste" value="waste">Waste</MenuItem>,
+                        <MenuItem key="equipment" value="equipment">Equipment</MenuItem>
+                      ] : [
+                        <MenuItem key="personnel" value="personnel">Personnel</MenuItem>,
+                        <MenuItem key="equipment_movement" value="equipment">Equipment Movement</MenuItem>
+                      ]}
                     </Select>
                   </FormControl>
                 ) : (
                   <Chip
-                    label={formData.flowType?.replace('_', ' ') || 'Raw Material'}
+                    label={formData.flowType?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Not set'}
                     variant="outlined"
                     size="small"
                   />

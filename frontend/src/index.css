@@ -11,3 +11,52 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Guided Adjacency Animations */
+@keyframes adjacency-pulse {
+  0% { 
+    opacity: 0.9; 
+    filter: drop-shadow(0 0 6px #4CAF50);
+  }
+  50% { 
+    opacity: 1; 
+    filter: drop-shadow(0 0 12px #4CAF50);
+  }
+  100% { 
+    opacity: 0.9; 
+    filter: drop-shadow(0 0 6px #4CAF50);
+  }
+}
+
+@keyframes separation-warning {
+  0% { 
+    opacity: 0.6; 
+    filter: drop-shadow(0 0 4px #f44336);
+  }
+  50% { 
+    opacity: 0.9; 
+    filter: drop-shadow(0 0 8px #f44336);
+  }
+  100% { 
+    opacity: 0.6; 
+    filter: drop-shadow(0 0 4px #f44336);
+  }
+}
+
+@keyframes overlap-warning {
+  0% { 
+    opacity: 0.8; 
+    filter: drop-shadow(0 0 8px #d32f2f);
+    stroke-width: 3;
+  }
+  50% { 
+    opacity: 1; 
+    filter: drop-shadow(0 0 16px #d32f2f);
+    stroke-width: 4;
+  }
+  100% { 
+    opacity: 0.8; 
+    filter: drop-shadow(0 0 8px #d32f2f);
+    stroke-width: 3;
+  }
+}

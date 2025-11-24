@@ -1,27 +1,24 @@
 /* Custom handle styles for improved visual feedback */
 .custom-handle:hover {
   background: #333 !important;
-  width: 16px !important;
-  height: 16px !important;
   border: 2px solid #2196f3 !important;
   box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3) !important;
-  transform: translateX(-50%) translateY(-50%) scale(1.1) !important;
 }
 
 .custom-handle.react-flow__handle-top:hover {
-  transform: translateX(-50%) scale(1.1) !important;
+  transform: translateX(-50%) !important;
 }
 
 .custom-handle.react-flow__handle-bottom:hover {
-  transform: translateX(-50%) scale(1.1) !important;
+  transform: translateX(-50%) !important;
 }
 
 .custom-handle.react-flow__handle-left:hover {
-  transform: translateY(-50%) scale(1.1) !important;
+  transform: translateY(-50%) !important;
 }
 
 .custom-handle.react-flow__handle-right:hover {
-  transform: translateY(-50%) scale(1.1) !important;
+  transform: translateY(-50%) !important;
 }
 
 /* Connection line styling for better visual feedback */
@@ -35,4 +32,16 @@
 .custom-handle {
   opacity: 1 !important;
   z-index: 100 !important;
+}
+
+/* Ghost node styles for visibility */
+.react-flow__node-ghostNode {
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+}
+
+/* Ghost edge styles */
+.react-flow__edge-ghostEdge {
+  z-index: 999 !important;
+  pointer-events: auto !important;
 }
