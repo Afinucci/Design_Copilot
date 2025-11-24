@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Paper,
   Typography,
@@ -23,6 +23,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Stack,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -32,9 +33,15 @@ import {
   Settings as SettingsIcon,
   Refresh as RefreshIcon,
   Download as DownloadIcon,
+  EditOutlined as EditIcon,
+  DeleteOutline as DeleteIcon,
+  InfoOutlined as InfoIcon,
 } from '@mui/icons-material';
 import { Node } from 'reactflow';
-import costService from '../services/costService';
+import costService, {
+  CleanroomCostProfileInput,
+  CleanroomCostProfile
+} from '../services/costService';
 import {
   ProjectCostEstimate,
   CostEstimationSettings,
@@ -74,6 +81,37 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ items, onSett
   const [currencyRates, setCurrencyRates] = useState<Record<string, number>>({});
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [projectName, setProjectName] = useState('');
+  const [cleanroomCosts, setCleanroomCosts] = useState<CleanroomCostProfile[]>([]);
+  const [costProfilesLoading, setCostProfilesLoading] = useState(false);
+  const [costDialogOpen, setCostDialogOpen] = useState(false);
+  const [editingCostProfile, setEditingCostProfile] = useState<CleanroomCostProfile | null>(null);
+  const [costForm, setCostForm] = useState<CleanroomCostProfileInput>({
+    cleanroomClass: '',
+    name: '',
+    description: '',
+    baseConstructionCostPerSqm: 2500,
+    hvacCostPerSqm: 900,
+    validationCostPerSqm: 400,
+    cleanroomMultiplier: 1,
+    unitType: 'sqm',
+    unitLabel: 'm²',
+    currency: 'USD'
+  });
+  const [isSavingCostProfile, setIsSavingCostProfile] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  const loadCostProfiles = useCallback(async () => {
+    setCostProfilesLoading(true);
+    try {
+      const profiles = await costService.getCleanroomCostProfiles();
+      const sortedProfiles = [...profiles].sort((a, b) => a.cleanroomClass.localeCompare(b.cleanroomClass));
+      setCleanroomCosts(sortedProfiles);
+    } catch (error) {
+      console.error('Error loading cleanroom cost profiles:', error);
+    } finally {
+      setCostProfilesLoading(false);
+    }
+  }, []);
 
   // Draggable functionality
   const { position, isDragging, dragHandleProps } = useDraggable({
@@ -83,7 +121,7 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ items, onSett
   // Load initial settings and data
   useEffect(() => {
     loadInitialData();
-  }, []);
+  }, [loadCostProfiles]);
 
   // Recalculate when items change
   useEffect(() => {
@@ -103,6 +141,7 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ items, onSett
       setSettings(loadedSettings);
       setRegionalFactors(factors);
       setCurrencyRates(rates);
+      await loadCostProfiles();
 
       if (onSettingsChange) {
         onSettingsChange(loadedSettings);
@@ -190,6 +229,83 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ items, onSett
     }
   };
 
+  const handleOpenCostDialog = (profile?: CleanroomCostProfile) => {
+    if (profile) {
+      setEditingCostProfile(profile);
+      setCostForm({
+        id: profile.id,
+        cleanroomClass: profile.cleanroomClass,
+        name: profile.name || '',
+        description: profile.description || '',
+        baseConstructionCostPerSqm: profile.baseConstructionCostPerSqm,
+        hvacCostPerSqm: profile.hvacCostPerSqm,
+        validationCostPerSqm: profile.validationCostPerSqm,
+        cleanroomMultiplier: profile.cleanroomMultiplier,
+        unitType: profile.unitType || 'sqm',
+        unitLabel: profile.unitLabel || (profile.unitType === 'unit' ? 'unit' : 'm²'),
+        currency: profile.currency || settings.currency || 'USD'
+      });
+    } else {
+      setEditingCostProfile(null);
+      setCostForm({
+        cleanroomClass: '',
+        name: '',
+        description: '',
+        baseConstructionCostPerSqm: 2500,
+        hvacCostPerSqm: 900,
+        validationCostPerSqm: 400,
+        cleanroomMultiplier: 1,
+        unitType: 'sqm',
+        unitLabel: 'm²',
+        currency: settings.currency || 'USD'
+      });
+    }
+    setCostDialogOpen(true);
+  };
+
+  const handleCostFormChange = (field: keyof CleanroomCostProfileInput, value: string | number) => {
+    setCostForm(prev => ({
+      ...prev,
+      [field]: typeof value === 'string' ? value : Number(value)
+    }));
+  };
+
+  const handleSaveCostProfile = async () => {
+    if (!costForm.cleanroomClass.trim()) return;
+    setIsSavingCostProfile(true);
+    try {
+      await costService.saveCleanroomCostProfile({
+        ...costForm,
+        cleanroomClass: costForm.cleanroomClass.toUpperCase()
+      });
+      setCostDialogOpen(false);
+      setEditingCostProfile(null);
+      await loadCostProfiles();
+      await calculateEstimate();
+    } catch (error) {
+      console.error('Failed to save cleanroom cost profile', error);
+      setError('Failed to save cleanroom cost profile');
+    } finally {
+      setIsSavingCostProfile(false);
+    }
+  };
+
+  const handleDeleteCostProfile = async (profile: CleanroomCostProfile) => {
+    if (!profile.id || profile.isDefault) return;
+    const confirmed = window.confirm(`Delete custom profile for Class ${profile.cleanroomClass}?`);
+    if (!confirmed) return;
+    try {
+      await costService.deleteCleanroomCostProfile(profile.id);
+      await loadCostProfiles();
+      await calculateEstimate();
+    } catch (error) {
+      console.error('Failed to delete cleanroom cost profile', error);
+      setError('Failed to delete cleanroom cost profile');
+    }
+  };
+
+  const isCostFormValid = costForm.cleanroomClass.trim().length > 0;
+
   const handleExport = () => {
     if (!estimate) return;
 
@@ -215,6 +331,92 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ items, onSett
     ];
     return items.filter(item => item.value > 0);
   };
+
+  const roomMetadata = useMemo(() => {
+    return items.reduce<Record<string, CostEstimationItem>>((acc, item) => {
+      acc[item.id] = item;
+      return acc;
+    }, {});
+  }, [items]);
+
+  type ComponentDetail = {
+    label: string;
+    value: number;
+    details: string;
+  };
+
+  const formatComponentDetails = useCallback(
+    (room: ProjectCostEstimate['rooms'][number]): ComponentDetail[] => {
+    const metadata = roomMetadata[room.roomId];
+    const cleanroomClass = metadata?.cleanroomClass || 'Unknown';
+    const cleanroomProfile = cleanroomCosts.find(profile => profile.cleanroomClass === cleanroomClass);
+    const unitLabel = cleanroomProfile?.unitLabel || 'm²';
+    const baseConstructionCost = cleanroomProfile?.baseConstructionCostPerSqm || 0;
+    const hvacCost = cleanroomProfile?.hvacCostPerSqm || 0;
+    const validationCost = cleanroomProfile?.validationCostPerSqm || 0;
+
+    return [
+      {
+        label: 'Construction',
+        value: room.costBreakdown.constructionCost,
+        details: `${room.area.toFixed(2)} ${unitLabel} × ${costService.formatCurrency(baseConstructionCost, estimate?.currency)}`
+      },
+      {
+        label: 'HVAC',
+        value: room.costBreakdown.hvacCost,
+        details: `${room.area.toFixed(2)} ${unitLabel} × ${costService.formatCurrency(hvacCost, estimate?.currency)}`
+      },
+      {
+        label: 'Validation',
+        value: room.costBreakdown.validationCost,
+        details: `${room.area.toFixed(2)} ${unitLabel} × ${costService.formatCurrency(validationCost, estimate?.currency)}`
+      },
+      {
+        label: 'Equipment Purchase',
+        value: room.costBreakdown.equipmentPurchaseCost,
+        details: room.costBreakdown.equipmentPurchaseCost > 0 ? 'Sum of selected equipment purchase costs' : 'No equipment selected'
+      },
+      {
+        label: 'Equipment Installation',
+        value: room.costBreakdown.equipmentInstallationCost,
+        details: room.costBreakdown.equipmentInstallationCost > 0 ? 'Sum of equipment installation costs' : 'No equipment selected'
+      },
+      {
+        label: 'Other',
+        value: room.costBreakdown.otherCosts,
+        details: room.costBreakdown.otherCosts > 0 ? 'Additional custom costs' : 'None'
+      }
+    ].filter(item => item.value > 0);
+    },
+    [roomMetadata, cleanroomCosts, estimate?.currency]
+  );
+
+  const aggregateBreakdown = useMemo(() => {
+    if (!estimate) {
+      return null;
+    }
+    return estimate.rooms.reduce(
+      (acc, room) => {
+        acc.constructionCost += room.costBreakdown.constructionCost;
+        acc.hvacCost += room.costBreakdown.hvacCost;
+        acc.equipmentPurchaseCost += room.costBreakdown.equipmentPurchaseCost;
+        acc.equipmentInstallationCost += room.costBreakdown.equipmentInstallationCost;
+        acc.validationCost += room.costBreakdown.validationCost;
+        acc.otherCosts += room.costBreakdown.otherCosts;
+        acc.totalCost += room.costBreakdown.totalCost;
+        return acc;
+      },
+      {
+        constructionCost: 0,
+        hvacCost: 0,
+        equipmentPurchaseCost: 0,
+        equipmentInstallationCost: 0,
+        validationCost: 0,
+        otherCosts: 0,
+        totalCost: 0
+      }
+    );
+  }, [estimate]);
 
   return (
     <>
@@ -296,6 +498,91 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ items, onSett
               </Alert>
             )}
 
+            <Box
+              sx={{
+                mb: 2,
+                p: 1.5,
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Box>
+                  <Typography variant="subtitle2">Cleanroom Cost Database</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Custom cost profiles applied to every estimate
+                  </Typography>
+                </Box>
+                <Button size="small" variant="outlined" onClick={() => handleOpenCostDialog()}>
+                  Manage
+                </Button>
+              </Box>
+
+              {costProfilesLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              ) : cleanroomCosts.length === 0 ? (
+                <Typography variant="caption" color="text.secondary">
+                  Using default GMP cleanroom cost factors.
+                </Typography>
+              ) : (
+                <Stack spacing={1}>
+                  {cleanroomCosts.slice(0, 3).map((profile) => (
+                    <Box
+                      key={profile.id}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        px: 1,
+                        py: 0.5
+                      }}
+                    >
+                      <Box>
+                        <Typography variant="body2" fontWeight={500}>
+                          {profile.name || `Class ${profile.cleanroomClass}`}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Class {profile.cleanroomClass} · {profile.unitLabel || 'm²'} · Base{' '}
+                          {costService.formatCurrency(profile.baseConstructionCostPerSqm, profile.currency || settings.currency)}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Tooltip title="Edit cost profile">
+                          <span>
+                            <IconButton size="small" onClick={() => handleOpenCostDialog(profile)}>
+                              <EditIcon fontSize="inherit" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title={profile.isDefault ? 'Default profiles cannot be deleted' : 'Delete cost profile'}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteCostProfile(profile)}
+                              disabled={Boolean(profile.isDefault)}
+                            >
+                              <DeleteIcon fontSize="inherit" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </Box>
+                    </Box>
+                  ))}
+                  {cleanroomCosts.length > 3 && (
+                    <Typography variant="caption" color="text.secondary">
+                      +{cleanroomCosts.length - 3} additional profiles
+                    </Typography>
+                  )}
+                </Stack>
+              )}
+            </Box>
+
             {estimate && !loading && (
               <>
                 {/* Summary */}
@@ -328,6 +615,13 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ items, onSett
                       size="small"
                       color="primary"
                     />
+                    <Button
+                      size="small"
+                      startIcon={<InfoIcon fontSize="small" />}
+                      onClick={() => setDetailsDialogOpen(true)}
+                    >
+                      View Breakdown
+                    </Button>
                   </Box>
                 </Box>
 
@@ -368,6 +662,8 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ items, onSett
                     </TableBody>
                   </Table>
                 </TableContainer>
+
+                {/* Details moved into dialog */}
 
                 {/* Action Buttons */}
                 <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
@@ -481,6 +777,231 @@ const CostEstimationPanel: React.FC<CostEstimationPanelProps> = ({ items, onSett
           >
             Save
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Cleanroom Cost Database Dialog */}
+      <Dialog open={costDialogOpen} onClose={() => setCostDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingCostProfile ? 'Edit Cleanroom Cost Profile' : 'Add Cleanroom Cost Profile'}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Cleanroom Class"
+              value={costForm.cleanroomClass}
+              onChange={(e) => handleCostFormChange('cleanroomClass', e.target.value.toUpperCase())}
+              helperText="Example: A, B, C, D, CNC"
+              fullWidth
+            />
+            <TextField
+              label="Display Name"
+              value={costForm.name || ''}
+              onChange={(e) => handleCostFormChange('name', e.target.value)}
+              fullWidth
+            />
+            <TextField
+              label="Description"
+              value={costForm.description || ''}
+              onChange={(e) => handleCostFormChange('description', e.target.value)}
+              fullWidth
+              multiline
+              minRows={2}
+            />
+            <TextField
+              label="Unit Type"
+              select
+              value={costForm.unitType || 'sqm'}
+              onChange={(e) => handleCostFormChange('unitType', e.target.value)}
+              fullWidth
+            >
+              <MenuItem value="sqm">Per Square Meter</MenuItem>
+              <MenuItem value="unit">Per Room / Unit</MenuItem>
+            </TextField>
+            <TextField
+              label="Unit Label"
+              value={costForm.unitLabel || ''}
+              onChange={(e) => handleCostFormChange('unitLabel', e.target.value)}
+              helperText="Displayed next to totals (e.g., m², unit)"
+              fullWidth
+            />
+            <TextField
+              label="Base Construction Cost"
+              type="number"
+              value={costForm.baseConstructionCostPerSqm}
+              onChange={(e) => handleCostFormChange('baseConstructionCostPerSqm', parseFloat(e.target.value) || 0)}
+              fullWidth
+            />
+            <TextField
+              label="HVAC Cost"
+              type="number"
+              value={costForm.hvacCostPerSqm}
+              onChange={(e) => handleCostFormChange('hvacCostPerSqm', parseFloat(e.target.value) || 0)}
+              fullWidth
+            />
+            <TextField
+              label="Validation Cost"
+              type="number"
+              value={costForm.validationCostPerSqm}
+              onChange={(e) => handleCostFormChange('validationCostPerSqm', parseFloat(e.target.value) || 0)}
+              fullWidth
+            />
+            <TextField
+              label="Cleanroom Multiplier"
+              type="number"
+              value={costForm.cleanroomMultiplier}
+              onChange={(e) => handleCostFormChange('cleanroomMultiplier', parseFloat(e.target.value) || 1)}
+              helperText="Used for relative comparisons (optional)"
+              fullWidth
+            />
+            <TextField
+              label="Currency"
+              value={costForm.currency || settings.currency}
+              onChange={(e) => handleCostFormChange('currency', e.target.value)}
+              fullWidth
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setCostDialogOpen(false);
+              setEditingCostProfile(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSaveCostProfile}
+            variant="contained"
+            disabled={!isCostFormValid || isSavingCostProfile}
+          >
+            {editingCostProfile ? 'Update' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Cost Breakdown Dialog */}
+      <Dialog
+        open={detailsDialogOpen}
+        onClose={() => setDetailsDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Cost Breakdown</DialogTitle>
+        <DialogContent dividers>
+          {estimate && aggregateBreakdown ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Components contributing to subtotal ({costService.formatCurrency(aggregateBreakdown.totalCost, estimate.currency)})
+                </Typography>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Component</TableCell>
+                        <TableCell align="right">Amount</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {[
+                        { label: 'Construction', value: aggregateBreakdown.constructionCost },
+                        { label: 'HVAC', value: aggregateBreakdown.hvacCost },
+                        { label: 'Equipment Purchase', value: aggregateBreakdown.equipmentPurchaseCost },
+                        { label: 'Equipment Installation', value: aggregateBreakdown.equipmentInstallationCost },
+                        { label: 'Validation', value: aggregateBreakdown.validationCost },
+                        { label: 'Other', value: aggregateBreakdown.otherCosts }
+                      ].map(component => (
+                        <TableRow key={component.label}>
+                          <TableCell>{component.label}</TableCell>
+                          <TableCell align="right">
+                            {costService.formatCurrency(component.value, estimate.currency)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow>
+                        <TableCell>
+                          <strong>Total</strong>
+                        </TableCell>
+                        <TableCell align="right">
+                          <strong>{costService.formatCurrency(aggregateBreakdown.totalCost, estimate.currency)}</strong>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Room-by-room details
+                </Typography>
+                <Stack spacing={2}>
+                  {estimate.rooms.map(room => (
+                    <Box
+                      key={room.roomId}
+                      sx={{
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        p: 1.5
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Box>
+                          <Typography variant="body2" fontWeight={600}>
+                            {room.roomName}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Area: {room.area.toFixed(2)} m²
+                            {roomMetadata[room.roomId]?.cleanroomClass
+                              ? ` · Class ${roomMetadata[room.roomId]?.cleanroomClass}`
+                              : ''}
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" fontWeight={600}>
+                          {costService.formatCurrency(room.costBreakdown.totalCost, estimate.currency)}
+                        </Typography>
+                      </Box>
+
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Component</TableCell>
+                              <TableCell align="right">Amount</TableCell>
+                              <TableCell>Calculation</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {formatComponentDetails(room).map(detail => (
+                              <TableRow key={`${room.roomId}-${detail.label}`}>
+                                <TableCell>{detail.label}</TableCell>
+                                <TableCell align="right">
+                                  {costService.formatCurrency(detail.value, estimate.currency)}
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {detail.details}
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            </Box>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No estimate available yet.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailsDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </>

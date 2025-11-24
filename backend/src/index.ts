@@ -17,6 +17,8 @@ import chatRoutes from './routes/chat';
 import generativeRoutes from './routes/generative';
 import layoutRoutes from './routes/layouts';
 import costRoutes from './routes/costs';
+import costDatabaseService from './services/costDatabaseService';
+import { CLEANROOM_COST_FACTORS } from './config/costConfiguration';
 import logger from './utils/logger';
 
 // Load environment variables
@@ -102,6 +104,14 @@ app.listen(PORT, async () => {
     logger.emoji('✅', 'Static Node Templates Service initialized successfully');
   } catch (error) {
     logger.error('❌ Static Templates Service initialization error:', error);
+  }
+
+  // Initialize cost database
+  try {
+    await costDatabaseService.initialize(CLEANROOM_COST_FACTORS);
+    logger.emoji('💰', 'Custom cost database initialized');
+  } catch (error) {
+    logger.error('❌ Cost database initialization error:', error);
   }
 
   // Test database connection on startup

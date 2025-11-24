@@ -1,6 +1,7 @@
-import {
+import type {
   CostEstimationSettings,
-  ProjectCostEstimate
+  ProjectCostEstimate,
+  RoomCostFactors
 } from '../../../shared/types';
 
 // Equipment catalog item interface
@@ -14,6 +15,34 @@ export interface EquipmentCatalogItem {
   annualMaintenanceCost: number;
   lifespan: number;
   linkedRoomTypes: string[];
+}
+
+export interface CleanroomCostProfile extends RoomCostFactors {
+  id: string;
+  cleanroomClass: string;
+  name?: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  currency?: string;
+  unitType?: string;
+  unitLabel?: string;
+  notes?: string;
+  isDefault?: boolean;
+}
+
+export interface CleanroomCostProfileInput {
+  id?: string;
+  cleanroomClass: string;
+  name?: string;
+  description?: string;
+  baseConstructionCostPerSqm: number;
+  hvacCostPerSqm: number;
+  validationCostPerSqm: number;
+  cleanroomMultiplier: number;
+  unitType?: string;
+  unitLabel?: string;
+  currency?: string;
 }
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
@@ -55,6 +84,55 @@ class CostService {
     } catch (error) {
       console.error('Error updating cost settings:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get cleanroom cost profiles
+   */
+  async getCleanroomCostProfiles(): Promise<CleanroomCostProfile[]> {
+    const response = await fetch(`${API_BASE_URL}/api/costs/database/cleanroom-costs`);
+    const data = await response.json();
+    if (data.success) {
+      return data.profiles;
+    }
+    throw new Error(data.error || 'Failed to load cleanroom cost profiles');
+  }
+
+  /**
+   * Create or update a cleanroom cost profile
+   */
+  async saveCleanroomCostProfile(profile: CleanroomCostProfileInput): Promise<CleanroomCostProfile> {
+    const method = profile.id ? 'PUT' : 'POST';
+    const url = profile.id
+      ? `${API_BASE_URL}/api/costs/database/cleanroom-costs/${profile.id}`
+      : `${API_BASE_URL}/api/costs/database/cleanroom-costs`;
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(profile)
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      return data.profile;
+    }
+    throw new Error(data.error || 'Failed to save cleanroom cost profile');
+  }
+
+  /**
+   * Delete a cleanroom cost profile
+   */
+  async deleteCleanroomCostProfile(id: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/api/costs/database/cleanroom-costs/${id}`, {
+      method: 'DELETE'
+    });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to delete cleanroom cost profile');
     }
   }
 

@@ -366,19 +366,23 @@ export function calculateRoomCost(
   area: number,
   cleanroomClass: string,
   roomType: string,
-  settings: CostEstimationSettings = DEFAULT_COST_SETTINGS
+  settings: CostEstimationSettings = DEFAULT_COST_SETTINGS,
+  customFactors?: RoomCostFactors
 ): {
   constructionCost: number;
   hvacCost: number;
   validationCost: number;
   totalCost: number;
 } {
-  const baseCostFactors = CLEANROOM_COST_FACTORS[cleanroomClass] || CLEANROOM_COST_FACTORS['CNC'];
+  const fallbackFactors = CLEANROOM_COST_FACTORS[cleanroomClass] || CLEANROOM_COST_FACTORS['CNC'];
+  const baseCostFactors = customFactors || fallbackFactors;
   const roomTypeAdjustment = ROOM_TYPE_COST_ADJUSTMENTS[roomType] || 1.0;
+  const unitType = (baseCostFactors.unitType || 'sqm').toLowerCase();
+  const quantity = unitType === 'sqm' ? area : 1;
 
-  const constructionCost = area * baseCostFactors.baseConstructionCostPerSqm * roomTypeAdjustment * settings.regionalFactor * settings.escalationFactor;
-  const hvacCost = area * baseCostFactors.hvacCostPerSqm * roomTypeAdjustment * settings.regionalFactor * settings.escalationFactor;
-  const validationCost = area * baseCostFactors.validationCostPerSqm * settings.regionalFactor * settings.escalationFactor;
+  const constructionCost = quantity * baseCostFactors.baseConstructionCostPerSqm * roomTypeAdjustment * settings.regionalFactor * settings.escalationFactor;
+  const hvacCost = quantity * baseCostFactors.hvacCostPerSqm * roomTypeAdjustment * settings.regionalFactor * settings.escalationFactor;
+  const validationCost = quantity * baseCostFactors.validationCostPerSqm * settings.regionalFactor * settings.escalationFactor;
 
   return {
     constructionCost,
@@ -398,7 +402,8 @@ export function getEquipmentForRoomType(roomType: string): EquipmentCatalogItem[
 // Helper function to calculate total project cost
 export function calculateProjectCost(
   rooms: { area: number; cleanroomClass: string; roomType: string; equipment?: string[] }[],
-  settings: CostEstimationSettings = DEFAULT_COST_SETTINGS
+  settings: CostEstimationSettings = DEFAULT_COST_SETTINGS,
+  cleanroomOverrides?: Record<string, RoomCostFactors | undefined>
 ): {
   roomsCost: number;
   equipmentCost: number;
@@ -410,7 +415,9 @@ export function calculateProjectCost(
   let equipmentCost = 0;
 
   rooms.forEach(room => {
-    const roomCostData = calculateRoomCost(room.area, room.cleanroomClass, room.roomType, settings);
+    const normalizedClass = room.cleanroomClass?.toUpperCase?.() || room.cleanroomClass;
+    const customFactors = normalizedClass ? cleanroomOverrides?.[normalizedClass] : undefined;
+    const roomCostData = calculateRoomCost(room.area, room.cleanroomClass, room.roomType, settings, customFactors);
     roomsCost += roomCostData.totalCost;
 
     if (room.equipment) {

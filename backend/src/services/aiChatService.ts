@@ -7,10 +7,10 @@ import FacilityTemplatesService from './facilityTemplatesService';
 import LayoutGenerationService from './layoutGenerationService';
 import {
   calculateRoomCost,
-  calculateProjectCost,
   DEFAULT_COST_SETTINGS
 } from '../config/costConfiguration';
 import { ProjectCostEstimate } from '../../../shared/types';
+import costDatabaseService from './costDatabaseService';
 
 export class AIChatService {
   private openai: OpenAI;
@@ -698,8 +698,12 @@ ${request.message}
                 estimatedDate: new Date()
               };
 
+              const cleanroomOverrides = await costDatabaseService.getCleanroomCostFactorsMap();
+
               for (const room of rooms) {
-                const roomCostData = calculateRoomCost(room.area, room.cleanroomClass, room.roomType, settings);
+                const normalizedClass = room.cleanroomClass?.toUpperCase?.() || room.cleanroomClass;
+                const customFactors = normalizedClass ? cleanroomOverrides[normalizedClass] : undefined;
+                const roomCostData = calculateRoomCost(room.area, room.cleanroomClass, room.roomType, settings, customFactors);
 
                 const costBreakdown = {
                   constructionCost: roomCostData.constructionCost,

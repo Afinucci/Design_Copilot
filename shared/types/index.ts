@@ -143,10 +143,24 @@ export interface CostBreakdown {
 }
 
 export interface RoomCostFactors {
-  baseConstructionCostPerSqm: number; // Base construction cost per square meter
+  baseConstructionCostPerSqm: number; // Base construction cost per measurement unit (default: square meter)
   cleanroomMultiplier: number; // Multiplier based on cleanroom class
-  hvacCostPerSqm: number; // HVAC cost per square meter
-  validationCostPerSqm: number; // Validation cost per square meter
+  hvacCostPerSqm: number; // HVAC cost per measurement unit
+  validationCostPerSqm: number; // Validation cost per measurement unit
+  unitType?: string; // Measurement basis (e.g., sqm, unit)
+  unitLabel?: string; // Display label for the measurement unit (e.g., m², unit)
+  currency?: string; // Currency for the defined costs
+  notes?: string; // Additional notes for this factor
+  isDefault?: boolean; // Whether this factor comes from defaults
+}
+
+export interface CleanroomCostProfile extends RoomCostFactors {
+  id: string;
+  cleanroomClass: string;
+  name?: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CostEstimationSettings {

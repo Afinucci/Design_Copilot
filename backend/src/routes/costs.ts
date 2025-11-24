@@ -6,11 +6,11 @@ import {
   REGIONAL_FACTORS,
   CURRENCY_RATES,
   calculateRoomCost,
-  calculateProjectCost,
   getEquipmentForRoomType
 } from '../config/costConfiguration';
 import { CostEstimationSettings, ProjectCostEstimate, CostBreakdown } from '../../../shared/types';
 import { asyncHandler } from '../middleware/errorHandler';
+import costDatabaseService, { CleanroomCostProfileInput } from '../services/costDatabaseService';
 
 const router = Router();
 
@@ -123,6 +123,102 @@ router.get('/equipment-catalog', asyncHandler(async (req: Request, res: Response
 }));
 
 /**
+ * GET /api/costs/database/cleanroom-costs
+ * Retrieve custom cleanroom cost profiles
+ */
+router.get('/database/cleanroom-costs', asyncHandler(async (_req: Request, res: Response) => {
+  try {
+    const profiles = await costDatabaseService.getCleanroomCostProfiles();
+    res.json({
+      success: true,
+      profiles,
+      metadata: {
+        updatedAt: costDatabaseService.getLastUpdated()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load cleanroom cost profiles',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}));
+
+/**
+ * POST /api/costs/database/cleanroom-costs
+ * Create a new cleanroom cost profile
+ */
+router.post('/database/cleanroom-costs', asyncHandler(async (req: Request, res: Response) => {
+  const payload = req.body as CleanroomCostProfileInput;
+
+  if (!payload.cleanroomClass) {
+    return res.status(400).json({
+      success: false,
+      error: 'cleanroomClass is required'
+    });
+  }
+
+  try {
+    const profile = await costDatabaseService.upsertCleanroomCostProfile(payload);
+    res.json({
+      success: true,
+      profile
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to save cleanroom cost profile',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}));
+
+/**
+ * PUT /api/costs/database/cleanroom-costs/:id
+ * Update an existing cleanroom cost profile
+ */
+router.put('/database/cleanroom-costs/:id', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const payload = { ...req.body, id } as CleanroomCostProfileInput;
+
+  try {
+    const profile = await costDatabaseService.upsertCleanroomCostProfile(payload);
+    res.json({
+      success: true,
+      profile
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update cleanroom cost profile',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}));
+
+/**
+ * DELETE /api/costs/database/cleanroom-costs/:id
+ * Remove a cleanroom cost profile
+ */
+router.delete('/database/cleanroom-costs/:id', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    await costDatabaseService.deleteCleanroomCostProfile(id);
+    res.json({
+      success: true,
+      message: 'Profile deleted'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete cleanroom cost profile',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}));
+
+/**
  * POST /api/costs/calculate
  * Calculate costs for a given layout
  */
@@ -147,6 +243,8 @@ router.post('/calculate', asyncHandler(async (req: Request, res: Response) => {
     estimatedDate: new Date()
   };
 
+  const cleanroomOverrides = await costDatabaseService.getCleanroomCostFactorsMap();
+
   // Calculate costs for each room
   for (const room of rooms) {
     const { area, cleanroomClass, roomType, equipment = [] } = room;
@@ -155,7 +253,9 @@ router.post('/calculate', asyncHandler(async (req: Request, res: Response) => {
       continue; // Skip incomplete room data
     }
 
-    const roomCostData = calculateRoomCost(area, cleanroomClass, roomType, settings);
+    const normalizedClass = cleanroomClass?.toUpperCase?.() || cleanroomClass;
+    const customFactors = normalizedClass ? cleanroomOverrides[normalizedClass] : undefined;
+    const roomCostData = calculateRoomCost(area, cleanroomClass, roomType, settings, customFactors);
 
     // Calculate equipment costs for this room
     let equipmentPurchaseCost = 0;

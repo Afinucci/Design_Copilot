@@ -127,6 +127,19 @@ export interface RoomCostFactors {
     cleanroomMultiplier: number;
     hvacCostPerSqm: number;
     validationCostPerSqm: number;
+    unitType?: string;
+    unitLabel?: string;
+    currency?: string;
+    notes?: string;
+    isDefault?: boolean;
+}
+export interface CleanroomCostProfile extends RoomCostFactors {
+    id: string;
+    cleanroomClass: string;
+    name?: string;
+    description?: string;
+    createdAt: string;
+    updatedAt: string;
 }
 export interface CostEstimationSettings {
     currency: string;

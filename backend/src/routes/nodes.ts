@@ -1102,35 +1102,74 @@ router.get('/neo4j/functional-areas', async (req, res) => {
     const neo4jService = Neo4jService.getInstance();
     const session = neo4jService.getSession();
 
+    const neo4jNumberToFloat = (value: any, fallback = 0) => {
+      if (typeof value === 'number') return value;
+      if (value && typeof value.toNumber === 'function') {
+        return value.toNumber();
+      }
+      if (value && typeof value.low === 'number') {
+        return value.low;
+      }
+      return fallback;
+    };
+
+    const mapNodeToFunctionalArea = (node: any) => {
+      const props = node?.properties || {};
+      const defaultWidth = neo4jNumberToFloat(props.defaultWidth ?? props.width, 150);
+      const defaultHeight = neo4jNumberToFloat(props.defaultHeight ?? props.height, 100);
+
+      return {
+        id: props.id || props.name,
+        name: props.name || 'Unnamed Area',
+        category: props.category || 'Unknown',
+        cleanroomClass: props.cleanroomClass,
+        color: props.color || '#90CAF9',
+        description: props.description,
+        defaultSize: props.defaultSize || {
+          width: defaultWidth,
+          height: defaultHeight
+        }
+      };
+    };
+
     try {
-      const query = `
+      const functionalAreaQuery = `
         MATCH (n:FunctionalArea)
         RETURN n
         ORDER BY n.category, n.name
       `;
 
-      const result = await session.run(query);
-
-      const functionalAreas = result.records.map(record => {
-        const node = record.get('n');
-        return {
-          id: node.properties.id,
-          name: node.properties.name,
-          category: node.properties.category,
-          cleanroomClass: node.properties.cleanroomClass,
-          color: node.properties.color,
-          description: node.properties.description,
-          defaultSize: node.properties.defaultSize || { width: 150, height: 100 }
-        };
-      });
+      const faResult = await session.run(functionalAreaQuery);
+      let functionalAreas = faResult.records.map(record => mapNodeToFunctionalArea(record.get('n')));
 
       console.log(`🔍 Found ${functionalAreas.length} FunctionalArea nodes in Neo4j`);
-      res.json(functionalAreas);
 
+      // If no standalone FunctionalArea nodes exist, fall back to NodeTemplate nodes
+      if (functionalAreas.length === 0) {
+        console.log('ℹ️  No FunctionalArea nodes found. Falling back to NodeTemplate nodes for assignment list.');
+        const nodeTemplateQuery = `
+          MATCH (n:NodeTemplate)
+          RETURN n
+          ORDER BY n.category, n.name
+        `;
+
+        const templateResult = await session.run(nodeTemplateQuery);
+        functionalAreas = templateResult.records.map(record => {
+          const mapped = mapNodeToFunctionalArea(record.get('n'));
+          // NodeTemplate cleanroom class may be stored with capital letters but without "Class " prefix
+          if (mapped.cleanroomClass && !mapped.cleanroomClass.includes('Class')) {
+            mapped.cleanroomClass = mapped.cleanroomClass.replace(/^Class\s*/, '');
+          }
+          return mapped;
+        });
+
+        console.log(`ℹ️  Returning ${functionalAreas.length} NodeTemplate nodes as fallback`);
+      }
+
+      res.json(functionalAreas);
     } finally {
       await session.close();
     }
-
   } catch (error) {
     console.error('❌ Error fetching FunctionalArea nodes from Neo4j:', error);
     res.status(500).json({
